@@ -1,0 +1,27 @@
+site_name: Cybersecurity Homelab
+site_description: A segmented, reproducible security lab on Apple Silicon — AD, Wazuh SIEM, and a full detection-engineering loop.
+repo_url: https://github.com/tohudgins/homelab
+
+theme:
+  name: material
+  palette:
+    scheme: slate
+    primary: black
+  features:
+    - navigation.tabs
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - tables
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Home: index.md
+  - IP Plan: 00-ip-plan.md
+  - Network Diagram: 01-network-diagram.md
+  - Design Decisions: design-decisions.md
