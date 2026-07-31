@@ -1,6 +1,6 @@
 site_name: Cybersecurity Homelab
 site_description: A segmented, reproducible security lab on Apple Silicon — AD, Wazuh SIEM, and a full detection-engineering loop.
-repo_url: https://github.com/tohudgins/homelab
+repo_url: https://github.com/tohudgins/Homelab
 
 theme:
   name: material
