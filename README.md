@@ -2,7 +2,7 @@
 
 A segmented, reproducible security lab built on Apple Silicon (VMware Fusion, ARM64-only) — Active Directory, a hand-built Linux router/firewall, Wazuh SIEM, and a full detection-engineering loop from attack simulation to written detection to evasion attempt.
 
-> **Status: Phase 0 — Foundation.** Full build plan and design rationale: [`docs/`](docs/).
+> **Status: Phase 2 complete — Phase 3 (Visibility) starting.** Full build plan and design rationale: [`docs/`](docs/).
 
 ## Architecture
 
@@ -49,10 +49,10 @@ Sysmon + Wazuh agent"]
 
 | Phase | Focus | Status |
 |---|---|---|
-| 0 | Foundation | ✅ In progress |
-| 1 | Routing & segmentation | ⬜ |
-| 2 | Identity (Active Directory) | ⬜ |
-| 3 | Visibility (Wazuh) | ⬜ |
+| 0 | Foundation | ✅ Complete |
+| 1 | Routing & segmentation | ✅ Complete |
+| 2 | Identity (Active Directory) | ✅ Complete |
+| 3 | Visibility (Wazuh) | ⬜ In progress |
 | 4 | Detection engineering | ⬜ |
 | 5 | Offense in context | ⬜ |
 | 6 | Network security monitoring | ⬜ |

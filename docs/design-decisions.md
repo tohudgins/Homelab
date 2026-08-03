@@ -16,6 +16,12 @@ Apple Silicon has no x86 virtualization and no nested virtualization, which rule
 
 CORP/SOC/DMZ/REDTEAM/WAN mirrors a real enterprise's actual boundary logic. Most importantly, the SOC segment is isolated even from the identity plane it monitors — `siem-01` never joins the AD domain — and REDTEAM can reach CORP/DMZ but is explicitly walled off from SOC. Being able to explain *why* that asymmetry exists is itself a portfolio artifact, not just a network diagram.
 
+## Why dc-01 is Samba AD DC, not Windows Server
+
+The original plan called for Windows Server ARM64 on dc-01. Microsoft doesn't publish an ARM64 Windows Server ISO at all — Azure and OEM partners get it, the public doesn't — so the only route in is [UUP dump](https://uupdump.net), which packages Windows Insider Preview builds. In practice this proved unreliable: the newest arm64 Server Insider build UUP dump indexed had already been pulled from Windows Update (`EMPTY_FILELIST`), and a second attempt at an older build turned out to be x64 despite the listing, caught only by checking the actual PE header of `setup.exe` inside the ISO rather than trusting the filename. Insider builds also expire on a schedule regardless, meaning even a successful build would need periodic rebuilding indefinitely.
+
+Samba AD DC sidesteps all of it — a real, open-source implementation of the Active Directory protocols (Kerberos, LDAP, GPO-compatible SYSVOL) that runs natively on ARM64 Linux with no unofficial builds involved. `ws-01` domain-joins it exactly like it would real AD, and the attack/detection scenarios Phase 4/5 plan (Kerberoasting, NTLM, GPO misconfig) exercise the same protocol behavior either way, since they target the protocol, not the specific server implementation. Documenting a real constraint and a reasoned pivot away from the original plan is itself the kind of judgment call worth showing in a portfolio, not something to hide.
+
 ## Why Zeek runs from Phase 1, not just Phase 6
 
 Standing up Suricata + Zeek together from the start — even before rule-tuning begins — means every later phase generates real historical NSM data, instead of Phase 6 needing to backfill weeks of context in a rush.

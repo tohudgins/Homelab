@@ -26,7 +26,7 @@
 | Host | Segment | IP | Role |
 |---|---|---|---|
 | rtr-01 | all internal segments (gateway) + WAN | `.1` on each internal segment | Firewall, DHCP/DNS/NTP, inline Suricata + Zeek |
-| dc-01 | CORP | `10.10.10.10` | AD DS, DNS, GPO, PDC time source |
+| dc-01 | CORP | `10.10.10.10` | AD DS, DNS, GPO, PDC time source (Samba AD DC on Ubuntu ARM64 — see `design-decisions.md`) |
 | ws-01 | CORP | `10.10.10.50` (DHCP reservation) | Domain-joined victim workstation |
 | siem-01 | SOC/MGMT | `10.10.30.10` | Wazuh all-in-one |
 | dmz-01 | DMZ | `10.10.20.10` | Vulnerable web apps |
