@@ -22,6 +22,8 @@ dnsmasq (DHCP/DNS) + FRR + chrony (NTP)"]
         DC["dc-01 — AD DS, DNS, GPO"]
         WS["ws-01 — Win11 workstation
 Sysmon + Wazuh agent"]
+        FS["fs-01 — Samba file server (planned)
+domain member, deliberate share/ACL misconfig"]
     end
     subgraph SOC["SOC / MGMT"]
         SIEM["siem-01 — Wazuh all-in-one"]
