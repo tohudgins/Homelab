@@ -46,3 +46,34 @@
   -->
 
 </group>
+
+<!--
+  T1484.001 — Group Policy Modification (SYSVOL integrity)
+
+  Default FIM (rules 550/553/554 — modified/deleted/added) treats every monitored path identically:
+  level 5-7 regardless of WHERE the change happened. That undersells SYSVOL specifically — it holds
+  GPOs and logon scripts that apply to every domain-joined host on next policy refresh/logon, so a
+  single unauthorized write there has a blast radius no other path in this lab has. This rule doesn't
+  replace the base FIM rules (they still fire, still carry the full hash/attribute record) — it adds
+  a second, higher-severity alert scoped to that one path via the `file` dynamic field syscheck
+  decodes into.
+-->
+<group name="local,syscheck,">
+
+  <rule id="100020" level="12">
+    <if_sid>550,553,554</if_sid>
+    <field name="file" type="pcre2">^/var/lib/samba/sysvol</field>
+    <description>SYSVOL integrity change (GPO/logon script) — $(file)</description>
+    <mitre>
+      <id>T1484.001</id>
+    </mitre>
+    <group>gpo_tampering,attack,</group>
+  </rule>
+
+  <!--
+  No active response wired here on purpose — auto-reverting a file is a much riskier default action
+  than blocking an IP (could clobber a legitimate GPO edit made seconds earlier), so this stays
+  alert-only pending a real response playbook. See detection-catalog.md.
+  -->
+
+</group>

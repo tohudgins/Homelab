@@ -26,6 +26,14 @@
       "comment": "SSH brute force against dc-01 — rules 100010 (wrong password) + 100011 (non-existent user) in local_rules.xml, if_matched_sid/frequency/same_source_ip. Verified true positive live (not just wazuh-logtest); firewall-drop active response confirmed firing. Known gap: per-type thresholds, so mixing failure types across both rules evades detection (documented in detection-catalog.md).",
       "enabled": true,
       "score": 1
+    },
+    {
+      "techniqueID": "T1484.001",
+      "tactic": "defense-evasion",
+      "color": "#3d8b40",
+      "comment": "SYSVOL FIM escalation on dc-01 — rule 100020, scopes stock FIM rules 550/553/554 (modified/deleted/added) to /var/lib/samba/sysvol via the syscheck 'file' field, escalated to level 12. Verified true positive for add, modify (with full hash diff), and delete. No active response by design (alert-only; auto-reverting a file is riskier than blocking an IP). Untested gap: only exercised via local root on dc-01, not the more realistic remote-SMB write path (needs a second domain host).",
+      "enabled": true,
+      "score": 1
     }
   ],
   "gradient": {
