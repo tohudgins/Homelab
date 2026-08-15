@@ -19,6 +19,7 @@ Rules live on siem-01 at `/var/ossec/etc/rules/local_rules.xml` (mirrored in thi
 | 4 | [T1110.001 – Password Guessing (Kerberos)](https://attack.mitre.org/techniques/T1110/001/) | 100040, 100041 | dc-01 (Samba KDC audit) | ✅ verified TP, custom active response confirmed |
 | 5 | [T1053.003 – Scheduled Task/Job: Cron](https://attack.mitre.org/techniques/T1053/003/) | 100050 | dc-01 (cron FIM) | ✅ verified TP |
 | 6 | [T1136.001 – Create Account: Local Account](https://attack.mitre.org/techniques/T1136/001/) (+ T1098) | 100051 | dc-01 (passwd/shadow/sudoers FIM) | ✅ verified TP (passwd + shadow) |
+| 7 | [T1562.001 – Impair Defenses: Disable or Modify Tools](https://attack.mitre.org/techniques/T1562/001/) | 100060 | dc-01 (sudo/journald) | ✅ verified TP |
 
 (#6 is tagged with both IDs deliberately: the rule can't distinguish creating a new local account from
 modifying an existing one's credentials — same file, same rule, same broad-not-narrow tradeoff as the
@@ -46,9 +47,12 @@ on the list. Worth a real pass once credentials are sorted out.
   flowing) as prep, but building actual detections on top of it is explicitly **Phase 6** scope in the
   build plan (ET Open tuning, Suricata+Zeek correlation). Started drifting into that scope mid-session and
   pulled back deliberately rather than half-finish Phase 6 under the Phase 4 banner.
-- **Target is 8-12 techniques total** per the build plan; 4 verified custom-rule techniques + SCA + one
-  honestly-documented investigation is real, substantial progress, not the finish line. Continuing this
-  catalog (more dc-01/rtr-01 techniques, then ws-01 once resumed) is the natural next step.
+- **Target is 8-12 techniques total** per the build plan; 7 verified custom-rule techniques (spanning
+  Credential Access, Persistence, and Defense Evasion) + SCA + one honestly-documented investigation is
+  already at/near that target on Linux/AD telemetry alone — **Windows/Sysmon coverage on ws-01 remains
+  the single biggest gap**, since it opens up an entirely different tactic set (process-creation-based
+  detections, PowerShell logging, LSASS access) that nothing above touches. That's the natural next step,
+  not further Linux/AD rules for their own sake.
 
 ---
 
@@ -508,6 +512,65 @@ provisioning, a real cron job being added by an admin or a package's postinst sc
 High-noise by design in a lab with no separate change-management signal to cross-reference against; a real
 deployment would pair this with a ticketing/CMDB lookup before treating every alert as an incident, same
 caveat as the SYSVOL rule.
+
+---
+
+## 7. T1562.001 — Impair Defenses: Disable or Modify Tools
+
+Arguably the single highest-value rule in this whole catalog: an attacker who successfully disables the
+monitoring itself makes every other rule above moot. Every technique before this one assumes the SIEM is
+still watching — this is the one that questions that assumption directly.
+
+**Objective:** detect an attempt to stop, disable, or mask the security tooling running on dc-01 itself
+(the Wazuh agent, `auditd` if present, or the `samba-ad-dc` service whose logs feed most of this catalog).
+
+**No new telemetry needed — pure escalation on what's already flowing:** chains directly off the stock
+sudo rule (`5402`, any successful sudo-to-root, already firing constantly throughout this session) rather
+than requiring a new logging facility, decoder, or FIM path. The whole rule is a regex over the `command`
+field the stock `sudo` decoder already extracts.
+
+**Attack simulation — a genuinely self-defeating test, handled honestly:** the obvious test
+(`systemctl stop wazuh-agent`) has an irony baked in — an agent that's just been killed can't report that
+it was killed, so the test would risk failing for a reason that has nothing to do with whether the rule
+works. Used `systemctl disable wazuh-agent` instead: it matches the exact same detection pattern (and is
+a real, meaningfully dangerous action — it prevents the agent from surviving the *next* reboot, a
+realistic low-and-slow persistence-denial move) while leaving the agent running long enough to actually
+report the alert it just triggered.
+
+**Custom rule:**
+
+```xml
+<rule id="100060" level="13">
+  <if_sid>5402</if_sid>
+  <field name="command" type="pcre2">systemctl\s+(stop|disable|mask)\s+\S*(wazuh-agent|auditd|samba-ad-dc)|service\s+(wazuh-agent|auditd|samba-ad-dc)\s+stop</field>
+  <description>Security tooling disruption attempt — $(command)</description>
+  <mitre><id>T1562.001</id></mitre>
+  <group>defense_evasion,attack,</group>
+</rule>
+```
+
+**Verification (true positive):** confirmed live —
+
+```
+Rule: 100060 (level 13) -> 'Security tooling disruption attempt — /usr/bin/systemctl disable wazuh-agent'
+```
+
+Level 13 — one level above everything else in this catalog — deliberately: this alert type should never
+get lost in a busy queue behind routine credential-access noise.
+
+**Evasion — real, and worth being upfront about:** only catches the *obvious* path (systemctl/service
+managing the named unit by name). A more careful attacker sends `SIGSTOP`/`SIGKILL` directly to the
+`wazuh-agent` process, blocks `1514/tcp` outbound at the host firewall, or corrupts the agent's own config
+— none of which touch this rule, since none of them are a sudo command matching this text pattern at all.
+A production deployment would pair this with **manager-side "agent went silent unexpectedly" monitoring**
+(Wazuh's own agent-disconnection alerting) as the real backstop — that path doesn't depend on the
+compromised agent reporting anything, which is the whole point once an attacker is sophisticated enough
+to avoid the obvious command-line path this rule watches.
+
+**False-positive risk:** low in a small lab (legitimate reasons to stop the Wazuh agent — patching,
+planned maintenance — are rare and usually scheduled), but real in any environment with routine agent
+upgrades/restarts as part of normal ops; those would need an allowlist window rather than firing this as
+an incident every time.
 
 ---
 

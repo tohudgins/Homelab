@@ -68,6 +68,14 @@
       "score": 1
     },
     {
+      "techniqueID": "T1562.001",
+      "tactic": "defense-evasion",
+      "color": "#3d8b40",
+      "comment": "Arguably the highest-value rule in this catalog -- detects an attempt to disable the Wazuh agent, auditd, or samba-ad-dc itself, since every other rule here assumes the monitoring stays alive. Rule 100060, level 13 (highest in the catalog on purpose), pure escalation on the stock sudo rule (5402) with no new telemetry needed. Verified true positive via 'systemctl disable wazuh-agent' -- deliberately not 'stop', which would have killed the agent before it could report the alert about being killed. Documented real evasion: only catches the systemctl/service path, not SIGKILL or firewall-blocking the agent's outbound port; a real deployment needs manager-side disconnection monitoring as the actual backstop.",
+      "enabled": true,
+      "score": 1
+    },
+    {
       "techniqueID": "T1098.007",
       "tactic": "persistence",
       "color": "#e8a33d",

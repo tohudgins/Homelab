@@ -200,9 +200,40 @@
   from any domain member, and blocking one source IP does nothing if the attacker just tries from
   another host. Disabling the *account* stops the attack regardless of source. Custom script since the
   stock `disable-account` active response only understands local system accounts, not Samba AD accounts.
-  See disable-ad-account.sh (mirrored in this folder) and detection-catalog.md for the real risk this
-  creates: an attacker who knows this rule exists can weaponize it into a DoS by deliberately failing
-  Kerberos auth as a real, legitimate, high-value account (helpdesk lead, an admin) to get it locked out.
+  See disable-ad-account.py (mirrored in this folder, deployed without the extension per Wazuh's
+  active-response naming convention) and detection-catalog.md for the real risk this creates: an
+  attacker who knows this rule exists can weaponize it into a DoS by deliberately failing Kerberos auth
+  as a real, legitimate, high-value account (helpdesk lead, an admin) to get it locked out.
+  -->
+
+</group>
+
+<!--
+  T1562.001 — Impair Defenses: Disable or Modify Tools
+
+  Arguably the single highest-value rule in this catalog: an attacker who disables the monitoring itself
+  makes every other rule above moot. Chains off the stock sudo rule (5402, any successful sudo-to-root)
+  rather than needing new telemetry -- this is a pure escalation on top of what's already flowing.
+-->
+<group name="local,attack,">
+
+  <rule id="100060" level="13">
+    <if_sid>5402</if_sid>
+    <field name="command" type="pcre2">systemctl\s+(stop|disable|mask)\s+\S*(wazuh-agent|auditd|samba-ad-dc)|service\s+(wazuh-agent|auditd|samba-ad-dc)\s+stop</field>
+    <description>Security tooling disruption attempt — $(command)</description>
+    <mitre>
+      <id>T1562.001</id>
+    </mitre>
+    <group>defense_evasion,attack,</group>
+  </rule>
+
+  <!--
+  Evasion: only catches the OBVIOUS path (systemctl/service stopping the named unit). A more careful
+  attacker sends SIGSTOP/SIGKILL directly to the wazuh-agent process, or blocks 1514/tcp outbound at the
+  host firewall, or corrupts the agent's own config -- none of which touch this rule at all, and the
+  irony is real: an agent that's been killed can't alert that it was killed. A production deployment
+  would pair this with manager-side "agent went silent unexpectedly" monitoring (Wazuh's own
+  disconnection alerting), which doesn't depend on the compromised agent reporting anything at all.
   -->
 
 </group>
