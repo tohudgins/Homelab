@@ -34,6 +34,14 @@
       "comment": "SYSVOL FIM escalation on dc-01 — rule 100020, scopes stock FIM rules 550/553/554 (modified/deleted/added) to /var/lib/samba/sysvol via the syscheck 'file' field, escalated to level 12. Verified true positive for add, modify (with full hash diff), and delete. No active response by design (alert-only; auto-reverting a file is riskier than blocking an IP). Untested gap: only exercised via local root on dc-01, not the more realistic remote-SMB write path (needs a second domain host).",
       "enabled": true,
       "score": 1
+    },
+    {
+      "techniqueID": "T1558.003",
+      "tactic": "credential-access",
+      "color": "#3d8b40",
+      "comment": "Kerberoasting against 3 intentionally-planted Kerberoastable service accounts (svc-sql/svc-backup/svc-web, weak passwords + SPNs, see phase-2-identity/known-weaknesses.md). Enabled Samba's structured auth_json_audit logging (off by default) to get per-TGS-REQ telemetry (Samba's equivalent of Windows Event ID 4769). Rules 100030 (base capture) + 100031 (if_matched_sid + same_field correlation on account, 3+ tickets/60s = level 12). Verified true positive live, AND verified the evasion: a single targeted ticket request produces zero new alerts, confirmed by alert count before/after, not just reasoned about.",
+      "enabled": true,
+      "score": 1
     }
   ],
   "gradient": {

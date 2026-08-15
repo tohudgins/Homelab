@@ -15,6 +15,7 @@ Rules live on siem-01 at `/var/ossec/etc/rules/local_rules.xml` (mirrored in thi
 |---|---|---|---|---|
 | 1 | [T1110 – Brute Force](https://attack.mitre.org/techniques/T1110/) | 100010, 100011 | dc-01 (sshd) | ✅ verified TP, active response confirmed |
 | 2 | [T1484.001 – Group Policy Modification](https://attack.mitre.org/techniques/T1484/001/) | 100020 | dc-01 (SYSVOL FIM) | ✅ verified TP (add/modify/delete) |
+| 3 | [T1558.003 – Kerberoasting](https://attack.mitre.org/techniques/T1558/003/) | 100030, 100031 | dc-01 (Samba KDC audit) | ✅ verified TP + evasion confirmed |
 
 Plus a real SCA before/after remediation pass on dc-01 (48% → 55%, see below) — a different Wazuh
 capability (compliance benchmarking, not attack-simulation rule-writing), so it isn't in the technique
@@ -214,6 +215,110 @@ a logon script) fire this rule identically to an attacker — by design, since t
 SYSVOL write, then let a human judge intent," not "distinguish good writes from bad ones." A real
 deployment would want this correlated against a change-ticket system or a known-admin allowlist before
 treating every alert as an incident.
+
+---
+
+## 3. T1558.003 — Kerberoasting
+
+**Objective:** Detect an attacker with any valid (even low-privilege) domain credentials requesting
+Kerberos service tickets (TGS) for service accounts, in order to crack the tickets offline and recover
+the service account's plaintext password — the classic AD lateral-movement/privilege-escalation
+technique, and one Phase 2's own build plan named as an intended misconfig that never actually got built.
+
+**Setting up the intentional misconfig (retroactively completing Phase 2):** created three Kerberoastable
+service accounts on dc-01 — the kind of legacy accounts a real AD environment accumulates over years —
+each with an SPN registered (making it a valid Kerberoasting target) and a weak, dictionary-guessable
+password (the actual point of the exercise: a Kerberoastable *account* is only a real risk if its
+*password* is also weak enough to crack once you have the ticket):
+
+| Account | SPN | Password | Realistic role |
+|---|---|---|---|
+| `svc-sql` | `MSSQLSvc/dc-01.lab.internal:1433` | `Summer2026` | seasonal-pattern password, SQL service |
+| `svc-backup` | `HOST/backup-svc.lab.internal` | `Backup2026` | backup agent |
+| `svc-web` | `HTTP/webapp.lab.internal` | `WebApp2026` | IIS/web app pool identity |
+
+Also created `jdoe`, an ordinary domain user with no special privileges, to play the attacker — any valid
+domain account can request a TGS for any SPN in the domain; Kerberoasting needs no special access beyond
+"has a domain logon," which is what makes it dangerous. Full rationale in
+[`phase-2-identity/known-weaknesses.md`](../phase-2-identity/known-weaknesses.md).
+
+**Enabling telemetry — Samba doesn't log this by default:** at the default log level (0), Samba's AD DC
+logs nothing about individual Kerberos ticket requests. Enabled structured audit logging in
+`/etc/samba/smb.conf`:
+
+```ini
+[global]
+	log level = 1 auth_audit:3 auth_json_audit:3
+```
+
+This makes Samba emit real per-request JSON to `/var/log/samba/log.samba`, alternating with its normal
+human-readable lines. Wired as a `log_format=json` Wazuh localfile — the JSON parser silently skips lines
+that don't parse as JSON, so the human-readable half is dropped for free without a separate decoder.
+
+**Attack simulation:** authenticated as `jdoe` (`kinit`), then requested service tickets for all three
+Kerberoastable SPNs in immediate succession via `kvno` — functionally identical to what
+`impacket-GetUserSPNs.py` or Rubeus do (request a TGS per known SPN, extract the encrypted portion for
+offline cracking; `kvno` doesn't extract the crackable hash itself, but it performs the exact same TGS-REQ
+that a real Kerberoasting tool's request does, and that request is what this detects).
+
+**Raw telemetry observed:** a `"type": "KDC Authorization"` JSON event per ticket, with
+`"authType": "TGS-REQ with Ticket-Granting Ticket"`, the requesting account, and the target SPN —
+Samba's equivalent of Windows Event ID 4769 (*A Kerberos service ticket was requested*), the exact event
+ID real-world Kerberoasting detections are built on:
+
+```json
+{"timestamp":"2026-08-15T16:21:01.019867+0000","type":"KDC Authorization","KDC Authorization":
+ {"status":"NT_STATUS_OK","serviceDescription":"MSSQLSvc/dc-01.lab.internal:1433@LAB.INTERNAL",
+  "authType":"TGS-REQ with Ticket-Granting Ticket","domain":"LAB","account":"jdoe", ...}}
+```
+
+**Custom rules:**
+
+```xml
+<rule id="100030" level="3">
+  <decoded_as>json</decoded_as>
+  <field name="type">^KDC Authorization$</field>
+  <options>no_full_log</options>
+  <description>Samba KDC: TGS-REQ for a service ticket.</description>
+  <group>kerberos_tgs,</group>
+</rule>
+
+<rule id="100031" level="12" frequency="3" timeframe="60" ignore="120">
+  <if_matched_sid>100030</if_matched_sid>
+  <same_field>KDC Authorization.account</same_field>
+  <description>Kerberoasting suspected — $(KDC Authorization.account) requested 3+ service tickets in 60s.</description>
+  <mitre><id>T1558.003</id></mitre>
+  <group>attack,</group>
+</rule>
+```
+
+`<same_field>` — not used in either technique above — correlates on an *arbitrary* dynamic field value
+(here, the nested `KDC Authorization.account` JSON key) rather than just source IP; confirmed it works
+correctly even with a field name containing a literal space, which Samba's own JSON schema uses (the
+top-level key really is `"KDC Authorization"`, space and all).
+
+**Verification (true positive):** confirmed live — 3 real TGS-REQs against the 3 planted SPNs from `jdoe`
+in under a second produced:
+
+```
+Rule: 100031 (level 12) -> 'Kerberoasting suspected — jdoe requested 3+ service tickets in 60s.'
+```
+
+**Evasion attempt — confirmed it works:** re-authenticated as `jdoe` and requested a single additional
+ticket (targeting just the one juiciest-looking SPN, as a patient real attacker who's already done
+recon would). Confirmed via the alert count before/after: **zero new alerts** — a single targeted request
+is indistinguishable from a legitimate client requesting its one normal ticket, and `same_field`
+correlation counts *occurrences*, not *distinct SPNs*, so there's no volume signal to catch here at all.
+This is an honest, real limitation, not patched: a genuinely un-detectable-by-volume targeted Kerberoast
+would need baselining normal per-account SPN request patterns (which SPNs does `jdoe` request in the
+course of legitimate work, and does this one fall outside that set) — meaningfully harder than a
+threshold rule, and out of scope for what this lab can verify against real telemetry tonight.
+
+**False-positive risk:** a legitimate service or user that genuinely needs 3+ different service tickets
+within a minute — a user opening several different mapped drives/services in quick succession at login,
+or a monitoring/backup tool that touches multiple services on a schedule — would trip this identically.
+Real deployments tune the threshold and/or exclude known service accounts with legitimately bursty
+ticket-request patterns from this rule.
 
 ---
 

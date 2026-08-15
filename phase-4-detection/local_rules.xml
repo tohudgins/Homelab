@@ -77,3 +77,45 @@
   -->
 
 </group>
+
+<!--
+  T1558.003 — Kerberoasting
+
+  Samba's default log level (0) logs nothing about individual Kerberos ticket requests. Enabled
+  structured audit logging (`log level = 1 auth_audit:3 auth_json_audit:3` in smb.conf) which emits
+  real per-request JSON to /var/log/samba/log.samba, including a "KDC Authorization" event per TGS-REQ
+  with the requesting account and the target SPN — this is Samba's equivalent of Windows Event ID 4769.
+  Wired as a `log_format=json` localfile; Wazuh's JSON parser silently skips the human-readable lines
+  log.samba also writes, so no separate decoder was needed for that half.
+-->
+<group name="local,kerberos,">
+
+  <rule id="100030" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="type">^KDC Authorization$</field>
+    <options>no_full_log</options>
+    <description>Samba KDC: TGS-REQ for a service ticket.</description>
+    <group>kerberos_tgs,</group>
+  </rule>
+
+  <rule id="100031" level="12" frequency="3" timeframe="60" ignore="120">
+    <if_matched_sid>100030</if_matched_sid>
+    <same_field>KDC Authorization.account</same_field>
+    <description>Kerberoasting suspected — $(KDC Authorization.account) requested 3+ service tickets in 60s.</description>
+    <mitre>
+      <id>T1558.003</id>
+    </mitre>
+    <group>attack,</group>
+  </rule>
+
+  <!--
+  Evasion: same_field correlation counts OCCURRENCES from one account, not DISTINCT SPNs requested --
+  a real attacker who already knows exactly which one or two SPNs are worth cracking (rather than
+  sweeping every SPN in the domain) stays under threshold and evades this rule entirely. That's a
+  meaningful real-world case: a targeted Kerberoast against one juiciest-looking service account looks
+  identical to a legitimate client requesting its one ticket. Not patched here -- see
+  detection-catalog.md for why (would need baselining normal per-account SPN request patterns, out of
+  scope for a rule this lab can verify against real telemetry tonight).
+  -->
+
+</group>
