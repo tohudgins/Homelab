@@ -6,7 +6,7 @@
     "layer": "4.5"
   },
   "domain": "enterprise-attack",
-  "description": "Techniques with a verified custom Wazuh detection rule in this lab (phase-4-detection/detection-catalog.md). Updated as each technique's rule is written and confirmed to fire on a true positive.",
+  "description": "12 techniques covered across dc-01/rtr-01 (Linux/AD, mostly custom rules against sparse default Samba logging) and ws-01 (Windows/Sysmon, mostly verifying Wazuh's mature stock ruleset), plus SCA remediation and one honestly-documented gap. See phase-4-detection/detection-catalog.md for full methodology, verification evidence, and evasion notes per technique.",
   "filters": {
     "platforms": ["Windows", "Linux"]
   },
@@ -76,6 +76,46 @@
       "score": 1
     },
     {
+      "techniqueID": "T1059.001",
+      "tactic": "execution",
+      "color": "#3d8b40",
+      "comment": "Encoded/obfuscated PowerShell on ws-01 -- stock rule 92057 (parentImage=powershell.exe + commandLine matches an encoded-command flag alternation). Verified true positive via a parent PowerShell spawning a child with a base64 -EncodedCommand. Part of the Windows/Sysmon batch (techniques 8-12) which is deliberately mostly verification of Wazuh's mature stock Sysmon ruleset rather than new custom rules -- a real, different kind of detection-engineering work than the Linux/AD side.",
+      "enabled": true,
+      "score": 1
+    },
+    {
+      "techniqueID": "T1547.001",
+      "tactic": "persistence",
+      "color": "#3d8b40",
+      "comment": "Registry Run key persistence on ws-01 -- a real gap found in Wazuh's stock Sysmon ruleset and closed. Writing the identical key via reg.exe correctly fired stock rule 92302; the same key via PowerShell's New-ItemProperty (arguably the more realistic real-world method) produced zero alerts, confirmed by direct comparison. Wrote rule 100070 to escalate the base classification rule (92300, level 0, previously silent) generically regardless of which tool performed the write. Verified true positive closing exactly the identified gap. Honest tradeoff named explicitly: broader coverage means firing on legitimate installers too.",
+      "enabled": true,
+      "score": 1
+    },
+    {
+      "techniqueID": "T1053.005",
+      "tactic": "persistence",
+      "color": "#3d8b40",
+      "comment": "Scheduled Task persistence on ws-01, the Windows equivalent of the cron technique on dc-01 -- stock rule 92154 (taskschd.dll module load). Verified true positive via schtasks /create with an onlogon trigger running as SYSTEM.",
+      "enabled": true,
+      "score": 1
+    },
+    {
+      "techniqueID": "T1070.004",
+      "tactic": "defense-evasion",
+      "color": "#3d8b40",
+      "comment": "Windows Event Log clearing on ws-01, the Windows-side counterpart to T1562.001 on the Linux side -- stock rules for Event ID 104 (any log, rule 63104) and Event ID 1102 (Security log specifically, rule 63103, the higher-value anti-forensics target). Verified true positive for both Clear-EventLog and wevtutil cl Security, both alerts carrying real forensic detail (account, domain, client process ID). One of the highest-confidence, lowest-FP rules in the whole catalog.",
+      "enabled": true,
+      "score": 1
+    },
+    {
+      "techniqueID": "T1003.001",
+      "tactic": "credential-access",
+      "color": "#4a90c4",
+      "comment": "The most technically involved investigation in this catalog. Stock rule 92900 confirmed correct by code inspection (targetImage=lsass.exe + grantedAccess=0x1010/0x40 + excludes common legitimate callers). Live-fire genuinely attempted, not skipped: Windows Defender blocked the standard comsvcs.dll technique in real time; Tamper Protection silently blocked scripted attempts to disable Defender (GUI-only by design); even with both off, ACCESS_DENIED persisted through elevated admin + SeDebugPrivilege attempts; root cause confirmed via registry -- RunAsPPL=2, LSASS running as Protected Process Light at the strongest tier, Microsoft's real modern mitigation, correctly enabled. wazuh-logtest verification also attempted and found to have a deeper, distinct limitation than the earlier-documented one: it decodes pasted JSON via the generic 'json' decoder, never 'windows_eventchannel', which the rule's full if_sid chain (92900->61612->61600->60004->60000) specifically requires at the base. Defeating PPL for real needs a vulnerable-driver loader -- genuine exploit development, deliberately not attempted even in this authorized isolated lab. Arguably a better portfolio entry than a clean true positive: demonstrates defense-in-depth at three independent layers plus the judgment to know where verification ends and exploit development begins.",
+      "enabled": true,
+      "score": 0.6
+    },
+    {
       "techniqueID": "T1098.007",
       "tactic": "persistence",
       "color": "#e8a33d",
@@ -90,8 +130,9 @@
     "maxValue": 1
   },
   "legendItems": [
-    { "label": "Custom rule written + verified true positive", "color": "#3d8b40" },
-    { "label": "Investigated — real platform limitation found, not achieved", "color": "#e8a33d" }
+    { "label": "Verified true positive (custom rule or confirmed stock coverage)", "color": "#3d8b40" },
+    { "label": "Rule confirmed correct; live-fire blocked by a working target-side mitigation", "color": "#4a90c4" },
+    { "label": "Investigated — real SIEM/logging platform limitation found, not achieved", "color": "#e8a33d" }
   ],
   "showTacticRowBackground": true,
   "tacticRowBackground": "#dddddd",

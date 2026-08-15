@@ -20,6 +20,11 @@ Rules live on siem-01 at `/var/ossec/etc/rules/local_rules.xml` (mirrored in thi
 | 5 | [T1053.003 – Scheduled Task/Job: Cron](https://attack.mitre.org/techniques/T1053/003/) | 100050 | dc-01 (cron FIM) | ✅ verified TP |
 | 6 | [T1136.001 – Create Account: Local Account](https://attack.mitre.org/techniques/T1136/001/) (+ T1098) | 100051 | dc-01 (passwd/shadow/sudoers FIM) | ✅ verified TP (passwd + shadow) |
 | 7 | [T1562.001 – Impair Defenses: Disable or Modify Tools](https://attack.mitre.org/techniques/T1562/001/) | 100060 | dc-01 (sudo/journald) | ✅ verified TP |
+| 8 | [T1059.001 – PowerShell](https://attack.mitre.org/techniques/T1059/001/) | 92057 (stock) | ws-01 (Sysmon) | ✅ verified TP (encoded command) |
+| 9 | [T1547.001 – Registry Run Keys](https://attack.mitre.org/techniques/T1547/001/) | 92302 (stock) + 100070 (custom) | ws-01 (Sysmon) | ✅ verified TP, real stock gap found + closed |
+| 10 | [T1053.005 – Scheduled Task](https://attack.mitre.org/techniques/T1053/005/) | 92154 (stock) | ws-01 (Sysmon) | ✅ verified TP |
+| 11 | [T1070 / T1070.004 – Indicator Removal: Clear Logs](https://attack.mitre.org/techniques/T1070/004/) | 63104, 63103 (stock) | ws-01 (Windows Eventlog) | ✅ verified TP (Application + Security) |
+| 12 | [T1003.001 – LSASS Memory](https://attack.mitre.org/techniques/T1003/001/) | 92900 (stock) | ws-01 (Sysmon) | ⚠️ confirmed correct by inspection; live-fire blocked by LSASS PPL (see below) |
 
 (#6 is tagged with both IDs deliberately: the rule can't distinguish creating a new local account from
 modifying an existing one's credentials — same file, same rule, same broad-not-narrow tradeoff as the
@@ -28,8 +33,16 @@ rest of this FIM family — but the actual test below specifically exercised acc
 *AD Domain Admins* group membership specifically — that was investigated and honestly not achieved; see
 [below](#investigated-not-achieved-t1098007-account-manipulation--privileged-group-membership) for why.)
 
+**12 of the build plan's target 8-12 techniques**, spanning Credential Access, Persistence, Defense
+Evasion, and Execution, across both the Linux/AD side (dc-01/rtr-01, techniques 1-7, almost entirely
+custom rules written from scratch since Samba's default logging is sparse) and the Windows side (ws-01,
+techniques 8-12, mostly *verifying* Wazuh's mature stock Sysmon ruleset rather than writing new rules —
+a genuinely different, equally real kind of detection-engineering work; see the Windows section below for
+why that contrast matters and is worth stating explicitly in a portfolio).
+
 Plus a real SCA before/after remediation pass on dc-01 (48% → 55%, see below — a different Wazuh
-capability, compliance benchmarking rather than attack-simulation rule-writing, so it isn't in the table).
+capability, compliance benchmarking rather than attack-simulation rule-writing, so it isn't in the table
+above), and one AD-specific investigation honestly documented as not achieved (T1098.007, see below).
 
 **Also confirmed running, not independently verified:** Wazuh's vulnerability-detection module
 (package-CVE matching) is enabled and its feed has updated (`ossec.log` confirms `Feed update process
@@ -40,19 +53,15 @@ credentials on hand to query it directly. Lowest-priority item on this tool's ow
 on the list. Worth a real pass once credentials are sorted out.
 
 **Deliberately deferred, not forgotten:**
-- **Windows/Sysmon coverage (ws-01)** — ws-01 is a suspended 8GB VM; this MacBook's 24GB is already fully
-  committed across rtr-01+dc-01+siem-01 with real swap pressure observed. Resuming it needs either more
-  free RAM (close other VMs) or accepting real thrash risk — not a decision to make silently mid-session.
 - **NSM / Suricata rule-writing** — wired Suricata's `eve.json` into Wazuh (real ingestion, verified
   flowing) as prep, but building actual detections on top of it is explicitly **Phase 6** scope in the
   build plan (ET Open tuning, Suricata+Zeek correlation). Started drifting into that scope mid-session and
   pulled back deliberately rather than half-finish Phase 6 under the Phase 4 banner.
-- **Target is 8-12 techniques total** per the build plan; 7 verified custom-rule techniques (spanning
-  Credential Access, Persistence, and Defense Evasion) + SCA + one honestly-documented investigation is
-  already at/near that target on Linux/AD telemetry alone — **Windows/Sysmon coverage on ws-01 remains
-  the single biggest gap**, since it opens up an entirely different tactic set (process-creation-based
-  detections, PowerShell logging, LSASS access) that nothing above touches. That's the natural next step,
-  not further Linux/AD rules for their own sake.
+- **12 techniques is the top of the build plan's target range, not a hard stop.** Real candidates for a
+  future pass: T1055 (process injection, stock rule 92910 already covers explorer.exe access — untested),
+  T1218 (LOLBin abuse — stock coverage exists, untested), T1087 (account/group discovery), and revisiting
+  T1003.001 with a proper PPL-bypass methodology if that's ever genuinely warranted (it wasn't here — see
+  below for why that line wasn't crossed).
 
 ---
 
@@ -571,6 +580,240 @@ to avoid the obvious command-line path this rule watches.
 planned maintenance — are rare and usually scheduled), but real in any environment with routine agent
 upgrades/restarts as part of normal ops; those would need an allowlist window rather than firing this as
 an incident every time.
+
+---
+
+# Windows / Sysmon Techniques (ws-01)
+
+**A genuinely different kind of detection-engineering work than techniques 1-7, worth stating explicitly.**
+The Linux/AD side above needed heavy custom rule authorship because Samba's default logging is sparse —
+Kerberos ticket requests, brute-force attempts, none of it existed until `auth_json_audit` was explicitly
+enabled and rules written from scratch against it. The Windows side is the opposite: Sysmon plus a mature
+community config (Olaf Hartong's modular ruleset) plus Wazuh's own bundled Sysmon rules already produce
+rich, correctly ATT&CK-tagged detections for a large fraction of common techniques, out of the box, with
+zero custom rule-writing. The real engineering work here was different in kind, not lesser: selecting a
+good config, wiring the log pipeline correctly (event channels, PowerShell Script Block Logging, which
+is off by default), and — the part that actually matters — *verifying* the stock coverage against real
+attacks rather than assuming a config file downloaded from GitHub does what it claims. That verification
+work found one real gap (T1547.001, below) that a less rigorous pass would have missed entirely.
+
+**Setup:** installed Sysmon (native ARM64 build, `Sysmon64a.exe`, matching this lab's ARM64-only theme)
+with Olaf Hartong's config; wired `Microsoft-Windows-Sysmon/Operational` and
+`Microsoft-Windows-PowerShell/Operational` into Wazuh as `eventchannel` localfiles; enabled PowerShell
+Script Block Logging via registry (`HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging`,
+off by default — without it the PowerShell channel carries almost nothing useful). All of this reused a
+`localadmin` SSH session bootstrapped the same key-based way as the Linux hosts, once Windows OpenSSH
+Server was manually enabled and given an inbound firewall rule (neither is automatic from installing the
+optional feature alone — a real, if mundane, gotcha in its own right, in [[Windows OpenSSH Server]] in the
+vault).
+
+## 8. T1059.001 — PowerShell (encoded command)
+
+**Objective:** detect obfuscated/encoded PowerShell execution — the base64 `-EncodedCommand` pattern is
+one of the most consistently-cited real-world indicators of malicious PowerShell use, precisely because
+it's how an attacker avoids having their actual command appear in plaintext in the process command line.
+
+**Attack simulation:** a parent PowerShell process base64-encoded a benign reconnaissance command
+(`whoami; hostname; Get-Process ...`) and spawned a child `powershell.exe -EncodedCommand <base64>` to
+execute it — the exact mechanical pattern real encoded-PowerShell attacks use, with harmless payload
+content.
+
+**Coverage:** stock rule `92057` (`0800-sysmon_id_1.xml`) — `if_group=sysmon_event1` +
+`parentImage` matches `powershell.exe` + `commandLine` matches an encoded-command flag
+(`-encodedcommand`/`-e`/`-ec`/etc., case-insensitive, several aliases covered).
+
+**Verification (true positive):** confirmed live —
+
+```
+Rule: 92057 (level 12) -> 'Powershell.exe spawned a powershell process which executed a base64 encoded command'
+```
+
+**Evasion:** the regex covers the standard flag spellings but PowerShell accepts *any unambiguous prefix*
+of `-EncodedCommand` (`-e`, `-en`, `-enc`, ... all the way to the full name) — the rule's own alternation
+list already anticipates this, which is a sign of a well-written rule, not a gap. A real evasion:
+splitting the encoded payload across an environment variable or a here-string built at runtime rather
+than passing it directly on the command line at all — the classic cat-and-mouse of command-line-based
+detection versus in-memory/staged execution.
+
+**False-positive risk:** legitimate remote-management tooling (some RMM/deployment tools, some
+CI/CD-style automation) does use `-EncodedCommand` for legitimate reasons (safely passing complex
+multi-line scripts through layers of shell quoting) — this is a real source of noise in any environment
+using such tooling, worth an allowlist for known-legitimate callers rather than blanket suppression.
+
+## 9. T1547.001 — Registry Run Keys (real gap found and closed)
+
+**Objective:** detect persistence via the classic `HKLM/HKCU\...\CurrentVersion\Run` autostart mechanism.
+
+**What was tried and found:** wrote the identical Run key twice, once via `reg.exe` and once via
+PowerShell's `New-ItemProperty` cmdlet. Wazuh's stock Sysmon EID 13 rules (`0860-sysmon_id_13.xml`) only
+escalate to a visible alert for narrow sub-patterns — `reg.exe` usage specifically (rule `92302`), a
+suspicious file extension in the value (`92301`), or a known remote-access-tool signature (`92303`). The
+base classification rule (`92300`, any write to a Run/RunOnce key) is level 0 — matched internally,
+**never alerted**. The `reg.exe` write correctly triggered `92302`; the PowerShell write — arguably the
+*more* realistic real-world method, since `reg.exe` usage is comparatively old-school and heavily
+signatured while PowerShell-based persistence is extremely common in current tooling — **produced zero
+alerts**, confirmed by direct comparison, not assumption.
+
+**Custom rule (closes the gap):**
+
+```xml
+<rule id="100070" level="10">
+  <if_sid>92300</if_sid>
+  <description>Registry Run key persistence — $(win.eventdata.image) set $(win.eventdata.targetObject)</description>
+  <mitre><id>T1547.001</id></mitre>
+  <group>persistence,attack,</group>
+</rule>
+```
+
+Escalates the base rule generically regardless of which tool performed the write — deliberately one level
+below the stock rules' specific-pattern escalations (10 vs. 12), since broadening coverage this way
+means firing on legitimate app installers too, not just attacks; that tradeoff is named honestly rather
+than hidden behind a high severity that overstates confidence.
+
+**Verification (true positive):** confirmed live, closing exactly the gap identified above —
+
+```
+Rule: 100070 (level 10) -> 'Registry Run key persistence — C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe set HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\TestPersistence3'
+```
+
+**Evasion:** `HKCU` (per-user) Run keys, `RunOnce` variants beyond what `92300`'s regex covers, and the
+dozen-plus *other* legitimate Windows autostart locations (Startup folder, services, scheduled tasks,
+WMI event subscriptions, AppInit_DLLs, etc.) are outside this specific rule's scope entirely — T1547 has
+over a dozen sub-techniques for a reason, and this rule (like the stock ones it extends) only covers one.
+
+**False-positive risk:** real and non-trivial by design (see above) — this is the honest cost of closing
+a real detection gap rather than a free win.
+
+## 10. T1053.005 — Scheduled Task
+
+**Objective:** detect Windows Task Scheduler used for persistence — the Windows equivalent of the cron
+technique already covered on dc-01 (#5), same tactic, completely different mechanism and telemetry.
+
+**Attack simulation:** created a scheduled task set to run at every logon as SYSTEM
+(`schtasks /create /tn "WindowsUpdateCheck" /tr ... /sc onlogon /ru SYSTEM`) — a deliberately
+innocuous-sounding task name, matching how a real persistence attempt would try to blend in with
+legitimate Windows Update-adjacent naming.
+
+**Coverage:** Sysmon's own config tags the process creation with `technique_id=T1053.005` directly (Olaf
+Hartong's config embeds ATT&CK metadata in the Sysmon `RuleName` field itself); Wazuh's stock rule `92154`
+alerts specifically on the `taskschd.dll` module load that `schtasks.exe` triggers.
+
+**Verification (true positive):** confirmed live —
+
+```
+Rule: 92154 (level 4) -> 'Process loaded taskschd.dll module. May be used to create delayed malware execution'
+```
+
+Real, working coverage — level 4 is modest, appropriately so for a signal this common in legitimate
+administration (task creation itself isn't inherently suspicious; the *content and context* of the task
+is), and not treated here as a gap needing a custom escalation the way the Registry Run Key case was.
+
+**False-positive risk:** high without additional context — routine software installers, backup tools, and
+IT automation all legitimately create scheduled tasks constantly. This rule is a starting point for
+investigation, not an incident on its own.
+
+## 11. T1070 / T1070.004 — Indicator Removal: Clear Windows Event Logs
+
+**Objective:** detect anti-forensic log clearing — arguably as important as detecting the *original*
+attack, since a sophisticated attacker's last move is often erasing the evidence of everything before it.
+
+**Attack simulation — two variants, deliberately:** cleared the `Application` log
+(`Clear-EventLog -LogName Application`, a lower-stakes test) and separately the `Security` log
+(`wevtutil cl Security`, the actual high-value target for anti-forensics, since that's where authentication
+and privilege-use evidence lives).
+
+**Coverage:** stock rules matching Windows Eventlog service events — Event ID 104 (*"The X log file was
+cleared"*, generic, any channel) and Event ID 1102 (*"The audit log was cleared"*, Security-log-specific,
+the more critical signal).
+
+**Verification (true positive):** both confirmed live —
+
+```
+Rule: 63104 (level 5) -> 'A Windows log file was cleared'   [Application log]
+Rule: 63103 (level 5) -> 'The audit log was cleared'         [Security log]
+```
+
+Both alerts carry real forensic detail beyond just "a log was cleared" — the exact account, domain, and
+client process ID that performed the clear are captured in the structured `logFileCleared` fields, which
+is exactly the information needed to actually act on this alert rather than just acknowledge it happened.
+
+**Evasion:** neither rule requires elevated logging levels to fire — this coverage is solid as long as
+the *Eventlog service itself* is still running and able to log its own clear-events. A sufficiently
+privileged attacker stopping the Eventlog service first, or tampering with the log files directly at the
+filesystem level while the service is down, would evade this specific detection (a variant of the same
+"disable the monitoring first" problem T1562.001 addresses on the Linux side).
+
+**False-positive risk:** low — clearing the Security log in particular has essentially no legitimate
+routine use case in most environments; this is one of the highest-confidence alerts in the whole catalog.
+
+## 12. T1003.001 — LSASS Memory (OS Credential Dumping)
+
+**Objective:** detect an attempt to dump LSASS process memory to extract cached credentials — one of the
+most consequential AD-adjacent techniques there is, and the natural escalation path from "has a foothold
+on a workstation" to "has domain credentials."
+
+**Coverage confirmed by inspection:** stock rule `92900` (`0945-sysmon_id_10.xml`) —
+`targetImage` matches `lsass.exe`, `grantedAccess` matches `0x1010` or `0x40` (the access masks that
+correspond to read access sufficient for a memory dump), with an explicit negation excluding common
+legitimate callers (`C:\Program Files\...`, `wmiprvse.exe`). This is correctly-written, real detection
+logic — verified by reading it, the same standard applied to every rule in this catalog, not just the
+custom ones.
+
+**Attack simulation — thorough, and a real multi-layer finding, not a shortcut:**
+1. **`comsvcs.dll` MiniDump technique** (`rundll32.exe comsvcs.dll, MiniDump <lsass_pid> ... full`), the
+   standard textbook LSASS-dump method — **blocked in real time by Windows Defender** (confirmed via
+   `Get-MpThreatDetection`: `ThreatStatusID: 4`, remediated) before Sysmon could observe a qualifying
+   `ProcessAccess` event at all.
+2. Attempted to test the Sysmon/Wazuh layer independently of Defender (standard, legitimate
+   detection-engineering practice — testing each defensive layer in isolation) by disabling Defender's
+   real-time protection — `Set-MpPreference -DisableRealtimeMonitoring $true` **silently had no effect**,
+   because **Windows 11's Tamper Protection blocks this specific change via script/registry with no
+   error message at all**, by design, specifically to stop this exact bypass (including by real malware).
+   Tamper Protection can only be toggled through the Windows Security GUI — deliberately not scriptable.
+3. With Tamper Protection and real-time protection both genuinely off (confirmed via
+   `Get-MpComputerStatus`), retried the `comsvcs.dll` technique — still failed, `ACCESS_DENIED`
+   (`0x80070005`), even from an elevated Administrator session.
+4. Investigated further rather than assuming: `SeDebugPrivilege` is *present* in an elevated token but
+   not *enabled* by default, and doesn't propagate to a child process spawned via `Start-Process` — a real
+   Windows token-privilege nuance. Enabling it in-process (`[System.Diagnostics.Process]::EnterDebugMode()`)
+   and attempting an in-process `MiniDumpWriteDump` via P/Invoke still failed.
+5. **Root cause confirmed via registry:** `HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\RunAsPPL = 2` —
+   **LSASS is running as Protected Process Light at the strongest enforcement tier.** This is Microsoft's
+   real, modern mitigation for this entire technique class, correctly enabled on this Windows 11 build,
+   and it structurally prevents *any* userland process — regardless of privilege level — from opening a
+   memory-read handle to LSASS. Zero Sysmon telemetry was ever generated across all attempts, because the
+   OS rejects the access before it reaches a point Sysmon's hooks would observe.
+
+**The line deliberately not crossed:** defeating LSASS PPL for real requires loading a vulnerable signed
+kernel driver to strip the protection — a genuine, real-world technique used by actual credential-theft
+tooling. Building that is exploit development, not detection engineering, and was not attempted here,
+even in this authorized, isolated lab — that's a different category of work with a different risk profile,
+not a box to check for catalog completeness.
+
+**Verification method used instead — testing what could honestly be tested:** since `wazuh-logtest`
+worked for the Samba/JSON sources earlier in this catalog, tried it here too, with a synthetic Sysmon
+Event ID 10 payload carrying exactly the field values rule 92900 requires
+(`targetImage=lsass.exe`, `grantedAccess=0x1010`). **It didn't fire — a distinct, deeper limitation than
+the one already documented for Suricata/Samba sources.** Tracing the rule's full `if_sid` chain
+(`92900 → 61612 → 61600 → 60004 → 60000`) found the actual base condition:
+`<rule id="60000"><decoded_as>windows_eventchannel</decoded_as>...`. `wazuh-logtest` decodes a raw pasted
+JSON blob via the generic `json` decoder, never the `windows_eventchannel` decoder real Windows-agent
+traffic is tagged with at ingestion — no amount of payload accuracy can substitute for that, since it's a
+property of the ingestion path, not the content. This confirms `wazuh-logtest` cannot verify *any*
+eventchannel-sourced rule via manual paste, a stronger and more precise version of the earlier finding
+(see [[Wazuh]] in the vault, updated with both).
+
+**Status: coverage confirmed correct by code inspection; live-fire blocked by a working OS mitigation
+(LSASS PPL); rule-logic verification blocked by a `wazuh-logtest` architectural limitation.** Genuinely
+the most technically involved investigation in this whole catalog, and arguably a *better* portfolio
+entry than a clean true-positive would have been — it demonstrates defense-in-depth working correctly at
+three independent layers (AV, Tamper Protection, PPL) and the judgment to recognize where legitimate
+detection-engineering verification ends and exploit development begins.
+
+**False-positive risk (of the rule itself, as written):** the negation for `Program Files`/`wmiprvse.exe`
+already excludes the most common legitimate callers (AV/EDR products, WMI-based monitoring); residual
+noise would mostly come from legitimate credential-management/SSO tooling that genuinely needs
+LSASS read access, which any real deployment running this rule would need to allowlist by path.
 
 ---
 
