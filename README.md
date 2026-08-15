@@ -2,7 +2,7 @@
 
 A segmented, reproducible security lab built on Apple Silicon (VMware Fusion, ARM64-only) — Active Directory, a hand-built Linux router/firewall, Wazuh SIEM, and a full detection-engineering loop from attack simulation to written detection to evasion attempt.
 
-> **Status: Phase 3 complete — Phase 4 (Detection engineering) starting.** Full build plan and design rationale: [`docs/`](docs/).
+> **Status: Phase 4 (Detection engineering) in progress.** 2 of 8–12 target ATT&CK techniques verified end-to-end (custom rule → true positive → evasion attempt), plus a real SCA before/after remediation pass — see [`phase-4-detection/detection-catalog.md`](phase-4-detection/detection-catalog.md). Full build plan and design rationale: [`docs/`](docs/).
 
 ## Architecture
 
