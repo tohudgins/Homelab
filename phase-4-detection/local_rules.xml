@@ -1,0 +1,48 @@
+<!-- Local rules -->
+<!-- Homelab Phase 4 — custom detection engineering -->
+<!-- Copyright (C) 2015, Wazuh Inc. -->
+
+<!--
+  T1110 — Brute Force (SSH)
+
+  First attempt used a single if_matched_group="authentication_failed" correlator to aggregate across
+  failure types (wrong password AND non-existent user) with one tighter threshold than the stock
+  per-type correlators (5712/5719/5763, each frequency=8/120s independently). Verified via
+  wazuh-logtest that if_matched_group never fires in this deployment — reproduced with a literal copy
+  of the stock ruleset's own if_matched_group rule (40111, same pattern, only frequency changed) and
+  it didn't fire either, while if_matched_sid (stock rule 5763) fired exactly as documented. Rather
+  than chase what looks like a version-specific bug, pivoted to two explicit if_matched_sid rules
+  below — same intent (tighter threshold + active response), proven mechanism.
+-->
+<group name="local,syslog,sshd,">
+
+  <rule id="100010" level="12" frequency="4" timeframe="60" ignore="120">
+    <if_matched_sid>5760</if_matched_sid>
+    <same_source_ip />
+    <description>sshd: brute force — $(srcip) had 4+ wrong-password failures in 60s.</description>
+    <mitre>
+      <id>T1110</id>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failures,attack,</group>
+  </rule>
+
+  <rule id="100011" level="12" frequency="4" timeframe="60" ignore="120">
+    <if_matched_sid>5710</if_matched_sid>
+    <same_source_ip />
+    <description>sshd: brute force — $(srcip) had 4+ non-existent-user failures in 60s.</description>
+    <mitre>
+      <id>T1110</id>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failures,attack,</group>
+  </rule>
+
+  <!--
+  Evasion follow-up: both key on same_source_ip and a single failure type, so (a) a spray that stays
+  under 4/60s from any single source, or (b) an attacker who mixes wrong-password and invalid-user
+  guesses to split their attempts across 100010 and 100011 without tripping either threshold alone,
+  both evade this pair by design. Documented in detection-catalog.md as a known gap, not patched here.
+  -->
+
+</group>

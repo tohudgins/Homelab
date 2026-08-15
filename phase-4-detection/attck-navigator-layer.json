@@ -1,0 +1,43 @@
+{
+  "name": "Homelab Detection Coverage",
+  "versions": {
+    "attack": "17",
+    "navigator": "5.1.0",
+    "layer": "4.5"
+  },
+  "domain": "enterprise-attack",
+  "description": "Techniques with a verified custom Wazuh detection rule in this lab (phase-4-detection/detection-catalog.md). Updated as each technique's rule is written and confirmed to fire on a true positive.",
+  "filters": {
+    "platforms": ["Windows", "Linux"]
+  },
+  "sorting": 0,
+  "layout": {
+    "layout": "side",
+    "aggregateFunction": "average",
+    "showID": true,
+    "showName": true
+  },
+  "hideDisabled": false,
+  "techniques": [
+    {
+      "techniqueID": "T1110",
+      "tactic": "credential-access",
+      "color": "#3d8b40",
+      "comment": "SSH brute force against dc-01 — rules 100010 (wrong password) + 100011 (non-existent user) in local_rules.xml, if_matched_sid/frequency/same_source_ip. Verified true positive live (not just wazuh-logtest); firewall-drop active response confirmed firing. Known gap: per-type thresholds, so mixing failure types across both rules evades detection (documented in detection-catalog.md).",
+      "enabled": true,
+      "score": 1
+    }
+  ],
+  "gradient": {
+    "colors": ["#ff6666", "#ffe766", "#8ec843"],
+    "minValue": 0,
+    "maxValue": 1
+  },
+  "legendItems": [
+    { "label": "Custom rule written + verified true positive", "color": "#3d8b40" }
+  ],
+  "showTacticRowBackground": true,
+  "tacticRowBackground": "#dddddd",
+  "selectTechniquesAcrossTactics": true,
+  "selectSubtechniquesWithParent": false
+}
