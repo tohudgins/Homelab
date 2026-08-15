@@ -76,6 +76,45 @@
   alert-only pending a real response playbook. See detection-catalog.md.
   -->
 
+  <!--
+  T1053.003 — Scheduled Task/Job: Cron (Persistence)
+
+  Same escalation pattern as SYSVOL above, different path set: cron directories are where a compromised
+  host most commonly gets a persistence mechanism planted (a scheduled beacon/implant re-download).
+  Extended real-time FIM to cover them plus a handful of other classic Linux persistence/credential
+  files (/etc/passwd, /etc/shadow, /etc/sudoers) in the same <directories> block.
+  -->
+  <rule id="100050" level="12">
+    <if_sid>550,553,554</if_sid>
+    <field name="file" type="pcre2">^/etc/cron\.(d|daily|hourly|weekly|monthly)/|^/etc/crontab$</field>
+    <description>Cron persistence — $(file) added/modified/deleted.</description>
+    <mitre>
+      <id>T1053.003</id>
+    </mitre>
+    <group>persistence,attack,</group>
+  </rule>
+
+  <!--
+  T1136.001 (Create Account: Local Account) / T1098 (Account Manipulation) — local account and
+  credential-file tampering (host-level, distinct from the Samba/AD-level T1098 investigation above —
+  this catches changes to the OS's OWN account files, relevant even though the primary identity plane
+  here is AD, since dc-01 itself is still a Linux host with local accounts/sudoers that could be abused
+  for persistence independent of AD entirely). Both MITRE IDs tagged deliberately, not sloppily: the rule
+  can't distinguish creating a new local account (useradd writes both passwd+shadow) from modifying an
+  existing one's password/shell (T1098) — same honest broad-not-narrow tradeoff as the rest of this FIM
+  family. The verified test below specifically exercised account *creation*.
+  -->
+  <rule id="100051" level="12">
+    <if_sid>550,553,554</if_sid>
+    <field name="file" type="pcre2">^/etc/(passwd|shadow|sudoers)$</field>
+    <description>Local account/credential file changed — $(file).</description>
+    <mitre>
+      <id>T1136.001</id>
+      <id>T1098</id>
+    </mitre>
+    <group>persistence,attack,</group>
+  </rule>
+
 </group>
 
 <!--
@@ -116,6 +155,54 @@
   identical to a legitimate client requesting its one ticket. Not patched here -- see
   detection-catalog.md for why (would need baselining normal per-account SPN request patterns, out of
   scope for a rule this lab can verify against real telemetry tonight).
+  -->
+
+</group>
+
+<!--
+  T1110.001 — Brute Force: Password Guessing (Kerberos pre-authentication, distinct from the sshd-based
+  100010/100011 above)
+
+  Same ATT&CK ID, genuinely different detection surface: an attacker guessing AD account passwords via
+  Kerberos (kinit, or any AD-aware tool) never touches sshd at all, so 100010/100011 are blind to this
+  vector entirely. Reuses the same auth_json_audit telemetry wired up for Kerberoasting above -- Samba
+  emits an eventId 4625 (matches real Windows Event ID 4625) per failed pre-auth attempt.
+-->
+<group name="local,kerberos,">
+
+  <rule id="100040" level="5">
+    <decoded_as>json</decoded_as>
+    <field name="type">^Authentication$</field>
+    <field name="Authentication.eventId">^4625$</field>
+    <field name="Authentication.serviceDescription">^Kerberos KDC$</field>
+    <options>no_full_log</options>
+    <description>Samba KDC: Kerberos pre-authentication failed for $(Authentication.clientAccount).</description>
+    <mitre>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failed,</group>
+  </rule>
+
+  <rule id="100041" level="12" frequency="4" timeframe="60" ignore="120">
+    <if_matched_sid>100040</if_matched_sid>
+    <same_field>Authentication.clientAccount</same_field>
+    <description>Kerberos brute force — $(Authentication.clientAccount) had 4+ pre-auth failures in 60s.</description>
+    <mitre>
+      <id>T1110</id>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failures,attack,</group>
+  </rule>
+
+  <!--
+  Active response: disables the targeted AD account via samba-tool rather than blocking a source IP.
+  IP-blocking (used for the sshd rules above) doesn't fit here -- a Kerberos brute force can originate
+  from any domain member, and blocking one source IP does nothing if the attacker just tries from
+  another host. Disabling the *account* stops the attack regardless of source. Custom script since the
+  stock `disable-account` active response only understands local system accounts, not Samba AD accounts.
+  See disable-ad-account.sh (mirrored in this folder) and detection-catalog.md for the real risk this
+  creates: an attacker who knows this rule exists can weaponize it into a DoS by deliberately failing
+  Kerberos auth as a real, legitimate, high-value account (helpdesk lead, an admin) to get it locked out.
   -->
 
 </group>

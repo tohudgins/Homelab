@@ -9,29 +9,46 @@ Rules live on siem-01 at `/var/ossec/etc/rules/local_rules.xml` (mirrored in thi
 
 ## Status
 
-**Verified tonight (2026-08-14/15), all against real telemetry, not just syntax checks:**
+**Verified across 2026-08-14/15, all against real telemetry, not just syntax checks:**
 
 | # | ATT&CK Technique | Rule ID(s) | Source Host | Status |
 |---|---|---|---|---|
 | 1 | [T1110 – Brute Force](https://attack.mitre.org/techniques/T1110/) | 100010, 100011 | dc-01 (sshd) | ✅ verified TP, active response confirmed |
 | 2 | [T1484.001 – Group Policy Modification](https://attack.mitre.org/techniques/T1484/001/) | 100020 | dc-01 (SYSVOL FIM) | ✅ verified TP (add/modify/delete) |
 | 3 | [T1558.003 – Kerberoasting](https://attack.mitre.org/techniques/T1558/003/) | 100030, 100031 | dc-01 (Samba KDC audit) | ✅ verified TP + evasion confirmed |
+| 4 | [T1110.001 – Password Guessing (Kerberos)](https://attack.mitre.org/techniques/T1110/001/) | 100040, 100041 | dc-01 (Samba KDC audit) | ✅ verified TP, custom active response confirmed |
+| 5 | [T1053.003 – Scheduled Task/Job: Cron](https://attack.mitre.org/techniques/T1053/003/) | 100050 | dc-01 (cron FIM) | ✅ verified TP |
+| 6 | [T1136.001 – Create Account: Local Account](https://attack.mitre.org/techniques/T1136/001/) (+ T1098) | 100051 | dc-01 (passwd/shadow/sudoers FIM) | ✅ verified TP (passwd + shadow) |
 
-Plus a real SCA before/after remediation pass on dc-01 (48% → 55%, see below) — a different Wazuh
-capability (compliance benchmarking, not attack-simulation rule-writing), so it isn't in the technique
-table above.
+(#6 is tagged with both IDs deliberately: the rule can't distinguish creating a new local account from
+modifying an existing one's credentials — same file, same rule, same broad-not-narrow tradeoff as the
+rest of this FIM family — but the actual test below specifically exercised account *creation*
+(`useradd`), which is T1136.001, not T1098. There's a separate, more precise T1098.007-flavored angle —
+*AD Domain Admins* group membership specifically — that was investigated and honestly not achieved; see
+[below](#investigated-not-achieved-t1098007-account-manipulation--privileged-group-membership) for why.)
+
+Plus a real SCA before/after remediation pass on dc-01 (48% → 55%, see below — a different Wazuh
+capability, compliance benchmarking rather than attack-simulation rule-writing, so it isn't in the table).
+
+**Also confirmed running, not independently verified:** Wazuh's vulnerability-detection module
+(package-CVE matching) is enabled and its feed has updated (`ossec.log` confirms `Feed update process
+completed` / `Vulnerability scanner module started`), but results live only in the OpenSearch indexer in
+this Wazuh version (no local CLI path the way SCA had) and this session didn't have indexer/API
+credentials on hand to query it directly. Lowest-priority item on this tool's own value ranking (see
+[[Wazuh]] in the vault) — didn't burn time rotating credentials on a live system to check a box that low
+on the list. Worth a real pass once credentials are sorted out.
 
 **Deliberately deferred, not forgotten:**
 - **Windows/Sysmon coverage (ws-01)** — ws-01 is a suspended 8GB VM; this MacBook's 24GB is already fully
-  committed across rtr-01+dc-01+siem-01 with real swap pressure observed tonight. Resuming it needs either
-  more free RAM (close other VMs) or accepting real thrash risk — not a decision to make silently mid-session.
-  Next session's natural starting point.
-- **NSM / Suricata rule-writing** — wired Suricata's `eve.json` into Wazuh tonight (real ingestion,
-  verified flowing) as prep, but building actual detections on top of it is explicitly **Phase 6** scope
-  in the build plan (ET Open tuning, Suricata+Zeek correlation). Started drifting into that scope
-  mid-session and pulled back deliberately rather than half-finish Phase 6 under the Phase 4 banner.
-- **Target is 8-12 techniques total** per the build plan; 2 custom-rule techniques + SCA is a real,
-  verified subset, not the finish line. Continuing this catalog is the first thing to pick back up.
+  committed across rtr-01+dc-01+siem-01 with real swap pressure observed. Resuming it needs either more
+  free RAM (close other VMs) or accepting real thrash risk — not a decision to make silently mid-session.
+- **NSM / Suricata rule-writing** — wired Suricata's `eve.json` into Wazuh (real ingestion, verified
+  flowing) as prep, but building actual detections on top of it is explicitly **Phase 6** scope in the
+  build plan (ET Open tuning, Suricata+Zeek correlation). Started drifting into that scope mid-session and
+  pulled back deliberately rather than half-finish Phase 6 under the Phase 4 banner.
+- **Target is 8-12 techniques total** per the build plan; 4 verified custom-rule techniques + SCA + one
+  honestly-documented investigation is real, substantial progress, not the finish line. Continuing this
+  catalog (more dc-01/rtr-01 techniques, then ws-01 once resumed) is the natural next step.
 
 ---
 
@@ -319,6 +336,225 @@ within a minute — a user opening several different mapped drives/services in q
 or a monitoring/backup tool that touches multiple services on a schedule — would trip this identically.
 Real deployments tune the threshold and/or exclude known service accounts with legitimately bursty
 ticket-request patterns from this rule.
+
+---
+
+## 4. T1110.001 — Password Guessing (Kerberos pre-authentication)
+
+**Objective:** Detect an attacker guessing AD account passwords via Kerberos directly (`kinit`, or any
+AD-aware tool) — a genuinely different detection surface from the sshd-based T1110 rules (100010/100011)
+above, which are completely blind to this vector since it never touches SSH at all. Same ATT&CK ID,
+different protocol, same reasoning as before for why real detection catalogs carry more than one rule per
+technique: coverage means covering every path an attacker could actually take, not just the first one.
+
+**Attack simulation:** created a throwaway domain account, then attempted `kinit` against it with 4 wrong
+passwords in immediate succession — reusing the same `auth_json_audit` telemetry wired up for
+Kerberoasting above.
+
+**Raw telemetry observed:** Samba emits `eventId: 4625` (matches real Windows Event ID 4625, *An account
+failed to log on*) for each failed pre-auth attempt, with the account name and failure reason:
+
+```json
+{"type":"Authentication","Authentication":{"eventId":4625,"status":"NT_STATUS_WRONG_PASSWORD",
+ "serviceDescription":"Kerberos KDC","authDescription":"ENC-TS Pre-authentication",
+ "clientAccount":"test-lockout@LAB.INTERNAL","becameAccount":"test-lockout", ...}}
+```
+
+**Custom rules:**
+
+```xml
+<rule id="100040" level="5">
+  <decoded_as>json</decoded_as>
+  <field name="type">^Authentication$</field>
+  <field name="Authentication.eventId">^4625$</field>
+  <field name="Authentication.serviceDescription">^Kerberos KDC$</field>
+  <options>no_full_log</options>
+  <description>Samba KDC: Kerberos pre-authentication failed for $(Authentication.clientAccount).</description>
+  <mitre><id>T1110.001</id></mitre>
+  <group>authentication_failed,</group>
+</rule>
+
+<rule id="100041" level="12" frequency="4" timeframe="60" ignore="120">
+  <if_matched_sid>100040</if_matched_sid>
+  <same_field>Authentication.clientAccount</same_field>
+  <description>Kerberos brute force — $(Authentication.clientAccount) had 4+ pre-auth failures in 60s.</description>
+  <mitre><id>T1110</id><id>T1110.001</id></mitre>
+  <group>authentication_failures,attack,</group>
+</rule>
+```
+
+**Verification (true positive):** confirmed live —
+
+```
+Rule: 100041 (level 12) -> 'Kerberos brute force — test-lockout@LAB.INTERNAL had 4+ pre-auth failures in 60s.'
+```
+
+**Active response — a genuinely custom script, and why:** IP-blocking (the sshd rules' approach) doesn't
+fit here — a Kerberos brute force can come from *any* domain member, so blocking one source IP does
+nothing once the attacker tries from another host. The right containment is disabling the targeted
+*account*, but Wazuh's stock `disable-account` active response only understands local system accounts
+(`usermod -L`) — it has no concept of a Samba AD domain account. Wrote a real custom active-response
+script instead ([`disable-ad-account.py`](disable-ad-account.py), mirrored here, deployed to
+`/var/ossec/active-response/bin/disable-ad-account` on dc-01):
+
+- Parses the JSON payload Wazuh feeds active-response scripts on stdin, pulls the target account out of
+  `parameters.alert.data.Authentication.becameAccount`
+- On `"command":"add"`, runs `samba-tool user disable <account>`; on `"command":"delete"` (fired
+  automatically when the active-response `<timeout>` expires), runs `samba-tool user enable <account>`
+- **Hard-excludes `administrator`, `krbtgt`, and `guest`** from automated action — flagged as a real risk
+  in the rule's own comment before ever testing it: an attacker who knows this rule exists could otherwise
+  weaponize it into a denial-of-service by deliberately failing Kerberos auth *as* a real admin account to
+  get it locked out. A response that can be turned into an attack is worse than no response.
+
+**Verified end-to-end, not just "script looks right":**
+1. Alert fired → `active-responses.log` on dc-01 recorded `disable test-lockout2: rc=0`
+2. `samba-tool user show test-lockout2` — `userAccountControl` flipped from `512` (normal, enabled) to
+   `514` (`512 | ACCOUNTDISABLE`) — a real AD-level change, not just a log line
+3. Attempted `kinit` against the disabled account **with the correct password** —
+   `kinit: Client's credentials have been revoked` — genuine lockout confirmed, not cosmetic
+4. Automatic reversal at the 600s timeout — **and a real, unplanned second finding here.** Restarted the
+   manager to deploy the next rules (100050/100051 below) while the reversal was still pending, and it
+   never fired. `ossec.log` showed exactly why: `wazuh-execd: Shutdown received. Deleting responses.` —
+   **restarting `wazuh-execd` (which a full manager restart does) discards every pending scheduled
+   active-response reversal**, silently, with no warning and no error. The account stayed disabled
+   indefinitely until manually re-enabled (`samba-tool user enable`). This is a genuine operational risk
+   worth knowing before relying on AR timeouts in anything resembling production: a routine config
+   deploy/restart during an active incident can permanently strand a block or a lockout — the fix is
+   either avoiding manager restarts while responses are in flight, or building monitoring that catches
+   "should have expired by now, didn't" rather than trusting the timeout blindly. See [[Wazuh]] in the
+   vault for the reusable version of this gotcha.
+
+**Evasion:** same core gap as the sshd rules — rate-limiting under 4 failures/60s evades detection
+entirely, and this protocol has no equivalent of trying multiple failure "types" to split across rules
+(the base account discovery is what's happening here; there's just one failure mode: wrong password).
+
+**False-positive risk — real and worth taking seriously given the active response attached:** a user who
+mistypes their password 4 times in a row gets their own account disabled for 10 minutes by the system
+that was supposed to be helping them. This is the honest cost of pairing account-lockout active response
+with a threshold this tight; a production deployment would want this threshold noticeably looser than the
+lab's own AD password lockout policy (if one is even configured — it isn't, here) to avoid the detection
+system locking out users before the directory's own native lockout policy would.
+
+---
+
+## 5 & 6. T1053.003 (Cron Persistence) and T1136.001 (Local Account Creation)
+
+Both reuse the real-time FIM machinery proven in T1484.001 — same escalation pattern (default FIM rules
+550/553/554 scoped to a specific path set via the `file` field), extended to two more path groups that are
+classic Linux persistence/credential targets, distinct from the AD-level techniques above. Adding these
+cost almost nothing beyond the SYSVOL work already done, which is exactly the point of building FIM this
+way — the pattern is designed to extend.
+
+**Setup:** extended dc-01's real-time FIM directories:
+
+```xml
+<directories realtime="yes" report_changes="yes">/etc/cron.d,/etc/cron.daily,/etc/cron.hourly,/etc/cron.weekly,/etc/cron.monthly</directories>
+<directories realtime="yes" report_changes="yes">/etc/passwd,/etc/shadow,/etc/sudoers,/etc/crontab</directories>
+```
+
+**Attack simulation:**
+- **T1053.003:** planted a cron job mimicking a disguised beacon (`/etc/cron.d/system-update-check`, a
+  name chosen to blend in with legitimate scheduled maintenance) that would periodically pull and execute
+  a remote script — the actual mechanics of cron-based persistence.
+- **T1136.001:** ran `useradd -m backdoor-test` — the direct local-account equivalent of what Kerberoasting/
+  Kerberos-brute-force above are ultimately after: once an attacker has root on the DC itself (through
+  *any* path), planting a local backdoor account is a much simpler, protocol-independent persistence
+  mechanism than anything AD-specific.
+
+**Custom rules:**
+
+```xml
+<rule id="100050" level="12">
+  <if_sid>550,553,554</if_sid>
+  <field name="file" type="pcre2">^/etc/cron\.(d|daily|hourly|weekly|monthly)/|^/etc/crontab$</field>
+  <description>Cron persistence — $(file) added/modified/deleted.</description>
+  <mitre><id>T1053.003</id></mitre>
+  <group>persistence,attack,</group>
+</rule>
+
+<rule id="100051" level="12">
+  <if_sid>550,553,554</if_sid>
+  <field name="file" type="pcre2">^/etc/(passwd|shadow|sudoers)$</field>
+  <description>Local account/credential file changed — $(file).</description>
+  <mitre><id>T1136.001</id><id>T1098</id></mitre>
+  <group>persistence,attack,</group>
+</rule>
+```
+
+Tagged with both MITRE IDs deliberately: the rule can't distinguish creating a new account (`useradd`
+writes both `passwd`+`shadow`, T1136.001) from modifying an existing one's password/shell (T1098) — same
+file, same rule, same broad-not-narrow tradeoff as the rest of this FIM family.
+
+**Verification (true positive):** both confirmed live —
+
+```
+Rule: 100050 (level 12) -> 'Cron persistence — /etc/cron.d/system-update-check added/modified/deleted.'
+Rule: 100051 (level 12) -> 'Local account/credential file changed — /etc/passwd.'
+Rule: 100051 (level 12) -> 'Local account/credential file changed — /etc/shadow.'
+```
+
+`useradd -m` correctly triggered *two* separate alerts (`/etc/passwd` and `/etc/shadow` both get written),
+confirming the rule catches the real filesystem-level footprint of account creation, not a synthetic test.
+
+**Evasion:** neither rule requires any specific *content* pattern — any write to these paths fires,
+regardless of what changed. That's the honest trade-off already established for SYSVOL: broad and
+reliable rather than narrow and gameable, but it means a legitimate `useradd`/`crontab -e` looks
+identical to an attacker's, and there's no distinction between "added a line" and "added a malicious
+line" — a human (or a future correlation rule cross-referencing *who* ran the change against an expected
+maintenance window) has to make that call.
+
+**False-positive risk:** any legitimate system administration touching these paths — routine user
+provisioning, a real cron job being added by an admin or a package's postinst script — fires identically.
+High-noise by design in a lab with no separate change-management signal to cross-reference against; a real
+deployment would pair this with a ticketing/CMDB lookup before treating every alert as an incident, same
+caveat as the SYSVOL rule.
+
+---
+
+## Investigated, not achieved: T1098.007 (Account Manipulation — privileged group membership)
+
+Worth documenting the dead end itself, not just the successes — this is a real, tested platform
+limitation, not a skipped step.
+
+**Goal:** detect an attacker adding an account to Domain Admins (or any privileged group) — one of the
+most consistently-monitored events in real-world AD security (Windows Event ID 4728/4732, *A member was
+added to a security-enabled group*), and a natural next step after Kerberoasting or brute-forcing your way
+to a privileged credential.
+
+**What was tried:** Samba's `auth_json_audit` (proven, working — everything above is built on it) only
+covers *authentication* events. Directory-object *modification* has its own logging facility family in
+Samba's source (`dsdb_audit`), so enabled every plausible variant in `smb.conf`:
+
+```
+log level = 1 auth_audit:3 auth_json_audit:3 dsdb_audit:3 dsdb_json_audit:3 dsdb_group_audit:3 dsdb_group_json_audit:3 dsdb_password_audit:3 dsdb_password_json_audit:3
+```
+
+**Test methodology (to rule out "the change didn't actually happen" as the explanation):** created a
+dedicated `adm-test` account, added it to Domain Admins locally (as a one-time bootstrap, not part of the
+test itself), then authenticated as `adm-test` **over the network LDAP protocol**
+(`samba-tool group addmembers "Domain Admins" jdoe -H ldap://dc-01.lab.internal -k yes`) — the same path a
+real remote attacker would use, not a local-database shortcut. Confirmed the modification genuinely
+succeeded (`samba-tool group listmembers "Domain Admins"` showed `jdoe` added) and confirmed the
+*authentication* half of that same operation *was* captured correctly (a real `KDC Authorization` TGS-REQ
+event for the `ldap/dc-01.lab.internal` SPN, exactly like the Kerberoasting telemetry above) — proving the
+audit pipeline itself works and the gap is specifically in directory-modification logging, not the whole
+mechanism.
+
+**Result:** zero output from any `dsdb_*` facility, across all four variants tried, for a change verified
+to have genuinely happened via the exact real-world attack path. This is a genuine capability gap in this
+Samba AD DC build (4.23.6) versus a real Windows Server DC, which supports this natively — and a concrete,
+honest cost of the Samba pivot documented in `docs/design-decisions.md`: the protocol behavior an attacker
+exercises is identical either way, but the *defender's* visibility into it is not automatically identical,
+and this is the first place in the whole catalog where that gap actually bit.
+
+**Cleaned up before moving on:** removed `jdoe` from Domain Admins and deleted `adm-test` entirely — both
+were test artifacts, not intentional misconfigurations, and leaving an undocumented extra Domain Admin
+account in place would have quietly corrupted the AD state for Phase 5's BloodHound work later.
+
+**Not pursued further tonight:** the remaining option — registering a real LDB audit-log module in the
+schema rather than a log-level flag — is a materially bigger, more invasive change than anything else in
+this catalog, and risks the live DC for a payoff that isn't guaranteed. Worth a dedicated pass later, not
+squeezed in as a footnote to something else.
 
 ---
 

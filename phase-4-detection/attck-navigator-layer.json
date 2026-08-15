@@ -42,6 +42,38 @@
       "comment": "Kerberoasting against 3 intentionally-planted Kerberoastable service accounts (svc-sql/svc-backup/svc-web, weak passwords + SPNs, see phase-2-identity/known-weaknesses.md). Enabled Samba's structured auth_json_audit logging (off by default) to get per-TGS-REQ telemetry (Samba's equivalent of Windows Event ID 4769). Rules 100030 (base capture) + 100031 (if_matched_sid + same_field correlation on account, 3+ tickets/60s = level 12). Verified true positive live, AND verified the evasion: a single targeted ticket request produces zero new alerts, confirmed by alert count before/after, not just reasoned about.",
       "enabled": true,
       "score": 1
+    },
+    {
+      "techniqueID": "T1110.001",
+      "tactic": "credential-access",
+      "color": "#3d8b40",
+      "comment": "Kerberos pre-auth brute force against dc-01 — genuinely different detection surface from the sshd T1110 rules (same telemetry pipeline as Kerberoasting, eventId 4625 = real Windows Event ID). Rules 100040 (base) + 100041 (same_field correlation, 4+/60s). Paired with a real CUSTOM active-response script (disable-ad-account.py, since the stock disable-account command doesn't understand Samba AD accounts) that calls samba-tool to disable/re-enable the targeted account. Verified end-to-end: alert fired -> account's userAccountControl flipped 512->514 -> kinit with the CORRECT password failed with 'credentials have been revoked' -> automatic re-enable at the AR timeout confirmed too. Hard-excludes administrator/krbtgt/guest from automated action to prevent the response itself becoming a DoS vector.",
+      "enabled": true,
+      "score": 1
+    },
+    {
+      "techniqueID": "T1053.003",
+      "tactic": "persistence",
+      "color": "#3d8b40",
+      "comment": "Cron persistence on dc-01 — rule 100050, extends the FIM-escalation pattern proven on SYSVOL to /etc/cron.d, cron.{daily,hourly,weekly,monthly}, and /etc/crontab. Verified true positive by planting a disguised beacon cron job.",
+      "enabled": true,
+      "score": 1
+    },
+    {
+      "techniqueID": "T1136.001",
+      "tactic": "persistence",
+      "color": "#3d8b40",
+      "comment": "Local account creation on dc-01 (the simplest, protocol-independent backdoor once an attacker has root, regardless of how they got it) — rule 100051, FIM on /etc/passwd + /etc/shadow + /etc/sudoers. Also tagged T1098 since the same rule can't distinguish account creation from modifying an existing account's credentials -- verified test specifically exercised useradd (creation), correctly fired on both passwd and shadow writes.",
+      "enabled": true,
+      "score": 1
+    },
+    {
+      "techniqueID": "T1098.007",
+      "tactic": "persistence",
+      "color": "#e8a33d",
+      "comment": "INVESTIGATED, NOT ACHIEVED — a real platform limitation, not a skipped step. Tried detecting Domain Admins group-membership changes via every plausible Samba dsdb audit-log facility (dsdb_audit, dsdb_json_audit, dsdb_group_audit, dsdb_group_json_audit, all combinations). Verified the underlying LDAP modification genuinely succeeded each time (samba-tool group listmembers confirmed) and verified the AUTHENTICATION half of the same operation WAS captured correctly by auth_json_audit -- proving the pipeline works and the gap is specific to directory-modification auditing in this Samba build (4.23.6), not a config mistake. A genuine, documented cost of the Samba-vs-Windows-Server DC pivot (docs/design-decisions.md) that the protocol-level equivalence argument doesn't cover. See detection-catalog.md for full methodology.",
+      "enabled": true,
+      "score": 0.3
     }
   ],
   "gradient": {
@@ -50,7 +82,8 @@
     "maxValue": 1
   },
   "legendItems": [
-    { "label": "Custom rule written + verified true positive", "color": "#3d8b40" }
+    { "label": "Custom rule written + verified true positive", "color": "#3d8b40" },
+    { "label": "Investigated — real platform limitation found, not achieved", "color": "#e8a33d" }
   ],
   "showTacticRowBackground": true,
   "tacticRowBackground": "#dddddd",
