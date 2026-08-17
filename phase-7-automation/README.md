@@ -91,8 +91,8 @@ ansible-playbook siem.yml
 | `siem` | siem-01 | Wazuh custom rules + decoders (detection-as-code), service health, restart-and-verify the ruleset parses | ✅ built, idempotent |
 | `dc` | dc-01 | Samba AD DC `smb.conf` (incl. Phase 4 audit logging) + the deliberate weaknesses register (Kerberoastable service accounts + SPNs, unprivileged user, svc-backup's Backup Operators + DCSync over-privilege), each guarded by an existence check | ✅ built, idempotent + self-verifying |
 | `dmz` | dmz-01 | Docker + OWASP Juice Shop, Wazuh agent (+ container-log ingestion), NTP sync to rtr-01 | ✅ built, idempotent |
-| `fileserver` | fs-01 | Samba member, the weak `[public]` share, `full_audit` VFS, Wazuh agent | ⬜ next (needs fs-01 sudo bootstrap) |
-| Windows | ws-01 | Sysmon + Wazuh agent via WinRM | ⬜ later increment |
+| `fileserver` | fs-01 | Samba member `smb.conf`, the weak `[public]` share + `full_audit` VFS, the bait credential file, Wazuh agent + realtime FIM on the share | ✅ built, idempotent + self-verifying |
+| Windows | ws-01 | Sysmon + Wazuh agent via WinRM | ⬜ later increment (the one host without a role) |
 
 > **dmz-01 is a from-scratch VM**, not just a role: it was installed fully
 > headless via Ubuntu autoinstall (see `provisioning/dmz-01/`) and then configured
@@ -122,6 +122,11 @@ Each role was proven, not assumed:
   present on the domain NC. (The create paths aren't exercised against the live DC
   because the accounts already exist — deleting a real AD account to test creation
   isn't worth the risk; the guards + end-state assertion are the verification.)
+- **fileserver** — converged against fs-01 with a domain-join guard (fails clearly
+  if `net ads testjoin` isn't "Join is OK"); re-run `changed=0`. Self-verification
+  task confirms the `[public]` share is exported (`testparm`) and the bait file is
+  present and still leaks `svc-backup`. The full lab (`site.yml`) converges all
+  five hosts — rtr-01, dc-01, siem-01, dmz-01, fs-01 — at `changed=0`.
 - **dmz** — full new-host build, verified end-to-end after headless install:
   Juice Shop answers HTTP 200 (the role's own `uri` check) and is reachable
   CORP→DMZ; the Wazuh agent enrolled as **005 / Active** on the manager and

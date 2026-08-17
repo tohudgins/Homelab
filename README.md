@@ -59,6 +59,6 @@ Wazuh agent + container-log ingestion"]
 | 4 | Detection engineering | ✅ Complete (12 techniques) |
 | 5 | Offense in context | 🔄 In progress (BloodHound path → executed → DCSync + credential-theft detections) |
 | 6 | Network security monitoring | 🔄 In progress (Suricata + Zeek inline; attack-chain PCAP analysis correlating signature/protocol/host) |
-| 7 | Automation | 🔄 In progress (Ansible IaC — `router`/`dc`/`siem`/`dmz` roles built, converged, and proven idempotent; **dmz-01** stood up from a blank disk via headless Ubuntu autoinstall + the `dmz` role) |
+| 7 | Automation | 🔄 In progress (Ansible IaC — all five Linux hosts covered by roles: `router`/`dc`/`siem`/`dmz`/`fileserver`; `site.yml` converges the whole lab at `changed=0`; **dmz-01** stood up from a blank disk via headless Ubuntu autoinstall. Remaining: ws-01 Windows/WinRM) |
 
 Full IP plan, naming convention, and design rationale: [`docs/00-ip-plan.md`](docs/00-ip-plan.md), [`docs/design-decisions.md`](docs/design-decisions.md).

@@ -1,0 +1,18 @@
+---
+# fs-01 — Samba domain member with a deliberately weak share.
+# The domain *join* (`net ads join -U administrator`) is a one-shot prerequisite
+# needing domain-admin creds; this role assumes a joined member and manages its
+# config + the weakness on top, idempotently.
+fileserver_samba_services:
+  - smbd
+  - nmbd
+  - winbind
+
+fileserver_share_path: /srv/samba/public
+# AD group (winbind-resolved) that owns the share; matches the live box.
+fileserver_share_group: "domain users"
+
+# Wazuh agent — same pinned version/repo as the other agents.
+wazuh_agent_version: "4.14.7-1"
+wazuh_apt_key_url: "https://packages.wazuh.com/key/GPG-KEY-WAZUH"
+wazuh_apt_repo: "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main"

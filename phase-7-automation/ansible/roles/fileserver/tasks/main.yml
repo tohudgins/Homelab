@@ -1,0 +1,114 @@
+---
+# ============================================================================
+# fs-01 — Samba domain member + the deliberately weak [public] share that leaks
+# svc-backup's cleartext credential (the intended lateral-movement path), plus
+# the Wazuh agent + realtime FIM that make tampering with the bait visible.
+# Idempotent; assumes the host is already domain-joined.
+# ============================================================================
+
+- name: Confirm fs-01 is domain-joined
+  ansible.builtin.command: net ads testjoin
+  register: fs_testjoin
+  changed_when: false
+  failed_when: "'Join is OK' not in fs_testjoin.stdout"
+  # Joining is a one-shot prerequisite: `net ads join -U administrator`
+  # (needs domain-admin creds). See the role README.
+
+# --- Samba member config + the weak share ------------------------------------
+- name: Deploy Samba member smb.conf (weak [public] share + full_audit)
+  ansible.builtin.copy:
+    src: smb.conf
+    dest: /etc/samba/smb.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: testparm -s %s
+  notify: Restart samba
+
+- name: Ensure the weak share directory exists
+  ansible.builtin.file:
+    path: "{{ fileserver_share_path }}"
+    state: directory
+    owner: root
+    group: "{{ fileserver_share_group }}"
+    mode: "2775"
+
+- name: Plant the bait credential file (the intended lateral-movement path)
+  ansible.builtin.copy:
+    src: map-backup-share.ps1
+    dest: "{{ fileserver_share_path }}/map-backup-share.ps1"
+    owner: root
+    group: "{{ fileserver_share_group }}"
+    mode: "0664"
+
+- name: Ensure Samba services are enabled and running
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: "{{ fileserver_samba_services }}"
+
+# --- Wazuh agent + realtime FIM on the share ---------------------------------
+- name: Install the Wazuh GPG key (dearmored)
+  ansible.builtin.shell: |
+    set -o pipefail
+    curl -s {{ wazuh_apt_key_url }} | gpg --dearmor > /usr/share/keyrings/wazuh.gpg
+  args:
+    creates: /usr/share/keyrings/wazuh.gpg
+    executable: /bin/bash
+
+- name: Add the Wazuh apt repository
+  ansible.builtin.apt_repository:
+    repo: "{{ wazuh_apt_repo }}"
+    filename: wazuh
+    state: present
+    update_cache: true
+
+- name: Install the Wazuh agent (pinned, manager preconfigured)
+  ansible.builtin.apt:
+    name: "wazuh-agent={{ wazuh_agent_version }}"
+    state: present
+  environment:
+    WAZUH_MANAGER: "{{ wazuh_manager_ip }}"
+
+- name: Hold the agent at the manager's version (no silent drift)
+  ansible.builtin.dpkg_selections:
+    name: wazuh-agent
+    selection: hold
+
+- name: Point the agent at the Wazuh manager
+  ansible.builtin.lineinfile:
+    path: /var/ossec/etc/ossec.conf
+    regexp: '<address>.*</address>'
+    line: "      <address>{{ wazuh_manager_ip }}</address>"
+  notify: Restart wazuh-agent
+
+- name: Realtime FIM on the weak share (flag any tampering with the bait)
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: "<!-- {mark} ANSIBLE MANAGED: fs-01 share FIM -->"
+    block: |
+      <ossec_config>
+        <syscheck>
+          <directories check_all="yes" report_changes="yes" realtime="yes">{{ fileserver_share_path }}</directories>
+        </syscheck>
+      </ossec_config>
+  notify: Restart wazuh-agent
+
+- name: Enable and start the Wazuh agent
+  ansible.builtin.systemd:
+    name: wazuh-agent
+    enabled: true
+    state: started
+
+# --- Verify -------------------------------------------------------------------
+- name: Verify the [public] share is exported and the bait is present
+  ansible.builtin.shell: |
+    set -e
+    testparm -s 2>/dev/null | grep -q '\[public\]'
+    test -f {{ fileserver_share_path }}/map-backup-share.ps1
+    grep -q 'svc-backup' {{ fileserver_share_path }}/map-backup-share.ps1
+    echo VERIFIED
+  register: fs_verify
+  changed_when: false
+  failed_when: "'VERIFIED' not in fs_verify.stdout"

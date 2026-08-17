@@ -1,0 +1,5 @@
+---
+- name: Configure fs-01 — Samba member, weak share, Wazuh agent + FIM
+  hosts: fileservers
+  roles:
+    - fileserver

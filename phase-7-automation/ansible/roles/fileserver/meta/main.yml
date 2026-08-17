@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  role_name: fileserver
+  description: >-
+    fs-01 — Samba domain member with the deliberately weak [public] share that
+    leaks svc-backup's cleartext credential (the lateral-movement path), plus the
+    Wazuh agent and realtime FIM that make tampering with the bait visible.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

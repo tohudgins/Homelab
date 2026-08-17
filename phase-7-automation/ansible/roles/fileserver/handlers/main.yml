@@ -1,0 +1,14 @@
+---
+- name: Restart samba
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: restarted
+  loop:
+    - smbd
+    - nmbd
+    - winbind
+
+- name: Restart wazuh-agent
+  ansible.builtin.systemd:
+    name: wazuh-agent
+    state: restarted
