@@ -57,7 +57,7 @@ domain member, deliberate share/ACL misconfig"]
 | 3 | Visibility (Wazuh) | ✅ Complete |
 | 4 | Detection engineering | ✅ Complete (12 techniques) |
 | 5 | Offense in context | 🔄 In progress (BloodHound path → executed → DCSync + credential-theft detections) |
-| 6 | Network security monitoring | ⬜ |
+| 6 | Network security monitoring | 🔄 In progress (Suricata + Zeek inline; attack-chain PCAP analysis correlating signature/protocol/host) |
 | 7 | Automation | ⬜ |
 
 Full IP plan, naming convention, and design rationale: [`docs/00-ip-plan.md`](docs/00-ip-plan.md), [`docs/design-decisions.md`](docs/design-decisions.md).
