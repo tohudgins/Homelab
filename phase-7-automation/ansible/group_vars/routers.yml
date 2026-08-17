@@ -1,0 +1,7 @@
+---
+# rtr-01 is reached directly on its WAN IP and we log in as root (minimal Debian
+# has no sudo), so no ProxyJump and no privilege escalation are needed here.
+ansible_ssh_common_args: >-
+  -o IdentitiesOnly=yes
+  -o StrictHostKeyChecking=accept-new
+ansible_become: false

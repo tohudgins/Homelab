@@ -1,0 +1,13 @@
+[Unit]
+Description=Zeek NSM (zeekctl deploy)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+ExecStart=/opt/zeek/bin/zeekctl deploy
+ExecStop=/opt/zeek/bin/zeekctl stop
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

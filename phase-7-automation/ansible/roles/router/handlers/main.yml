@@ -1,0 +1,28 @@
+---
+# nft -f applies the whole file in one transaction (it begins with `flush
+# ruleset`), so there's never a window with the firewall down — safer than a
+# systemctl restart, which stops (flushes) then starts.
+- name: Reload nftables
+  ansible.builtin.command:
+    cmd: nft -f /etc/nftables.conf
+  changed_when: true
+
+- name: Restart dnsmasq
+  ansible.builtin.systemd:
+    name: dnsmasq
+    state: restarted
+
+- name: Restart chrony
+  ansible.builtin.systemd:
+    name: chrony
+    state: restarted
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+# zeekctl deploy = install config + (re)start workers. Idempotent to run.
+- name: Deploy zeek
+  ansible.builtin.command:
+    cmd: "{{ zeek_prefix }}/bin/zeekctl deploy"
+  changed_when: true

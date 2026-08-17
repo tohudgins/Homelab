@@ -58,6 +58,6 @@ domain member, deliberate share/ACL misconfig"]
 | 4 | Detection engineering | ✅ Complete (12 techniques) |
 | 5 | Offense in context | 🔄 In progress (BloodHound path → executed → DCSync + credential-theft detections) |
 | 6 | Network security monitoring | 🔄 In progress (Suricata + Zeek inline; attack-chain PCAP analysis correlating signature/protocol/host) |
-| 7 | Automation | ⬜ |
+| 7 | Automation | 🔄 In progress (Ansible IaC — control node + `router` and `siem` roles built, converged, and proven idempotent against the live lab) |
 
 Full IP plan, naming convention, and design rationale: [`docs/00-ip-plan.md`](docs/00-ip-plan.md), [`docs/design-decisions.md`](docs/design-decisions.md).

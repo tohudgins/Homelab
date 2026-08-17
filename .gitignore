@@ -7,3 +7,6 @@ isos/
 
 # BloodHound collection data (reproducible lab enumeration; binary, kept local)
 phase-5-offense/bloodhound-collections/*.zip
+
+# Ansible vault key — decrypts the committed vault.yml files; never commit
+phase-7-automation/ansible/.vault_pass

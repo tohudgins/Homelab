@@ -1,0 +1,22 @@
+---
+# Internal-segment hosts (dc-01, fs-01, siem-01) are not on a vmnet the control
+# node can route to directly — reach them by jumping through rtr-01, exactly the
+# way an operator SSHes in. An explicit ProxyCommand (rather than ProxyJump) is
+# used so the jump hop gets its own -i key: with IdentitiesOnly=yes a bare
+# ProxyJump hop can't fall back to the agent and the connection dies at rtr-01.
+ansible_ssh_common_args: >-
+  -o IdentitiesOnly=yes
+  -o StrictHostKeyChecking=accept-new
+  -o ProxyCommand="ssh -W %h:%p -i /Users/tohud/.ssh/id_ed25519_homelab -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new tohudgins@192.168.168.133"
+
+# Privilege escalation is passwordless: a one-time bootstrap
+# (scripts/bootstrap-sudo.sh) grants the automation account a NOPASSWD sudoers
+# drop-in, authorized by the git-ignored SSH key. This is the standard Ansible
+# control-account pattern and sidesteps Ubuntu's `Defaults use_pty`, which routes
+# sudo's password prompt into a PTY that Ansible's become cannot read (the
+# "Timeout waiting for privilege escalation prompt" failure). Interactive human
+# sudo still requires a password — use_pty hardening is left intact.
+# ansible-vault (.vault_pass + host_vars/*/vault.yml) is reserved for real
+# application secrets (Samba/Wazuh/weak-account passwords) in later roles.
+ansible_become: true
+ansible_become_method: sudo

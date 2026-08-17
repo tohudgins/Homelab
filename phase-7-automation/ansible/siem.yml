@@ -1,0 +1,5 @@
+---
+- name: Configure siem-01 — Wazuh manager custom detection content (as code)
+  hosts: siem
+  roles:
+    - siem

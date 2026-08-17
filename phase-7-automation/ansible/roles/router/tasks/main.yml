@@ -1,0 +1,132 @@
+---
+# ============================================================================
+# rtr-01 — routing, firewall, DHCP/DNS/NTP, and the inline Suricata+Zeek sensor.
+# Idempotent: safe to converge against the live box or to rebuild a blank
+# Debian 13 ARM64 host into rtr-01 from nothing.
+# ============================================================================
+
+- name: Install router packages (firewall, DHCP/DNS, NTP, IDS)
+  ansible.builtin.apt:
+    name: "{{ router_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+# --- Kernel: turn the host into a router --------------------------------------
+- name: Enable IPv4 forwarding (persisted)
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    sysctl_file: /etc/sysctl.d/99-rtr01-forwarding.conf
+    sysctl_set: true
+    reload: true
+
+# --- nftables: default-deny firewall + NAT ------------------------------------
+- name: Deploy nftables ruleset
+  ansible.builtin.copy:
+    src: nftables.conf
+    dest: /etc/nftables.conf
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Reload nftables
+
+- name: Enable and start nftables
+  ansible.builtin.systemd:
+    name: nftables
+    enabled: true
+    state: started
+
+# --- dnsmasq: DHCP/DNS for DMZ, SOC, REDTEAM (CORP is dc-01's) ----------------
+- name: Deploy dnsmasq config
+  ansible.builtin.copy:
+    src: dnsmasq.conf
+    dest: /etc/dnsmasq.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart dnsmasq
+
+- name: Enable and start dnsmasq
+  ansible.builtin.systemd:
+    name: dnsmasq
+    enabled: true
+    state: started
+
+# --- chrony: NTP source for the whole lab (Kerberos needs tight time) ---------
+- name: Deploy chrony config
+  ansible.builtin.copy:
+    src: chrony.conf
+    dest: /etc/chrony/chrony.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart chrony
+
+- name: Enable and start chrony
+  ansible.builtin.systemd:
+    name: chrony
+    enabled: true
+    state: started
+
+# --- Suricata: inline signature IDS (ruleset tuning lives in Phase 6) ---------
+- name: Enable and start suricata
+  ansible.builtin.systemd:
+    name: suricata
+    enabled: true
+    state: started
+
+# --- Zeek: protocol-level NSM from the OBS package repo -----------------------
+- name: Add Zeek (OBS) apt signing key
+  ansible.builtin.get_url:
+    url: "{{ zeek_apt_key_url }}"
+    dest: /etc/apt/trusted.gpg.d/security_zeek.asc
+    mode: "0644"
+
+- name: Add Zeek (OBS) apt repository
+  ansible.builtin.apt_repository:
+    repo: "{{ zeek_apt_repo }}"
+    filename: security:zeek
+    state: present
+    update_cache: true
+
+- name: Install Zeek
+  ansible.builtin.apt:
+    name:
+      - zeek
+      - zeekctl
+    state: present
+
+- name: Deploy Zeek node.cfg (standalone on the CORP interface)
+  ansible.builtin.copy:
+    src: zeek-node.cfg
+    dest: "{{ zeek_prefix }}/etc/node.cfg"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Deploy zeek
+
+- name: Deploy Zeek networks.cfg (segment labels)
+  ansible.builtin.copy:
+    src: zeek-networks.cfg
+    dest: "{{ zeek_prefix }}/etc/networks.cfg"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Deploy zeek
+
+- name: Deploy Zeek systemd unit (boot persistence via zeekctl deploy)
+  ansible.builtin.copy:
+    src: zeek.service
+    dest: /etc/systemd/system/zeek.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Deploy zeek
+
+- name: Enable Zeek at boot
+  ansible.builtin.systemd:
+    name: zeek
+    enabled: true

@@ -1,0 +1,327 @@
+<!-- Local rules -->
+<!-- Homelab Phase 4 — custom detection engineering -->
+<!-- Copyright (C) 2015, Wazuh Inc. -->
+
+<!--
+  T1110 — Brute Force (SSH)
+
+  First attempt used a single if_matched_group="authentication_failed" correlator to aggregate across
+  failure types (wrong password AND non-existent user) with one tighter threshold than the stock
+  per-type correlators (5712/5719/5763, each frequency=8/120s independently). Verified via
+  wazuh-logtest that if_matched_group never fires in this deployment — reproduced with a literal copy
+  of the stock ruleset's own if_matched_group rule (40111, same pattern, only frequency changed) and
+  it didn't fire either, while if_matched_sid (stock rule 5763) fired exactly as documented. Rather
+  than chase what looks like a version-specific bug, pivoted to two explicit if_matched_sid rules
+  below — same intent (tighter threshold + active response), proven mechanism.
+-->
+<group name="local,syslog,sshd,">
+
+  <rule id="100010" level="12" frequency="4" timeframe="60" ignore="120">
+    <if_matched_sid>5760</if_matched_sid>
+    <same_source_ip />
+    <description>sshd: brute force — $(srcip) had 4+ wrong-password failures in 60s.</description>
+    <mitre>
+      <id>T1110</id>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failures,attack,</group>
+  </rule>
+
+  <rule id="100011" level="12" frequency="4" timeframe="60" ignore="120">
+    <if_matched_sid>5710</if_matched_sid>
+    <same_source_ip />
+    <description>sshd: brute force — $(srcip) had 4+ non-existent-user failures in 60s.</description>
+    <mitre>
+      <id>T1110</id>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failures,attack,</group>
+  </rule>
+
+  <!--
+  Evasion follow-up: both key on same_source_ip and a single failure type, so (a) a spray that stays
+  under 4/60s from any single source, or (b) an attacker who mixes wrong-password and invalid-user
+  guesses to split their attempts across 100010 and 100011 without tripping either threshold alone,
+  both evade this pair by design. Documented in detection-catalog.md as a known gap, not patched here.
+  -->
+
+</group>
+
+<!--
+  T1484.001 — Group Policy Modification (SYSVOL integrity)
+
+  Default FIM (rules 550/553/554 — modified/deleted/added) treats every monitored path identically:
+  level 5-7 regardless of WHERE the change happened. That undersells SYSVOL specifically — it holds
+  GPOs and logon scripts that apply to every domain-joined host on next policy refresh/logon, so a
+  single unauthorized write there has a blast radius no other path in this lab has. This rule doesn't
+  replace the base FIM rules (they still fire, still carry the full hash/attribute record) — it adds
+  a second, higher-severity alert scoped to that one path via the `file` dynamic field syscheck
+  decodes into.
+-->
+<group name="local,syscheck,">
+
+  <rule id="100020" level="12">
+    <if_sid>550,553,554</if_sid>
+    <field name="file" type="pcre2">^/var/lib/samba/sysvol</field>
+    <description>SYSVOL integrity change (GPO/logon script) — $(file)</description>
+    <mitre>
+      <id>T1484.001</id>
+    </mitre>
+    <group>gpo_tampering,attack,</group>
+  </rule>
+
+  <!--
+  No active response wired here on purpose — auto-reverting a file is a much riskier default action
+  than blocking an IP (could clobber a legitimate GPO edit made seconds earlier), so this stays
+  alert-only pending a real response playbook. See detection-catalog.md.
+  -->
+
+  <!--
+  T1053.003 — Scheduled Task/Job: Cron (Persistence)
+
+  Same escalation pattern as SYSVOL above, different path set: cron directories are where a compromised
+  host most commonly gets a persistence mechanism planted (a scheduled beacon/implant re-download).
+  Extended real-time FIM to cover them plus a handful of other classic Linux persistence/credential
+  files (/etc/passwd, /etc/shadow, /etc/sudoers) in the same <directories> block.
+  -->
+  <rule id="100050" level="12">
+    <if_sid>550,553,554</if_sid>
+    <field name="file" type="pcre2">^/etc/cron\.(d|daily|hourly|weekly|monthly)/|^/etc/crontab$</field>
+    <description>Cron persistence — $(file) added/modified/deleted.</description>
+    <mitre>
+      <id>T1053.003</id>
+    </mitre>
+    <group>persistence,attack,</group>
+  </rule>
+
+  <!--
+  T1136.001 (Create Account: Local Account) / T1098 (Account Manipulation) — local account and
+  credential-file tampering (host-level, distinct from the Samba/AD-level T1098 investigation above —
+  this catches changes to the OS's OWN account files, relevant even though the primary identity plane
+  here is AD, since dc-01 itself is still a Linux host with local accounts/sudoers that could be abused
+  for persistence independent of AD entirely). Both MITRE IDs tagged deliberately, not sloppily: the rule
+  can't distinguish creating a new local account (useradd writes both passwd+shadow) from modifying an
+  existing one's password/shell (T1098) — same honest broad-not-narrow tradeoff as the rest of this FIM
+  family. The verified test below specifically exercised account *creation*.
+  -->
+  <rule id="100051" level="12">
+    <if_sid>550,553,554</if_sid>
+    <field name="file" type="pcre2">^/etc/(passwd|shadow|sudoers)$</field>
+    <description>Local account/credential file changed — $(file).</description>
+    <mitre>
+      <id>T1136.001</id>
+      <id>T1098</id>
+    </mitre>
+    <group>persistence,attack,</group>
+  </rule>
+
+</group>
+
+<!--
+  T1558.003 — Kerberoasting
+
+  Samba's default log level (0) logs nothing about individual Kerberos ticket requests. Enabled
+  structured audit logging (`log level = 1 auth_audit:3 auth_json_audit:3` in smb.conf) which emits
+  real per-request JSON to /var/log/samba/log.samba, including a "KDC Authorization" event per TGS-REQ
+  with the requesting account and the target SPN — this is Samba's equivalent of Windows Event ID 4769.
+  Wired as a `log_format=json` localfile; Wazuh's JSON parser silently skips the human-readable lines
+  log.samba also writes, so no separate decoder was needed for that half.
+-->
+<group name="local,kerberos,">
+
+  <rule id="100030" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="type">^KDC Authorization$</field>
+    <options>no_full_log</options>
+    <description>Samba KDC: TGS-REQ for a service ticket.</description>
+    <group>kerberos_tgs,</group>
+  </rule>
+
+  <rule id="100031" level="12" frequency="3" timeframe="60" ignore="120">
+    <if_matched_sid>100030</if_matched_sid>
+    <same_field>KDC Authorization.account</same_field>
+    <description>Kerberoasting suspected — $(KDC Authorization.account) requested 3+ service tickets in 60s.</description>
+    <mitre>
+      <id>T1558.003</id>
+    </mitre>
+    <group>attack,</group>
+  </rule>
+
+  <!--
+  Evasion: same_field correlation counts OCCURRENCES from one account, not DISTINCT SPNs requested --
+  a real attacker who already knows exactly which one or two SPNs are worth cracking (rather than
+  sweeping every SPN in the domain) stays under threshold and evades this rule entirely. That's a
+  meaningful real-world case: a targeted Kerberoast against one juiciest-looking service account looks
+  identical to a legitimate client requesting its one ticket. Not patched here -- see
+  detection-catalog.md for why (would need baselining normal per-account SPN request patterns, out of
+  scope for a rule this lab can verify against real telemetry tonight).
+  -->
+
+</group>
+
+<!--
+  T1110.001 — Brute Force: Password Guessing (Kerberos pre-authentication, distinct from the sshd-based
+  100010/100011 above)
+
+  Same ATT&CK ID, genuinely different detection surface: an attacker guessing AD account passwords via
+  Kerberos (kinit, or any AD-aware tool) never touches sshd at all, so 100010/100011 are blind to this
+  vector entirely. Reuses the same auth_json_audit telemetry wired up for Kerberoasting above -- Samba
+  emits an eventId 4625 (matches real Windows Event ID 4625) per failed pre-auth attempt.
+-->
+<group name="local,kerberos,">
+
+  <rule id="100040" level="5">
+    <decoded_as>json</decoded_as>
+    <field name="type">^Authentication$</field>
+    <field name="Authentication.eventId">^4625$</field>
+    <field name="Authentication.serviceDescription">^Kerberos KDC$</field>
+    <options>no_full_log</options>
+    <description>Samba KDC: Kerberos pre-authentication failed for $(Authentication.clientAccount).</description>
+    <mitre>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failed,</group>
+  </rule>
+
+  <rule id="100041" level="12" frequency="4" timeframe="60" ignore="120">
+    <if_matched_sid>100040</if_matched_sid>
+    <same_field>Authentication.clientAccount</same_field>
+    <description>Kerberos brute force — $(Authentication.clientAccount) had 4+ pre-auth failures in 60s.</description>
+    <mitre>
+      <id>T1110</id>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failures,attack,</group>
+  </rule>
+
+  <!--
+  Active response: disables the targeted AD account via samba-tool rather than blocking a source IP.
+  IP-blocking (used for the sshd rules above) doesn't fit here -- a Kerberos brute force can originate
+  from any domain member, and blocking one source IP does nothing if the attacker just tries from
+  another host. Disabling the *account* stops the attack regardless of source. Custom script since the
+  stock `disable-account` active response only understands local system accounts, not Samba AD accounts.
+  See disable-ad-account.py (mirrored in this folder, deployed without the extension per Wazuh's
+  active-response naming convention) and detection-catalog.md for the real risk this creates: an
+  attacker who knows this rule exists can weaponize it into a DoS by deliberately failing Kerberos auth
+  as a real, legitimate, high-value account (helpdesk lead, an admin) to get it locked out.
+  -->
+
+</group>
+
+<!--
+  T1562.001 — Impair Defenses: Disable or Modify Tools
+
+  Arguably the single highest-value rule in this catalog: an attacker who disables the monitoring itself
+  makes every other rule above moot. Chains off the stock sudo rule (5402, any successful sudo-to-root)
+  rather than needing new telemetry -- this is a pure escalation on top of what's already flowing.
+-->
+<group name="local,attack,">
+
+  <rule id="100060" level="13">
+    <if_sid>5402</if_sid>
+    <field name="command" type="pcre2">systemctl\s+(stop|disable|mask)\s+\S*(wazuh-agent|auditd|samba-ad-dc)|service\s+(wazuh-agent|auditd|samba-ad-dc)\s+stop</field>
+    <description>Security tooling disruption attempt — $(command)</description>
+    <mitre>
+      <id>T1562.001</id>
+    </mitre>
+    <group>defense_evasion,attack,</group>
+  </rule>
+
+  <!--
+  Evasion: only catches the OBVIOUS path (systemctl/service stopping the named unit). A more careful
+  attacker sends SIGSTOP/SIGKILL directly to the wazuh-agent process, or blocks 1514/tcp outbound at the
+  host firewall, or corrupts the agent's own config -- none of which touch this rule at all, and the
+  irony is real: an agent that's been killed can't alert that it was killed. A production deployment
+  would pair this with manager-side "agent went silent unexpectedly" monitoring (Wazuh's own
+  disconnection alerting), which doesn't depend on the compromised agent reporting anything at all.
+  -->
+
+</group>
+
+<!--
+  T1547.001 — Registry Run Keys (ws-01, closing a real gap in the stock Sysmon ruleset)
+
+  Wazuh's stock Sysmon EID 13 rules (92300-92304 in 0860-sysmon_id_13.xml) only escalate to a visible
+  alert for specific narrow patterns: reg.exe usage (92302), a suspicious file extension in the value
+  (92301), or a known remote-access-tool signature (92303). The base classification rule (92300, any
+  write to a Run/RunOnce key) is level 0 -- matched internally, never alerted.
+
+  Verified this is a real gap, not a theoretical one: writing the exact same Run key via reg.exe
+  triggered 92302 correctly; writing it via PowerShell's New-ItemProperty -- arguably the more common
+  real-world persistence method, and one specifically called out because it's what a
+  living-off-the-land/fileless technique would actually use instead of the much-more-signature'd
+  reg.exe -- produced zero alerts, even though 92300 matched it silently. This rule closes that gap by
+  escalating the base rule generically, regardless of which tool wrote the key.
+-->
+<group name="local,attack,">
+
+  <rule id="100070" level="10">
+    <if_sid>92300</if_sid>
+    <description>Registry Run key persistence — $(win.eventdata.image) set $(win.eventdata.targetObject)</description>
+    <mitre>
+      <id>T1547.001</id>
+    </mitre>
+    <group>persistence,attack,</group>
+  </rule>
+
+  <!--
+  Deliberately a level below the stock rules' specific-pattern escalations (12): this is a broad
+  catch-all, so it will fire for legitimate app installers adding real autostart entries too, not just
+  attacks. That tradeoff (real coverage vs. real noise) is the honest cost of closing this gap -- see
+  detection-catalog.md.
+  -->
+
+</group>
+
+<!--
+  Phase 5 (offense-in-context): DCSync detection.
+
+  DCSync = an attacker with the DS-Replication-Get-Changes[-All] rights (here deliberately granted to
+  svc-backup, the account the fs-01 share bait leaks) asks the DC to REPLICATE account secrets to them
+  via the MS-DRSR DsGetNCChanges call, dumping password hashes without ever touching disk on the DC.
+
+  On this Samba DC the impacket implementation actually fails (it sends a prefixMap Samba can't decode —
+  see BloodHound notes), but that is irrelevant to detection: the malicious DsGetNCChanges request still
+  reaches the DC's replication handler, and Samba logs it (source4/rpc_server/drsuapi/getncchanges.c).
+  dc-01 forwards these plain-text lines via a dedicated syslog localfile (the json localfile that carries
+  the auth audit silently drops non-JSON lines).
+
+  Single-DC assumption: with only one DC there is NO legitimate DC-to-DC replication, so a GetNCChanges
+  request is unambiguously an attack -> level 12. In a multi-DC domain this rule would need to also
+  exclude requests whose source is a real DC (by IP / machine account). Also: this fires on the impacket
+  error path; to catch a *successful* replication from a non-buggy client, raise `log level drsuapi:5`
+  in smb.conf so every DsGetNCChanges is logged, then match the same handler string.
+-->
+<group name="local,dcsync,">
+
+  <rule id="100080" level="12">
+    <match>dcesrv_drsuapi_DsGetNCChanges</match>
+    <description>DCSync suspected — AD replication (DsGetNCChanges) invoked on the DC; no legitimate DC-to-DC replication exists in this single-DC domain, indicating credential-replication abuse.</description>
+    <mitre>
+      <id>T1003.006</id>
+    </mitre>
+    <group>dcsync,credential_access,attack,</group>
+  </rule>
+
+</group>
+
+<!--
+  Phase 5: fs-01 weak-share credential-theft detection (closes the T1552.001 blind spot).
+  FIM (syscheck) catches file *changes*, never *reads* — so reading the planted credential produced no
+  alert. Samba `full_audit` VFS on the [public] share logs every openat to smbd_audit (journald), decoded
+  above into smb_user/srcip/smb_share/smb_op/smb_path. This rule fires on an openat of the bait file
+  map-backup-share.ps1 (which embeds svc-backup/Backup2026) — i.e. the exact credential-theft action.
+-->
+<group name="local,samba,">
+
+  <rule id="100090" level="12">
+    <decoded_as>smbd</decoded_as>
+    <field name="smb_path" type="pcre2">map-backup-share\.ps1$</field>
+    <description>Credential theft — planted svc-backup credential file read on the fs-01 weak share by $(smb_user) from $(srcip).</description>
+    <mitre>
+      <id>T1552.001</id>
+    </mitre>
+    <group>credential_access,attack,</group>
+  </rule>
+
+</group>

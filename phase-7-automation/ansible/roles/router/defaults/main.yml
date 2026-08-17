@@ -1,0 +1,22 @@
+---
+# rtr-01 — firewall / DHCP / DNS / NTP / inline NSM sensor.
+# Packages available from Debian's own repos.
+router_packages:
+  - nftables
+  - dnsmasq
+  - chrony
+  - suricata
+
+# Services this role owns and keeps enabled+running.
+router_services:
+  - nftables
+  - dnsmasq
+  - chrony
+  - suricata
+
+# Zeek ships from the OpenSUSE OBS build service, not Debian — this is exactly
+# the source the box was originally installed from (installs under /opt/zeek).
+zeek_prefix: /opt/zeek
+zeek_apt_repo: "deb http://download.opensuse.org/repositories/security:/zeek/Debian_13/ /"
+zeek_apt_key_url: "https://download.opensuse.org/repositories/security:zeek/Debian_13/Release.key"
+zeek_capture_interface: enp26s0   # CORP — sees all AD traffic routed through rtr-01

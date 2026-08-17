@@ -1,0 +1,5 @@
+---
+- name: Configure rtr-01 — router / firewall / DHCP-DNS-NTP / inline NSM sensor
+  hosts: routers
+  roles:
+    - router

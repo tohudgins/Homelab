@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  role_name: siem
+  description: >-
+    siem-01 — deploys the homelab's custom Wazuh rules and decoders as code
+    (detection-as-code) onto the all-in-one Wazuh manager and verifies the
+    ruleset parses cleanly.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

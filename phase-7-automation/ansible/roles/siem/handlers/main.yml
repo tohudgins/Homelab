@@ -1,0 +1,7 @@
+---
+# Restarting the manager reloads decoders + rules. If the ruleset is malformed,
+# analysisd won't come back up — the verify task in tasks/main.yml catches that.
+- name: Restart wazuh-manager
+  ansible.builtin.systemd:
+    name: wazuh-manager
+    state: restarted

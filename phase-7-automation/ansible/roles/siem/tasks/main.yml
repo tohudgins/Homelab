@@ -1,0 +1,45 @@
+---
+# ============================================================================
+# siem-01 — deploy the custom Wazuh detection content (rules + decoders) as code
+# and prove the manager still parses its ruleset afterward. Idempotent.
+# ============================================================================
+
+- name: Ensure Wazuh core services are enabled and running
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: "{{ wazuh_services }}"
+
+# Decoders must be deployed before/with the rules that reference their fields
+# (e.g. the samba-full-audit decoder feeding rule 100090). Ownership matches
+# what the Wazuh installer sets: wazuh:wazuh 0660.
+- name: Deploy custom decoders (detection-as-code)
+  ansible.builtin.copy:
+    src: local_decoder.xml
+    dest: "{{ wazuh_decoders_dir }}/local_decoder.xml"
+    owner: "{{ wazuh_group }}"
+    group: "{{ wazuh_group }}"
+    mode: "0660"
+  notify: Restart wazuh-manager
+
+- name: Deploy custom rules (detection-as-code)
+  ansible.builtin.copy:
+    src: local_rules.xml
+    dest: "{{ wazuh_rules_dir }}/local_rules.xml"
+    owner: root
+    group: "{{ wazuh_group }}"
+    mode: "0660"
+  notify: Restart wazuh-manager
+
+# Apply the restart now (not at play end) so the verification below runs against
+# the freshly-loaded ruleset — a broken rule file fails here, loudly, instead of
+# silently leaving analysisd down.
+- name: Apply ruleset restart before verifying
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify wazuh-manager parsed the ruleset and analysisd is running
+  ansible.builtin.command: /var/ossec/bin/wazuh-control status
+  register: wazuh_status
+  changed_when: false
+  failed_when: "'wazuh-analysisd is running' not in wazuh_status.stdout"
