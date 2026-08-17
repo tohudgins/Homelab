@@ -4,4 +4,5 @@
 - import_playbook: router.yml
 - import_playbook: dc.yml             # dc-01    (Samba AD DC config + deliberate weaknesses)
 - import_playbook: siem.yml           # siem-01  (Wazuh manager + custom detection content)
+- import_playbook: dmz.yml            # dmz-01   (Docker + OWASP Juice Shop + Wazuh agent)
 # - import_playbook: fileserver.yml   # fs-01    (Samba member + weak share)       [next]

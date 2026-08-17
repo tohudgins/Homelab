@@ -1,0 +1,22 @@
+---
+# dmz-01 — DMZ vulnerable-web-app host (Docker) + Wazuh agent.
+dmz_docker_packages:
+  - docker.io
+
+# OWASP Juice Shop — multi-arch image (runs natively on ARM64).
+juiceshop_image: "bkimminich/juice-shop"
+juiceshop_name: "juice-shop"
+juiceshop_port: 3000
+
+# Wazuh agent — pinned to the manager's version (see siem-01 / the other agents).
+# wazuh_manager_ip comes from group_vars/all.yml.
+wazuh_agent_version: "4.14.7-1"
+wazuh_apt_key_url: "https://packages.wazuh.com/key/GPG-KEY-WAZUH"
+wazuh_apt_repo: "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main"
+
+# Time authority: rtr-01's DMZ-side address (rtr-01 is the lab's chrony source).
+dmz_ntp_server: "10.10.20.1"
+
+# Where Docker's json-file driver writes container stdout — tailing this puts the
+# Juice Shop request logs into Wazuh so DMZ web attacks are actually visible.
+dmz_docker_log_glob: "/var/lib/docker/containers/*/*-json.log"

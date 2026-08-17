@@ -1,0 +1,9 @@
+---
+galaxy_info:
+  role_name: dmz
+  description: >-
+    dmz-01 — DMZ vulnerable-web-app host: Docker + OWASP Juice Shop, plus the
+    Wazuh agent enrolling the DMZ segment into the SIEM.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

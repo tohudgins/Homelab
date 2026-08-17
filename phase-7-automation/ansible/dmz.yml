@@ -1,0 +1,5 @@
+---
+- name: Configure dmz-01 — Docker + OWASP Juice Shop + Wazuh agent
+  hosts: dmz
+  roles:
+    - dmz

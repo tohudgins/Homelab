@@ -1,0 +1,35 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  identity:
+    hostname: dmz-01
+    username: tohudgins
+    # Password: DmzLab2026!  (SHA-512 crypt) — key-based auth is primary.
+    password: "$6$.DqGqN.rh1ta/Cl/$PKNLkHNFCSLdnTLR5C570EGrAVFDSl.lLqizIfs/M1IW2TjN4aq5zKeJqg9bRVCUZQhtsVSXilq546TO8AlzL0"
+  ssh:
+    install-server: true
+    allow-pw: true
+    authorized-keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH7GQV6ykcpEB9lPX4PtS48LOUIeL2N/gA4w5biGD+XS tohudgins@mac-homelab-jumphost"
+  network:
+    version: 2
+    ethernets:
+      dmznic:
+        match:
+          name: "en*"
+        addresses:
+          - 10.10.20.10/24
+        routes:
+          - to: default
+            via: 10.10.20.1
+        nameservers:
+          addresses: [10.10.20.1]
+  storage:
+    layout:
+      name: direct
+  # Power off (don't reboot) so the installer can't loop back into the CD;
+  # the CDs are detached before first real boot.
+  shutdown: poweroff

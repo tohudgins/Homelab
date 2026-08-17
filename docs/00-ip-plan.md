@@ -30,7 +30,7 @@
 | ws-01 | CORP | `10.10.10.50` (DHCP reservation) | Domain-joined victim workstation |
 | fs-01 | CORP | `10.10.10.20` | Samba file server, domain member (not a DC) — deliberately weak share/ACL config to give BloodHound a real lateral-movement path |
 | siem-01 | SOC/MGMT | `10.10.30.10` | Wazuh all-in-one |
-| dmz-01 | DMZ | `10.10.20.10` | Vulnerable web apps |
+| dmz-01 | DMZ | `10.10.20.10` | OWASP Juice Shop (Docker), Wazuh agent 005 — built headless via Ubuntu autoinstall, configured by the `dmz` Ansible role |
 | atk-01 | REDTEAM | `10.10.40.10` (DHCP — rebuilt often) | Attack tooling, BloodHound collector |
 | scan-01 | REDTEAM | `10.10.40.20` (DHCP) | OpenVAS/Greenbone scanning |
 

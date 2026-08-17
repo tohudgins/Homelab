@@ -1,0 +1,122 @@
+---
+# ============================================================================
+# dmz-01 — stand up the vulnerable web app (OWASP Juice Shop in Docker) and the
+# Wazuh agent that puts the DMZ under the SIEM's eye. Idempotent.
+# ============================================================================
+
+# --- Docker + Juice Shop ------------------------------------------------------
+- name: Install Docker engine
+  ansible.builtin.apt:
+    name: "{{ dmz_docker_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Enable and start Docker
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+- name: List existing containers
+  ansible.builtin.command: docker ps -a --format '{{ "{{" }}.Names{{ "}}" }}'
+  register: dmz_containers
+  changed_when: false
+
+- name: Deploy OWASP Juice Shop (the vulnerable web app)
+  ansible.builtin.command: >-
+    docker run -d --name {{ juiceshop_name }} --restart unless-stopped
+    -p {{ juiceshop_port }}:3000 {{ juiceshop_image }}
+  when: juiceshop_name not in dmz_containers.stdout_lines
+
+# --- Time sync to rtr-01 (lab time authority; Wazuh correlates by timestamp) --
+# Minimal Ubuntu Server doesn't ship the NTP client — install it, or the config
+# below has no service to read it and the clock never syncs.
+- name: Install the NTP client (systemd-timesyncd)
+  ansible.builtin.apt:
+    name: systemd-timesyncd
+    state: present
+
+- name: Point systemd-timesyncd at the lab NTP source (rtr-01)
+  ansible.builtin.copy:
+    dest: /etc/systemd/timesyncd.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible (roles/dmz). rtr-01 is the lab's chrony time source.
+      [Time]
+      NTP={{ dmz_ntp_server }}
+      FallbackNTP=ntp.ubuntu.com
+  notify: Restart timesyncd
+
+- name: Enable and start systemd-timesyncd
+  ansible.builtin.systemd:
+    name: systemd-timesyncd
+    enabled: true
+    state: started
+
+# --- Wazuh agent --------------------------------------------------------------
+- name: Install the Wazuh GPG key (dearmored)
+  ansible.builtin.shell: |
+    set -o pipefail
+    curl -s {{ wazuh_apt_key_url }} | gpg --dearmor > /usr/share/keyrings/wazuh.gpg
+  args:
+    creates: /usr/share/keyrings/wazuh.gpg
+    executable: /bin/bash
+
+- name: Add the Wazuh apt repository
+  ansible.builtin.apt_repository:
+    repo: "{{ wazuh_apt_repo }}"
+    filename: wazuh
+    state: present
+    update_cache: true
+
+- name: Install the Wazuh agent (pinned, manager preconfigured)
+  ansible.builtin.apt:
+    name: "wazuh-agent={{ wazuh_agent_version }}"
+    state: present
+  environment:
+    WAZUH_MANAGER: "{{ wazuh_manager_ip }}"
+
+- name: Hold the agent at the manager's version (no silent drift)
+  ansible.builtin.dpkg_selections:
+    name: wazuh-agent
+    selection: hold
+
+- name: Point the agent at the Wazuh manager
+  ansible.builtin.lineinfile:
+    path: /var/ossec/etc/ossec.conf
+    regexp: '<address>.*</address>'
+    line: "      <address>{{ wazuh_manager_ip }}</address>"
+  notify: Restart wazuh-agent
+
+- name: Ingest Docker/Juice Shop container logs into Wazuh
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: "<!-- {mark} ANSIBLE MANAGED: dmz container logs -->"
+    block: |
+      <ossec_config>
+        <localfile>
+          <log_format>json</log_format>
+          <location>{{ dmz_docker_log_glob }}</location>
+        </localfile>
+      </ossec_config>
+  notify: Restart wazuh-agent
+
+- name: Enable and start the Wazuh agent
+  ansible.builtin.systemd:
+    name: wazuh-agent
+    enabled: true
+    state: started
+
+# --- Verify -------------------------------------------------------------------
+- name: Verify Juice Shop answers on its port
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ juiceshop_port }}/"
+    status_code: 200
+    timeout: 20
+  register: js_check
+  retries: 10
+  delay: 6
+  until: js_check.status == 200

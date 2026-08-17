@@ -28,8 +28,9 @@ domain member, deliberate share/ACL misconfig"]
     subgraph SOC["SOC / MGMT"]
         SIEM["siem-01 — Wazuh all-in-one"]
     end
-    subgraph DMZ["DMZ (optional)"]
-        DMZH["dmz-01 — Juice Shop / DVWA / WebGoat"]
+    subgraph DMZ["DMZ"]
+        DMZH["dmz-01 — OWASP Juice Shop (Docker)
+Wazuh agent + container-log ingestion"]
     end
     subgraph RED["REDTEAM (on-demand)"]
         ATK["atk-01 — Kali + BloodHound collector"]
@@ -58,6 +59,6 @@ domain member, deliberate share/ACL misconfig"]
 | 4 | Detection engineering | ✅ Complete (12 techniques) |
 | 5 | Offense in context | 🔄 In progress (BloodHound path → executed → DCSync + credential-theft detections) |
 | 6 | Network security monitoring | 🔄 In progress (Suricata + Zeek inline; attack-chain PCAP analysis correlating signature/protocol/host) |
-| 7 | Automation | 🔄 In progress (Ansible IaC — control node + `router` and `siem` roles built, converged, and proven idempotent against the live lab) |
+| 7 | Automation | 🔄 In progress (Ansible IaC — `router`/`dc`/`siem`/`dmz` roles built, converged, and proven idempotent; **dmz-01** stood up from a blank disk via headless Ubuntu autoinstall + the `dmz` role) |
 
 Full IP plan, naming convention, and design rationale: [`docs/00-ip-plan.md`](docs/00-ip-plan.md), [`docs/design-decisions.md`](docs/design-decisions.md).

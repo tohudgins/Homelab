@@ -90,8 +90,14 @@ ansible-playbook siem.yml
 | `router` | rtr-01 | IPv4 forwarding, nftables firewall+NAT, dnsmasq DHCP/DNS, chrony NTP source, Suricata, Zeek (OBS install + node/networks config + systemd unit) | ✅ built, idempotent |
 | `siem` | siem-01 | Wazuh custom rules + decoders (detection-as-code), service health, restart-and-verify the ruleset parses | ✅ built, idempotent |
 | `dc` | dc-01 | Samba AD DC `smb.conf` (incl. Phase 4 audit logging) + the deliberate weaknesses register (Kerberoastable service accounts + SPNs, unprivileged user, svc-backup's Backup Operators + DCSync over-privilege), each guarded by an existence check | ✅ built, idempotent + self-verifying |
+| `dmz` | dmz-01 | Docker + OWASP Juice Shop, Wazuh agent (+ container-log ingestion), NTP sync to rtr-01 | ✅ built, idempotent |
 | `fileserver` | fs-01 | Samba member, the weak `[public]` share, `full_audit` VFS, Wazuh agent | ⬜ next (needs fs-01 sudo bootstrap) |
 | Windows | ws-01 | Sysmon + Wazuh agent via WinRM | ⬜ later increment |
+
+> **dmz-01 is a from-scratch VM**, not just a role: it was installed fully
+> headless via Ubuntu autoinstall (see `provisioning/dmz-01/`) and then configured
+> by the `dmz` role — the build's only end-to-end "blank disk → running service"
+> example.
 
 ## Verification evidence
 
@@ -116,6 +122,14 @@ Each role was proven, not assumed:
   present on the domain NC. (The create paths aren't exercised against the live DC
   because the accounts already exist — deleting a real AD account to test creation
   isn't worth the risk; the guards + end-state assertion are the verification.)
+- **dmz** — full new-host build, verified end-to-end after headless install:
+  Juice Shop answers HTTP 200 (the role's own `uri` check) and is reachable
+  CORP→DMZ; the Wazuh agent enrolled as **005 / Active** on the manager and
+  logcollector is confirmed tailing the container json log; **DMZ→CORP is blocked**
+  (verified from dmz-01 — no pivot into AD) while DMZ→WAN and DMZ→SOC:1514 work;
+  clock **synchronized to rtr-01** (rtr-01's chrony lists it as a client). Re-run
+  `changed=0`. Gotcha closed en route: minimal Ubuntu ships no NTP client, so the
+  `timesyncd.conf` had no service to read it until the package was installed.
 
 ## What broke, and how it was diagnosed
 
