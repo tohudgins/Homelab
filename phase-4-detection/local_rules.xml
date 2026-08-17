@@ -272,3 +272,56 @@
   -->
 
 </group>
+
+<!--
+  Phase 5 (offense-in-context): DCSync detection.
+
+  DCSync = an attacker with the DS-Replication-Get-Changes[-All] rights (here deliberately granted to
+  svc-backup, the account the fs-01 share bait leaks) asks the DC to REPLICATE account secrets to them
+  via the MS-DRSR DsGetNCChanges call, dumping password hashes without ever touching disk on the DC.
+
+  On this Samba DC the impacket implementation actually fails (it sends a prefixMap Samba can't decode —
+  see BloodHound notes), but that is irrelevant to detection: the malicious DsGetNCChanges request still
+  reaches the DC's replication handler, and Samba logs it (source4/rpc_server/drsuapi/getncchanges.c).
+  dc-01 forwards these plain-text lines via a dedicated syslog localfile (the json localfile that carries
+  the auth audit silently drops non-JSON lines).
+
+  Single-DC assumption: with only one DC there is NO legitimate DC-to-DC replication, so a GetNCChanges
+  request is unambiguously an attack -> level 12. In a multi-DC domain this rule would need to also
+  exclude requests whose source is a real DC (by IP / machine account). Also: this fires on the impacket
+  error path; to catch a *successful* replication from a non-buggy client, raise `log level drsuapi:5`
+  in smb.conf so every DsGetNCChanges is logged, then match the same handler string.
+-->
+<group name="local,dcsync,">
+
+  <rule id="100080" level="12">
+    <match>dcesrv_drsuapi_DsGetNCChanges</match>
+    <description>DCSync suspected — AD replication (DsGetNCChanges) invoked on the DC; no legitimate DC-to-DC replication exists in this single-DC domain, indicating credential-replication abuse.</description>
+    <mitre>
+      <id>T1003.006</id>
+    </mitre>
+    <group>dcsync,credential_access,attack,</group>
+  </rule>
+
+</group>
+
+<!--
+  Phase 5: fs-01 weak-share credential-theft detection (closes the T1552.001 blind spot).
+  FIM (syscheck) catches file *changes*, never *reads* — so reading the planted credential produced no
+  alert. Samba `full_audit` VFS on the [public] share logs every openat to smbd_audit (journald), decoded
+  above into smb_user/srcip/smb_share/smb_op/smb_path. This rule fires on an openat of the bait file
+  map-backup-share.ps1 (which embeds svc-backup/Backup2026) — i.e. the exact credential-theft action.
+-->
+<group name="local,samba,">
+
+  <rule id="100090" level="12">
+    <decoded_as>smbd</decoded_as>
+    <field name="smb_path" type="pcre2">map-backup-share\.ps1$</field>
+    <description>Credential theft — planted svc-backup credential file read on the fs-01 weak share by $(smb_user) from $(srcip).</description>
+    <mitre>
+      <id>T1552.001</id>
+    </mitre>
+    <group>credential_access,attack,</group>
+  </rule>
+
+</group>

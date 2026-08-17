@@ -2,7 +2,7 @@
 
 A segmented, reproducible security lab built on Apple Silicon (VMware Fusion, ARM64-only) — Active Directory, a hand-built Linux router/firewall, Wazuh SIEM, and a full detection-engineering loop from attack simulation to written detection to evasion attempt.
 
-> **Status: Phase 4 (Detection engineering) — 12 of 8–12 target ATT&CK techniques verified end-to-end**, spanning Credential Access, Persistence, Defense Evasion, and Execution across both the Linux/AD side (dc-01/rtr-01) and Windows/Sysmon (ws-01), plus a real SCA before/after remediation pass and two honestly-documented investigations — see [`phase-4-detection/detection-catalog.md`](phase-4-detection/detection-catalog.md). Full build plan and design rationale: [`docs/`](docs/).
+> **Status: Phase 5 (Offense in context) — in progress.** Phase 4 delivered 12 ATT&CK techniques verified end-to-end (Credential Access, Persistence, Defense Evasion, Execution across dc-01/rtr-01 Linux/AD and ws-01 Windows/Sysmon), plus an SCA before/after remediation pass — see [`phase-4-detection/detection-catalog.md`](phase-4-detection/detection-catalog.md). Phase 5 maps AD attack paths in BloodHound, executes one from a Kali attacker box, and closes the loop back into detection — including **two new custom detections** (DCSync, and credential-theft on the fs-01 weak share) — with an honest writeup of where Linux offensive tooling does and doesn't work against a Samba DC: [`phase-5-offense/attack-detect-writeups/`](phase-5-offense/attack-detect-writeups/). Full build plan and design rationale: [`docs/`](docs/).
 
 ## Architecture
 
@@ -56,7 +56,7 @@ domain member, deliberate share/ACL misconfig"]
 | 2 | Identity (Active Directory) | ✅ Complete |
 | 3 | Visibility (Wazuh) | ✅ Complete |
 | 4 | Detection engineering | ✅ Complete (12 techniques) |
-| 5 | Offense in context | ⬜ |
+| 5 | Offense in context | 🔄 In progress (BloodHound path → executed → DCSync + credential-theft detections) |
 | 6 | Network security monitoring | ⬜ |
 | 7 | Automation | ⬜ |
 

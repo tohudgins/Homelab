@@ -4,3 +4,6 @@ __pycache__/
 .env
 site/
 isos/
+
+# BloodHound collection data (reproducible lab enumeration; binary, kept local)
+phase-5-offense/bloodhound-collections/*.zip

@@ -28,7 +28,7 @@
 | rtr-01 | all internal segments (gateway) + WAN | `.1` on each internal segment | Firewall, DHCP/DNS/NTP, inline Suricata + Zeek |
 | dc-01 | CORP | `10.10.10.10` | AD DS, DNS, GPO, PDC time source (Samba AD DC on Ubuntu ARM64 — see `design-decisions.md`) |
 | ws-01 | CORP | `10.10.10.50` (DHCP reservation) | Domain-joined victim workstation |
-| fs-01 *(planned, Phase 5)* | CORP | `10.10.10.20` | Samba file server, domain member (not a DC) — deliberately weak share/ACL config to give BloodHound a real lateral-movement path |
+| fs-01 | CORP | `10.10.10.20` | Samba file server, domain member (not a DC) — deliberately weak share/ACL config to give BloodHound a real lateral-movement path |
 | siem-01 | SOC/MGMT | `10.10.30.10` | Wazuh all-in-one |
 | dmz-01 | DMZ | `10.10.20.10` | Vulnerable web apps |
 | atk-01 | REDTEAM | `10.10.40.10` (DHCP — rebuilt often) | Attack tooling, BloodHound collector |

@@ -940,3 +940,30 @@ actual point of running this rather than just chasing the percentage up.
 
 *(Additional techniques added as Phase 4 progresses — target is 8–12 total per the build plan, covering
 both dc-01/rtr-01 Linux telemetry and ws-01 Windows/Sysmon telemetry once ws-01 is back online.)*
+
+---
+
+## Phase 5 additions (offense-in-context)
+
+Two custom detections written to close gaps found while executing a BloodHound-mapped attack path from the
+Kali attacker box. Full attacker/defender walkthrough: [`../phase-5-offense/attack-detect-writeups/`](../phase-5-offense/attack-detect-writeups/).
+
+### T1003.006 — DCSync (rule 100080, level 12)
+
+An attacker with replication rights (here svc-backup, deliberately granted `DS-Replication-Get-Changes[-All]`)
+asks the DC to replicate account secrets via MS-DRSR `DsGetNCChanges`. In this **single-DC** domain there
+is no legitimate DC-to-DC replication, so any `DsGetNCChanges` is an attack. The rule matches Samba's
+replication-handler log line (`dcesrv_drsuapi_DsGetNCChanges`) forwarded via journald.
+- **Gotcha:** a rule `<location>` filter silently blocks a `<match>` rule on agent-forwarded logs — it fails
+  in `wazuh-logtest` *and* production. Dropping it and relying on the unique `<match>` string fixed it.
+- **Samba note:** impacket's DCSync doesn't complete against Samba (`Failed to decode remote prefixMap`),
+  but the request still reaches the DC — detection doesn't depend on the exploit succeeding. Raise
+  `log level drsuapi:5` to also catch a *successful* replication from a non-buggy client.
+
+### T1552.001 — Unsecured Credentials in Files, share read (rule 100090, level 12)
+
+FIM catches file *changes*, never *reads*, so reading the planted credential on the fs-01 weak share
+produced no alert. Samba `full_audit` on `[public]` logs every `openat` to `smbd_audit` (journald); a
+custom decoder (`samba-full-audit`, **child of the stock `smbd` decoder** — a plain sibling gets shadowed
+since first match wins) parses the pipe-delimited line into `smb_user`/`srcip`/`smb_path`. The rule fires
+on a read of `map-backup-share.ps1`, reporting the user and source IP.
