@@ -1,0 +1,51 @@
+---
+# dc-01 — Samba AD DC (lab.internal). The domain *provision* is a one-shot
+# destructive prerequisite (`samba-tool domain provision`) — this role assumes an
+# already-provisioned DC and manages its config + the deliberate, documented
+# weaknesses on top, idempotently. See the role README.
+samba_private_db: /var/lib/samba/private/sam.ldb
+samba_domain_dn: "DC=lab,DC=internal"
+samba_service: samba-ad-dc
+
+# ---------------------------------------------------------------------------
+# Deliberate, DOCUMENTED lab weaknesses — see phase-2-identity/known-weaknesses.md.
+# These passwords are intentionally weak and ALREADY PUBLIC in that committed
+# register; the entire point is a reproducible Kerberoasting / DCSync target.
+# They are deliberately NOT vaulted: encrypting values that are printed in
+# plaintext two files away would be security theater, and would wrongly imply
+# they're meant to be secret. Genuine secrets belong in ansible-vault.
+# ---------------------------------------------------------------------------
+dc_service_accounts:
+  - name: svc-sql
+    password: "Summer2026"
+    spn: "MSSQLSvc/dc-01.lab.internal:1433"
+    description: "SQL Server service account (lab-weak, Kerberoastable)"
+  - name: svc-backup
+    password: "Backup2026"
+    spn: "HOST/backup-svc.lab.internal"
+    description: "Backup service account (lab-weak, Kerberoastable; over-privileged)"
+  - name: svc-web
+    password: "WebApp2026"
+    spn: "HTTP/webapp.lab.internal"
+    description: "Web app pool identity (lab-weak, Kerberoastable)"
+
+# Ordinary unprivileged user — the principal the Phase 4/5 attacks authenticate
+# as, proving Kerberoasting needs no special privilege. (This password only takes
+# effect on a from-scratch rebuild; on the live DC jdoe already exists and is
+# left untouched.)
+dc_normal_users:
+  - name: jdoe
+    password: "P@ssw0rd-jdoe-lab"
+    description: "Ordinary unprivileged domain user (attack-simulation principal)"
+
+# svc-backup is deliberately over-privileged to give BloodHound a low-priv -> Tier0
+# path: Backup Operators membership + DCSync rights on the domain NC.
+dc_backup_operators_members:
+  - svc-backup
+
+# svc-backup's SID, and the two DCSync control-access rights it is granted on the
+# NC: DS-Replication-Get-Changes + DS-Replication-Get-Changes-All.
+dc_dcsync_principal_sid: "S-1-5-21-1796057822-2459490249-1258748197-1106"
+dc_dcsync_guids:
+  - "1131f6aa-9c07-11d1-f79f-00c04fc2dcd2"
+  - "1131f6ad-9c07-11d1-f79f-00c04fc2dcd2"

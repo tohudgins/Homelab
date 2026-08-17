@@ -1,0 +1,5 @@
+---
+- name: Configure dc-01 — Samba AD DC config + deliberate weaknesses (as code)
+  hosts: domain_controllers
+  roles:
+    - dc

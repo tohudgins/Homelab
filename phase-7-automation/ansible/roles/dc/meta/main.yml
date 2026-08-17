@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: dc
+  description: >-
+    dc-01 — Samba AD DC config (incl. Phase 4 audit logging) plus the deliberate,
+    documented weaknesses register (Kerberoastable service accounts + SPNs, an
+    unprivileged user, and svc-backup's Backup Operators + DCSync over-privilege),
+    all applied idempotently with existence guards.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

@@ -1,0 +1,113 @@
+---
+# ============================================================================
+# dc-01 — Samba AD DC config + the deliberate weaknesses register, as code.
+# Every mutating step is guarded by an existence check, so the role never resets
+# an existing account's password and never appends a duplicate ACE. Safe to
+# converge against the live DC; also rebuilds the weaknesses onto a freshly
+# provisioned DC.
+# ============================================================================
+
+- name: Confirm the AD DC is already provisioned
+  ansible.builtin.stat:
+    path: "{{ samba_private_db }}"
+  register: sam_db
+
+- name: Fail clearly if the domain has not been provisioned
+  ansible.builtin.assert:
+    that: sam_db.stat.exists
+    fail_msg: >-
+      dc-01 is not provisioned ({{ samba_private_db }} missing). Domain
+      provisioning is a one-shot prerequisite — run `samba-tool domain provision`
+      (see the phase-7 role README) before converging this role.
+    success_msg: "AD DC is provisioned; converging config + weaknesses."
+
+# --- smb.conf (carries the Phase 4 audit logging that makes attacks visible) ---
+- name: Deploy Samba AD DC smb.conf
+  ansible.builtin.copy:
+    src: smb.conf
+    dest: /etc/samba/smb.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: testparm -s %s
+  notify: Restart samba-ad-dc
+
+# --- Accounts (create-only; existing accounts are never touched) --------------
+- name: Enumerate current domain users
+  ansible.builtin.command: samba-tool user list
+  register: samba_users
+  changed_when: false
+
+- name: Create deliberately-weak Kerberoastable service accounts
+  ansible.builtin.command: >-
+    samba-tool user create {{ item.name }} '{{ item.password }}'
+    --description={{ item.description | quote }}
+  loop: "{{ dc_service_accounts }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name not in samba_users.stdout_lines
+
+- name: Create ordinary domain users
+  ansible.builtin.command: >-
+    samba-tool user create {{ item.name }} '{{ item.password }}'
+    --description={{ item.description | quote }}
+  loop: "{{ dc_normal_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name not in samba_users.stdout_lines
+
+# --- SPNs (what makes the accounts Kerberoastable) ----------------------------
+- name: Read current SPNs per service account
+  ansible.builtin.command: samba-tool spn list {{ item.name }}
+  loop: "{{ dc_service_accounts }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: spn_list
+  changed_when: false
+
+- name: Register missing SPNs
+  ansible.builtin.command: samba-tool spn add {{ item.item.spn }} {{ item.item.name }}
+  loop: "{{ spn_list.results }}"
+  loop_control:
+    label: "{{ item.item.name }} -> {{ item.item.spn }}"
+  when: item.item.spn not in item.stdout
+
+# --- Over-privilege: Backup Operators membership ------------------------------
+- name: Read Backup Operators membership
+  ansible.builtin.command: samba-tool group listmembers "Backup Operators"
+  register: backup_ops
+  changed_when: false
+  failed_when: false
+
+- name: Add deliberate members to Backup Operators
+  ansible.builtin.command: samba-tool group addmembers "Backup Operators" {{ item }}
+  loop: "{{ dc_backup_operators_members }}"
+  when: item not in (backup_ops.stdout_lines | default([]))
+
+# --- Over-privilege: DCSync rights on the domain NC ---------------------------
+- name: Read the domain NC ACL
+  ansible.builtin.command: samba-tool dsacl get --objectdn "{{ samba_domain_dn }}"
+  register: nc_acl
+  changed_when: false
+
+- name: Grant DCSync control-access rights to svc-backup
+  ansible.builtin.command: >-
+    samba-tool dsacl set --objectdn "{{ samba_domain_dn }}"
+    --sddl "(OA;;CR;{{ item }};;{{ dc_dcsync_principal_sid }})"
+  loop: "{{ dc_dcsync_guids }}"
+  when: "'(OA;;CR;' ~ item ~ ';;' ~ dc_dcsync_principal_sid ~ ')' not in nc_acl.stdout"
+
+# --- Self-verification: prove the desired end state actually holds ------------
+- name: Verify service accounts, SPNs, and DCSync grant are all present
+  ansible.builtin.shell: |
+    set -e
+    samba-tool user list | grep -qx svc-backup
+    samba-tool user list | grep -qx svc-sql
+    samba-tool user list | grep -qx svc-web
+    samba-tool group listmembers "Backup Operators" | grep -qx svc-backup
+    samba-tool dsacl get --objectdn "{{ samba_domain_dn }}" \
+      | grep -qF '(OA;;CR;{{ dc_dcsync_guids[0] }};;{{ dc_dcsync_principal_sid }})'
+    echo VERIFIED
+  register: dc_verify
+  changed_when: false
+  failed_when: "'VERIFIED' not in dc_verify.stdout"

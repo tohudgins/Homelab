@@ -1,0 +1,8 @@
+---
+# Only fires if smb.conf actually changes. Restarting the DC daemon briefly drops
+# LDAP/Kerberos; the SSH session driving Ansible is independent of Samba, so the
+# run survives.
+- name: Restart samba-ad-dc
+  ansible.builtin.systemd:
+    name: "{{ samba_service }}"
+    state: restarted

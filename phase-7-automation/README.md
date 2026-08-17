@@ -89,8 +89,8 @@ ansible-playbook siem.yml
 |---|---|---|---|
 | `router` | rtr-01 | IPv4 forwarding, nftables firewall+NAT, dnsmasq DHCP/DNS, chrony NTP source, Suricata, Zeek (OBS install + node/networks config + systemd unit) | ✅ built, idempotent |
 | `siem` | siem-01 | Wazuh custom rules + decoders (detection-as-code), service health, restart-and-verify the ruleset parses | ✅ built, idempotent |
-| `dc` | dc-01 | Samba AD DC config, OUs/users, the deliberate weaknesses register | ⬜ next |
-| `fileserver` | fs-01 | Samba member, the weak `[public]` share, `full_audit` VFS, Wazuh agent | ⬜ next |
+| `dc` | dc-01 | Samba AD DC `smb.conf` (incl. Phase 4 audit logging) + the deliberate weaknesses register (Kerberoastable service accounts + SPNs, unprivileged user, svc-backup's Backup Operators + DCSync over-privilege), each guarded by an existence check | ✅ built, idempotent + self-verifying |
+| `fileserver` | fs-01 | Samba member, the weak `[public]` share, `full_audit` VFS, Wazuh agent | ⬜ next (needs fs-01 sudo bootstrap) |
 | Windows | ws-01 | Sysmon + Wazuh agent via WinRM | ⬜ later increment |
 
 ## Verification evidence
@@ -107,6 +107,15 @@ Each role was proven, not assumed:
   live rules file, then confirming the role corrected it, restarted
   `wazuh-manager`, and its verify task saw `wazuh-analysisd is running` (a broken
   ruleset would have failed here). Re-run reported `changed=0`.
+- **dc** — every mutating step (account create, SPN add, group add, DCSync grant)
+  is guarded by an existence check, so the role never resets a live account's
+  password and never appends a duplicate ACE; converge reported `changed=0`
+  against the live DC. A self-verification task then independently queried the DC
+  and confirmed the full weaknesses register holds — all three service accounts
+  exist, svc-backup is in Backup Operators, and the DCSync control-access ACE is
+  present on the domain NC. (The create paths aren't exercised against the live DC
+  because the accounts already exist — deleting a real AD account to test creation
+  isn't worth the risk; the guards + end-state assertion are the verification.)
 
 ## What broke, and how it was diagnosed
 

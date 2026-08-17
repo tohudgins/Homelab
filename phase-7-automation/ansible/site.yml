@@ -2,6 +2,6 @@
 # Full-lab convergence. Import per-host plays in dependency order.
 # Each is also runnable on its own (e.g. ansible-playbook router.yml).
 - import_playbook: router.yml
+- import_playbook: dc.yml             # dc-01    (Samba AD DC config + deliberate weaknesses)
 - import_playbook: siem.yml           # siem-01  (Wazuh manager + custom detection content)
-# - import_playbook: dc.yml           # dc-01    (Samba AD DC + weaknesses)        [next]
 # - import_playbook: fileserver.yml   # fs-01    (Samba member + weak share)       [next]
