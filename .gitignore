@@ -10,3 +10,6 @@ phase-5-offense/bloodhound-collections/*.zip
 
 # Ansible vault key — decrypts the committed vault.yml files; never commit
 phase-7-automation/ansible/.vault_pass
+
+# Lab-control secrets (ws-01 encryption passphrase etc.)
+scripts/.lab-secrets
