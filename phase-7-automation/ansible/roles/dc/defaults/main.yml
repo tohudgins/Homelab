@@ -37,6 +37,14 @@ dc_normal_users:
   - name: jdoe
     password: "P@ssw0rd-jdoe-lab"
     description: "Ordinary unprivileged domain user (attack-simulation principal)"
+  # Additional ordinary users so the domain feels populated for simulations and
+  # so attacks can target a realistic victim session instead of localadmin.
+  - name: asmith
+    password: "Autumn2026!Smith"
+    description: "Regular domain user — designated attack-simulation victim (logs into ws-01)"
+  - name: bwilson
+    password: "Winter2026!Wilson"
+    description: "Regular domain user (populates the domain for realistic simulations)"
 
 # svc-backup is deliberately over-privileged to give BloodHound a low-priv -> Tier0
 # path: Backup Operators membership + DCSync rights on the domain NC.
