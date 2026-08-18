@@ -1,0 +1,47 @@
+---
+# ============================================================================
+# ws-01 — codify the Windows victim endpoint's detection-telemetry sources:
+# the Wazuh agent (→ manager), Sysmon (process/network/registry), and PowerShell
+# Script Block Logging (event 4104). Managed over SSH with the ansible.windows
+# win_* modules. Idempotent.
+# ============================================================================
+
+# --- Wazuh agent → manager ----------------------------------------------------
+- name: Point the Wazuh agent at the manager
+  community.windows.win_lineinfile:
+    path: "{{ wazuh_agent_conf }}"
+    regexp: '<address>.*</address>'
+    line: "      <address>{{ wazuh_manager_ip }}</address>"
+  notify: Restart wazuh agent
+
+- name: Ensure the Wazuh agent service is running
+  ansible.windows.win_service:
+    name: WazuhSvc
+    start_mode: auto
+    state: started
+
+# --- PowerShell Script Block Logging (event 4104) -----------------------------
+- name: Enable PowerShell Script Block Logging
+  ansible.windows.win_regedit:
+    path: HKLM:\SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging
+    name: EnableScriptBlockLogging
+    data: 1
+    type: dword
+
+# --- Sysmon -------------------------------------------------------------------
+- name: Ensure the Sysmon service is running
+  ansible.windows.win_service:
+    name: "{{ sysmon_service }}"
+    start_mode: auto
+    state: started
+
+# --- Soft verification (informational; log may have rotated) ------------------
+- name: Report the agent's last "Connected to the server" log line
+  ansible.windows.win_shell: Select-String -Path 'C:\Program Files (x86)\ossec-agent\ossec.log' -Pattern 'Connected to the server' | Select-Object -Last 1 -ExpandProperty Line
+  register: ws_connected
+  changed_when: false
+  failed_when: false
+
+- name: Show agent connection status
+  ansible.builtin.debug:
+    msg: "{{ ws_connected.stdout | default('') | trim }}"

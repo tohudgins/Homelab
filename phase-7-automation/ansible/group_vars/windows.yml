@@ -1,0 +1,19 @@
+---
+# ws-01 is managed over SSH (Win32-OpenSSH is already installed and working), not
+# WinRM. Rationale: SSH is already present and reachable, it avoids standing up a
+# WinRM listener + certificate, and it is Microsoft's recommended Ansible transport
+# for Windows going forward. ws-01's OpenSSH DefaultShell is the stock cmd.exe, so
+# ansible_shell_type must be `cmd` — telling Ansible `powershell` while the shell
+# is cmd corrupts its Base64 -EncodedCommand payload (powershell just prints help).
+#
+# Reached on the CORP segment via the same ProxyCommand jump through rtr-01 as the
+# other internal hosts. localadmin is a local Administrator, so no privilege
+# escalation is needed (Windows has no sudo).
+ansible_connection: ssh
+ansible_shell_type: cmd
+ansible_ssh_private_key_file: "~/.ssh/id_ed25519_homelab"
+ansible_ssh_common_args: >-
+  -o IdentitiesOnly=yes
+  -o StrictHostKeyChecking=accept-new
+  -o ProxyCommand="ssh -W %h:%p -i /Users/tohud/.ssh/id_ed25519_homelab -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new tohudgins@192.168.168.133"
+ansible_become: false

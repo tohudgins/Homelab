@@ -5,10 +5,15 @@ The goal the build plan sets is the "infrastructure as code" bullet: a repo that
 provisions the lab, so a host can be rebuilt from a base OS install to its
 working role without hand-editing config files from memory.
 
-> **Status: in progress.** Control node + inventory + secrets model are in place.
-> Two roles — **`router`** (rtr-01) and **`siem`** (siem-01) — are built,
-> converged against the live lab, and proven idempotent (`changed=0` on
-> re-run). `dc` (Samba AD DC) and `fileserver` (fs-01) are next.
+> **Status: complete.** All six hosts are covered by idempotent roles —
+> **`router`** (rtr-01), **`dc`** (dc-01), **`siem`** (siem-01), **`dmz`**
+> (dmz-01), **`fileserver`** (fs-01), and **`windows`** (ws-01, managed over SSH).
+> `ansible-playbook site.yml` converges the entire lab at `changed=0`, and
+> **dmz-01** was stood up from a blank disk via headless Ubuntu autoinstall — the
+> full "rebuild the lab from a repo" deliverable. *Optional future depth: automate
+> the one-shot provisioners (`samba-tool domain provision`, `wazuh-install.sh`) so
+> dc-01/siem-01 can also rebuild from truly blank — dmz-01 already proves the
+> pattern.*
 
 ## Scope — what "IaC" honestly means here
 
@@ -92,7 +97,7 @@ ansible-playbook siem.yml
 | `dc` | dc-01 | Samba AD DC `smb.conf` (incl. Phase 4 audit logging) + the deliberate weaknesses register (Kerberoastable service accounts + SPNs, unprivileged user, svc-backup's Backup Operators + DCSync over-privilege), each guarded by an existence check | ✅ built, idempotent + self-verifying |
 | `dmz` | dmz-01 | Docker + OWASP Juice Shop, Wazuh agent (+ container-log ingestion), NTP sync to rtr-01 | ✅ built, idempotent |
 | `fileserver` | fs-01 | Samba member `smb.conf`, the weak `[public]` share + `full_audit` VFS, the bait credential file, Wazuh agent + realtime FIM on the share | ✅ built, idempotent + self-verifying |
-| Windows | ws-01 | Sysmon + Wazuh agent via WinRM | ⬜ later increment (the one host without a role) |
+| `windows` | ws-01 | Wazuh agent → manager, Sysmon service, PowerShell Script Block Logging — managed **over SSH** (ansible.windows / community.windows) | ✅ built, idempotent |
 
 > **dmz-01 is a from-scratch VM**, not just a role: it was installed fully
 > headless via Ubuntu autoinstall (see `provisioning/dmz-01/`) and then configured
@@ -125,8 +130,15 @@ Each role was proven, not assumed:
 - **fileserver** — converged against fs-01 with a domain-join guard (fails clearly
   if `net ads testjoin` isn't "Join is OK"); re-run `changed=0`. Self-verification
   task confirms the `[public]` share is exported (`testparm`) and the bait file is
-  present and still leaks `svc-backup`. The full lab (`site.yml`) converges all
-  five hosts — rtr-01, dc-01, siem-01, dmz-01, fs-01 — at `changed=0`.
+  present and still leaks `svc-backup`.
+- **windows** — ws-01 managed **over SSH** with the ansible.windows modules; the
+  role's verify task read the agent's own log confirming *"Connected to the server
+  ([10.10.30.10]:1514/tcp)"*. Enforce path exercised by flipping the Script Block
+  Logging registry value off and watching the role set it back (`changed=1` → then
+  `changed=0`). Gotcha: with Win32-OpenSSH's default `cmd` shell, `ansible_shell_type`
+  **must** be `cmd` — declaring `powershell` corrupts Ansible's Base64
+  `-EncodedCommand`. **`site.yml` converges all six hosts — rtr-01, dc-01, siem-01,
+  dmz-01, fs-01, ws-01 — at `changed=0`.**
 - **dmz** — full new-host build, verified end-to-end after headless install:
   Juice Shop answers HTTP 200 (the role's own `uri` check) and is reachable
   CORP→DMZ; the Wazuh agent enrolled as **005 / Active** on the manager and

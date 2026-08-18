@@ -1,0 +1,6 @@
+---
+- name: Configure ws-01 — Windows victim endpoint detection telemetry
+  hosts: windows
+  gather_facts: false
+  roles:
+    - windows

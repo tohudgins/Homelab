@@ -1,0 +1,9 @@
+---
+# ws-01 — Windows 11 ARM64 domain-joined workstation (the victim endpoint).
+# Sysmon and the Wazuh agent were installed in Phase 3; this role codifies their
+# config + the endpoint's detection-telemetry sources as idempotent Ansible.
+wazuh_agent_conf: 'C:\Program Files (x86)\ossec-agent\ossec.conf'
+
+# Sysmon's main service (the ARM64 build registers as "Sysmon64a"); the SysmonDrv
+# kernel driver comes up with it.
+sysmon_service: Sysmon64a

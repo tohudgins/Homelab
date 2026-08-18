@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  role_name: windows
+  description: >-
+    ws-01 — codifies the Windows victim endpoint's detection-telemetry sources
+    (Wazuh agent → manager, Sysmon, PowerShell Script Block Logging) as
+    idempotent Ansible, managed over SSH with the ansible.windows modules.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []
