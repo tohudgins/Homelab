@@ -61,6 +61,17 @@ ALL_PROFILES="networking ad soc attack vulnscan services"
 
 running() { vmrun list | grep -qF "$(vmx_path "$1")"; }
 
+# Run a vmrun command for a VM, prepending -vp <pass> for encrypted VMs so
+# suspend/stop work on them too (not just start).
+vmrun_vm() {
+  local vm="$1"; shift
+  if is_encrypted "$vm" && [ -n "$(enc_pass "$vm")" ]; then
+    vmrun -vp "$(enc_pass "$vm")" "$@"
+  else
+    vmrun "$@"
+  fi
+}
+
 start_vm() {
   local vm="$1" vmx; vmx="$(vmx_path "$1")"
   [ -f "$vmx" ] || { echo "  ! $vm: no vmx (not built yet?)"; return 0; }
@@ -84,7 +95,12 @@ cmd_up() {
 
 cmd_suspend() {
   for vm in $ALL_VMS; do
-    running "$vm" && { vmrun suspend "$(vmx_path "$vm")" soft >/dev/null 2>&1 && echo "  v $vm suspended" || echo "  ! $vm suspend failed"; }
+    running "$vm" || continue
+    # soft needs VMware Tools; fall back to hard if Tools isn't responding.
+    if vmrun_vm "$vm" suspend "$(vmx_path "$vm")" soft >/dev/null 2>&1 \
+       || vmrun_vm "$vm" suspend "$(vmx_path "$vm")" hard >/dev/null 2>&1; then
+      echo "  v $vm suspended"
+    else echo "  ! $vm suspend failed"; fi
   done
   echo "done."
 }
@@ -92,8 +108,8 @@ cmd_suspend() {
 cmd_stop() {
   for vm in $ALL_VMS; do
     running "$vm" || continue
-    if vmrun stop "$(vmx_path "$vm")" soft >/dev/null 2>&1; then echo "  . $vm powered off"
-    elif vmrun stop "$(vmx_path "$vm")" hard >/dev/null 2>&1; then echo "  . $vm hard-stopped"
+    if vmrun_vm "$vm" stop "$(vmx_path "$vm")" soft >/dev/null 2>&1; then echo "  . $vm powered off"
+    elif vmrun_vm "$vm" stop "$(vmx_path "$vm")" hard >/dev/null 2>&1; then echo "  . $vm hard-stopped"
     else echo "  ! $vm stop failed"; fi
   done
   echo "done."
