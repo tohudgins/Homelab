@@ -48,6 +48,21 @@ Wazuh agent + container-log ingestion"]
 - **Network security monitoring** — paired Suricata + Zeek analysis, PCAP investigation
 - **Infrastructure as code** — Ansible-driven rebuild of the entire lab
 
+## Running the lab
+
+The lab is driven as a platform, not a pile of VMs — a `make` control surface over
+VMware Fusion + Ansible:
+
+```bash
+make up PROFILE=soc     # start a run profile (networking|ad|soc|attack|vulnscan|services)
+make converge           # ansible-playbook site.yml — bring the whole lab to desired state
+make status             # power state of every VM
+make down               # suspend everything
+```
+
+Full operator guide — running a simulation, the detection loop, **and how to add a
+new host/segment (the scalability path)** — in [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+
 ## Build phases
 
 | Phase | Focus | Status |
