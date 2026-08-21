@@ -13,9 +13,24 @@ from-scratch counterpart to the `scan` Ansible role that layers Greenbone on top
 | `grub.cfg` | ISO grub with `autoinstall ds=nocloud` + serial console added, so the installer runs unattended instead of prompting |
 
 ## Sizing (bigger than dmz-01 — Greenbone is heavy)
-1 vCPU / 2 GB is fine for a Juice Shop box; Greenbone's ~15-container stack
+1 vCPU / 2 GB is fine for a Juice Shop box; Greenbone's ~16-container stack
 (gvmd + Postgres + redis + openvas-scanner + ospd + notus + gsa + feed loaders)
-is memory-hungry. scan-01 is built with **4 vCPU / 6 GB / 40 GB disk**.
+is memory- **and disk**-hungry. scan-01 runs on **4 vCPU / 10 GB / 80 GB disk**.
+Both the RAM and disk had to be raised from the first attempt (6 GB / 40 GB) —
+**build new scanners at 10 GB / 80 GB from the start.**
+
+> **Disk was originally 40 GB — too small.** The ~11 GB of images + ~16 GB of
+> feed/DB volumes leave almost no headroom, and the first SCAP feed import's
+> transient temp/WAL space nearly filled the disk (dropping ~1 GB/min). Grew it to
+> **80 GB** (power off → `vmware-vdiskmanager -x 80GB scan-01.vmdk` → boot →
+> `growpart /dev/nvme0n1 2 && resize2fs /dev/nvme0n1p2`, both online).
+
+> **RAM was originally 6 GB — too small.** gvmd **repeatedly aborted (SIGABRT)**
+> during the SCAP CVSS/CPE-count computation with only ~260 MB free — that step is
+> memory-hungry and Greenbone wants **≥8 GB**. Raised scan-01 to **10 GB** (power
+> off → set `memsize = "10240"` in the `.vmx` → boot), which gave ~8 GB free and let
+> the import finish. Symptom to recognise: feeds stuck `currently_syncing`, DB size
+> plateaued, and `Received Aborted signal` + `BACKTRACE` in `docker compose logs gvmd`.
 
 ## Build steps (host = macOS, VMware Fusion, ARM64)
 
