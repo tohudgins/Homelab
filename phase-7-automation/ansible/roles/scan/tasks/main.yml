@@ -1,0 +1,168 @@
+---
+# ============================================================================
+# scan-01 — stand up the Greenbone Community Edition vulnerability scanner
+# (GVM/OpenVAS) in Docker, arm64-native, and create the admin login. Idempotent.
+#
+# No Wazuh agent here on purpose: REDTEAM can't reach the SOC segment (the SIEM
+# must not be reachable by the box generating the scans), so scan-01 stays
+# un-agented and unmonitored — the scanner is a tool, not a telemetry source.
+# ============================================================================
+
+# --- Docker engine + compose v2 ----------------------------------------------
+- name: Install Docker engine + compose plugin
+  ansible.builtin.apt:
+    name: "{{ scan_docker_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Enable and start Docker
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+# --- Time sync to rtr-01 (REDTEAM side) --------------------------------------
+# Minimal Ubuntu Server ships no NTP client; install it or the config below has
+# no service to read it and the scanner's clock drifts away from the lab.
+- name: Install the NTP client (systemd-timesyncd)
+  ansible.builtin.apt:
+    name: systemd-timesyncd
+    state: present
+
+- name: Point systemd-timesyncd at the lab NTP source (rtr-01, REDTEAM side)
+  ansible.builtin.copy:
+    dest: /etc/systemd/timesyncd.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible (roles/scan). rtr-01 is the lab's chrony time source.
+      [Time]
+      NTP={{ scan_ntp_server }}
+      FallbackNTP=ntp.ubuntu.com
+  notify: Restart timesyncd
+
+- name: Enable and start systemd-timesyncd
+  ansible.builtin.systemd:
+    name: systemd-timesyncd
+    enabled: true
+    state: started
+
+# --- Greenbone Community Edition stack ----------------------------------------
+- name: Create the Greenbone deployment directory
+  ansible.builtin.file:
+    path: "{{ scan_deploy_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Fetch Greenbone's official Community Edition compose file
+  ansible.builtin.get_url:
+    url: "{{ scan_compose_url }}"
+    dest: "{{ scan_deploy_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+
+# One-command scan launcher (GMP: create target+task for the CORP hosts, start
+# it). Ships with the scanner so a rebuilt scan-01 always has it.
+- name: Deploy the CORP scan launcher (greenbone-scan.sh)
+  ansible.builtin.copy:
+    src: greenbone-scan.sh
+    dest: "{{ scan_deploy_dir }}/greenbone-scan.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
+# `docker compose up -d` is Greenbone's own documented deploy: it pulls any
+# missing images and starts the stack, including the one-shot feed-loader and
+# TLS-generation containers that populate volumes and then exit 0. The dedicated
+# docker_compose module is avoided on purpose — its health-gating treats those
+# expected "exited" one-shots as a failure.
+- name: Bring up the Greenbone stack (pulls missing images, starts all services)
+  ansible.builtin.command: >-
+    docker compose -p {{ scan_compose_project }} up -d
+  args:
+    chdir: "{{ scan_deploy_dir }}"
+  register: scan_compose
+  # Only a (re)built container is a real change. This stack has one-shot feed/
+  # config containers that exit and a gvm-tools helper that `up` re-"Started"s
+  # every run — steady-state churn, not drift — so "Started" is deliberately
+  # excluded to keep a converged re-run at changed=0.
+  changed_when: >-
+    ('Created' in scan_compose.stderr) or ('Recreated' in scan_compose.stderr)
+  # The first pull is ~10 GB of layers over NAT; the community registry CDN will
+  # occasionally reset a connection mid-layer ("connection reset by peer"), which
+  # fails the whole `up`. Already-pulled layers are cached, so each retry resumes
+  # with less to fetch and eventually completes.
+  retries: 6
+  delay: 20
+  until: scan_compose.rc == 0
+
+# gvmd needs a moment after the containers report "running" before its unix
+# socket answers — poll it rather than sleeping a fixed interval. Long first
+# retry budget: on the initial run gvmd waits on the pg-gvm DB migration.
+- name: Wait for gvmd to accept commands
+  ansible.builtin.command: >-
+    docker compose -p {{ scan_compose_project }} exec -T -u gvmd gvmd gvmd --get-users
+  args:
+    chdir: "{{ scan_deploy_dir }}"
+  register: gvmd_users
+  changed_when: false
+  retries: 60
+  delay: 10
+  until: gvmd_users.rc == 0
+
+# --- Admin login --------------------------------------------------------------
+# gvmd's entrypoint auto-creates an `admin` user on a fresh database with a
+# password we don't control (not logged), so "create only if absent" would leave
+# an un-loggable admin. Instead: create it only in the rare case gvmd didn't, and
+# always enforce the known lab password so a rebuild is always reachable.
+- name: Create the Greenbone admin user (only if gvmd didn't auto-create it)
+  ansible.builtin.command: >-
+    docker compose -p {{ scan_compose_project }} exec -T -u gvmd gvmd
+    gvmd --create-user={{ greenbone_admin_user }} --password={{ greenbone_admin_password }}
+  args:
+    chdir: "{{ scan_deploy_dir }}"
+  when: greenbone_admin_user not in gvmd_users.stdout_lines
+  register: scan_admin_created
+
+- name: Ensure the admin password is the known lab value
+  ansible.builtin.command: >-
+    docker compose -p {{ scan_compose_project }} exec -T -u gvmd gvmd
+    gvmd --user={{ greenbone_admin_user }} --new-password={{ greenbone_admin_password }}
+  args:
+    chdir: "{{ scan_deploy_dir }}"
+  when: greenbone_admin_user in gvmd_users.stdout_lines
+  changed_when: false   # declarative enforcement, not drift — keeps converge clean
+
+# --- Verify -------------------------------------------------------------------
+# nginx only starts once gvm-config has generated TLS and GSA is healthy, so the
+# port listening is a solid "the whole front-end chain is up" gate — and it's
+# protocol-agnostic (nginx fronts the UI over TLS), unlike a fixed http/https URL.
+- name: Verify the GSA web UI is listening
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ scan_gsa_port }}"
+    state: started
+    timeout: 300
+
+- name: Probe the GSA endpoint (best-effort — confirms nginx is serving)
+  ansible.builtin.uri:
+    url: "https://127.0.0.1:{{ scan_gsa_port }}/"
+    validate_certs: false
+    status_code: [200, 301, 302, 401]
+    timeout: 20
+  register: gsa_check
+  failed_when: false
+
+- name: Report scanner status
+  ansible.builtin.debug:
+    msg: >-
+      Greenbone CE up on scan-01. GSA answering on 127.0.0.1:{{ scan_gsa_port }}
+      (tunnel from the Mac to reach it). Admin user '{{ greenbone_admin_user }}'
+      {{ 'created' if scan_admin_created is changed else 'already present' }}.
+      Feed sync (SCAP/CERT/VT/NOTUS) runs in the background and can take 20-40 min
+      the first time — check Administration > Feed Status in the UI.

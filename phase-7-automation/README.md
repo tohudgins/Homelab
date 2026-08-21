@@ -5,15 +5,15 @@ The goal the build plan sets is the "infrastructure as code" bullet: a repo that
 provisions the lab, so a host can be rebuilt from a base OS install to its
 working role without hand-editing config files from memory.
 
-> **Status: complete.** All six hosts are covered by idempotent roles —
+> **Status: complete.** All seven hosts are covered by idempotent roles —
 > **`router`** (rtr-01), **`dc`** (dc-01), **`siem`** (siem-01), **`dmz`**
-> (dmz-01), **`fileserver`** (fs-01), and **`windows`** (ws-01, managed over SSH).
-> `ansible-playbook site.yml` converges the entire lab at `changed=0`, and
-> **dmz-01** was stood up from a blank disk via headless Ubuntu autoinstall — the
-> full "rebuild the lab from a repo" deliverable. *Optional future depth: automate
-> the one-shot provisioners (`samba-tool domain provision`, `wazuh-install.sh`) so
-> dc-01/siem-01 can also rebuild from truly blank — dmz-01 already proves the
-> pattern.*
+> (dmz-01), **`fileserver`** (fs-01), **`windows`** (ws-01, managed over SSH), and
+> **`scan`** (scan-01, Greenbone CE vuln scanner). `ansible-playbook site.yml`
+> converges the entire lab at `changed=0`, and **dmz-01** and **scan-01** were both
+> stood up from a blank disk via headless Ubuntu autoinstall — the full "rebuild
+> the lab from a repo" deliverable. *Optional future depth: automate the one-shot
+> provisioners (`samba-tool domain provision`, `wazuh-install.sh`) so dc-01/siem-01
+> can also rebuild from truly blank — dmz-01/scan-01 already prove the pattern.*
 
 ## Scope — what "IaC" honestly means here
 
@@ -98,11 +98,12 @@ ansible-playbook siem.yml
 | `dmz` | dmz-01 | Docker + OWASP Juice Shop, Wazuh agent (+ container-log ingestion), NTP sync to rtr-01 | ✅ built, idempotent |
 | `fileserver` | fs-01 | Samba member `smb.conf`, the weak `[public]` share + `full_audit` VFS, the bait credential file, Wazuh agent + realtime FIM on the share | ✅ built, idempotent + self-verifying |
 | `windows` | ws-01 | Wazuh agent → manager, Sysmon service, PowerShell Script Block Logging — managed **over SSH** (ansible.windows / community.windows) | ✅ built, idempotent |
+| `scan` | scan-01 | Docker + **Greenbone Community Edition** (GVM/OpenVAS) — arm64-native ~16-container stack, admin login enforced, NTP sync to rtr-01, ships a one-command CORP scan launcher (`greenbone-scan.sh`, GMP) | ✅ built, idempotent |
 
-> **dmz-01 is a from-scratch VM**, not just a role: it was installed fully
-> headless via Ubuntu autoinstall (see `provisioning/dmz-01/`) and then configured
-> by the `dmz` role — the build's only end-to-end "blank disk → running service"
-> example.
+> **dmz-01 and scan-01 are from-scratch VMs**, not just roles: each was installed
+> fully headless via Ubuntu autoinstall (see `provisioning/dmz-01/`,
+> `provisioning/scan-01/`) and then configured by its role — the build's
+> end-to-end "blank disk → running service" examples.
 
 ## Verification evidence
 
@@ -137,8 +138,8 @@ Each role was proven, not assumed:
   Logging registry value off and watching the role set it back (`changed=1` → then
   `changed=0`). Gotcha: with Win32-OpenSSH's default `cmd` shell, `ansible_shell_type`
   **must** be `cmd` — declaring `powershell` corrupts Ansible's Base64
-  `-EncodedCommand`. **`site.yml` converges all six hosts — rtr-01, dc-01, siem-01,
-  dmz-01, fs-01, ws-01 — at `changed=0`.**
+  `-EncodedCommand`. **`site.yml` converges all seven hosts — rtr-01, dc-01,
+  siem-01, dmz-01, fs-01, ws-01, scan-01 — at `changed=0`.**
 - **dmz** — full new-host build, verified end-to-end after headless install:
   Juice Shop answers HTTP 200 (the role's own `uri` check) and is reachable
   CORP→DMZ; the Wazuh agent enrolled as **005 / Active** on the manager and
@@ -147,6 +148,15 @@ Each role was proven, not assumed:
   clock **synchronized to rtr-01** (rtr-01's chrony lists it as a client). Re-run
   `changed=0`. Gotcha closed en route: minimal Ubuntu ships no NTP client, so the
   `timesyncd.conf` had no service to read it until the package was installed.
+- **scan** — second full new-host build from a blank disk. Greenbone CE's
+  ~16-container stack came up (all `healthy`), gvmd accepted GMP commands, and the
+  admin credential was verified end-to-end at the API (`<get_feeds/>` returned
+  `status="200"` under `admin`). Re-run `changed=0`. Arch was verified *before*
+  building: every one of the 19 images on `registry.community.greenbone.net`
+  publishes `linux/arm64`, so the scanner runs native on Apple Silicon — no qemu.
+  The firewall needed **zero** changes: REDTEAM→CORP was already open (scan-01
+  reaches dc-01/ws-01) and REDTEAM→SOC blocked (so scan-01 correctly runs no Wazuh
+  agent — the SIEM must not be reachable by the box generating the scans).
 
 ## What broke, and how it was diagnosed
 
@@ -165,3 +175,15 @@ hand-built lab into idempotent code:
   `ProxyCommand` that passes `-i <key>` to the jump hop.
 - **`community.general.yaml` stdout callback removed** in current ansible-core.
   Replaced with `stdout_callback = default` + `result_format = yaml`.
+- **Greenbone stack `up` failed mid-pull: `connection reset by peer`.** The first
+  scan-01 converge aborted ~47 s in — the community registry CDN reset a
+  connection while pulling a 1.5 GB layer, which fails the whole `docker compose
+  up`. Not an arch or config fault (already-pulled layers were cached). Fix: a
+  `retries`/`until rc==0` loop on the stack-up task, so each retry resumes from
+  cache and eventually completes — real robustness for a ~10 GB first pull over NAT.
+- **The admin-user task skipped, leaving a login I didn't control.** gvmd's
+  entrypoint *auto-creates* an `admin` on a fresh DB with an un-logged password, so
+  "create only if absent" silently left an unreachable UI. Fix: the role now also
+  *enforces* the known lab password (`gvmd --user=admin --new-password`,
+  `changed_when: false` since it's declarative state), so a rebuilt scanner is
+  always reachable.

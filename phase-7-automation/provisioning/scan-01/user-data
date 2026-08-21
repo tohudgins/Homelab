@@ -1,0 +1,35 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  identity:
+    hostname: scan-01
+    username: tohudgins
+    # Password: ScanLab2026!  (SHA-512 crypt) — key-based auth is primary.
+    password: "$6$9gHLpCA4V3U.dwt/$oz00QpyxL7IvTsO/KmWcHVmDzj/sjiBFjc48.PvJKfOIaML6YJk0//9MiXbU6.ZEAsCvIrZVIkOjY4JipGqee0"
+  ssh:
+    install-server: true
+    allow-pw: true
+    authorized-keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH7GQV6ykcpEB9lPX4PtS48LOUIeL2N/gA4w5biGD+XS tohudgins@mac-homelab-jumphost"
+  network:
+    version: 2
+    ethernets:
+      scannic:
+        match:
+          name: "en*"
+        addresses:
+          - 10.10.40.20/24
+        routes:
+          - to: default
+            via: 10.10.40.1
+        nameservers:
+          addresses: [10.10.40.1]
+  storage:
+    layout:
+      name: direct
+  # Power off (don't reboot) so the installer can't loop back into the CD;
+  # the CDs are detached before first real boot.
+  shutdown: poweroff

@@ -1,0 +1,38 @@
+---
+# scan-01 — REDTEAM active vulnerability scanner (Greenbone Community Edition).
+#
+# Greenbone CE ships as a multi-container stack from Greenbone's own registry
+# (registry.community.greenbone.net/community/*), and those images ARE published
+# multi-arch — linux/arm64 alongside amd64 — so the whole scanner runs natively
+# on this Apple-Silicon host with no qemu emulation. (Docker Hub's greenbone/*
+# is a stale mirror; the community registry is the real one.)
+scan_docker_packages:
+  - docker.io
+  - docker-compose-v2   # provides `docker compose` (the v2 CLI plugin)
+
+# Where the Greenbone deployment lives on scan-01.
+scan_deploy_dir: /opt/greenbone
+scan_compose_project: greenbone-community-edition
+
+# Greenbone's official Community Edition compose file — self-contained, pins the
+# correct image tags and the community registry for every service (gvmd, gsa/gsad,
+# openvas-scanner, ospd-openvas, pg-gvm, redis, mqtt, nginx front-end, and the
+# feed-data loader containers). Pulling it rather than vendoring keeps the stack
+# current. An nginx reverse proxy now fronts the UI and terminates TLS.
+scan_compose_url: "https://greenbone.github.io/docs/latest/_static/docker-compose.yml"
+
+# Greenbone Security Assistant (the web UI). The compose binds it to 127.0.0.1
+# only — reach it from the Mac with an SSH tunnel through the rtr-01 jump host:
+#   ssh -J tohudgins@<rtr-wan> -L 9392:127.0.0.1:9392 tohudgins@10.10.40.20
+# then browse https://127.0.0.1:9392  (self-signed).
+scan_gsa_port: 9392
+
+# Lab admin credential for the GSA web UI / gvmd. A deliberate, documented lab
+# secret (recorded in the vault's Virtual Machines note), same posture as the
+# other weak lab creds — not vaulted, because it's already written down.
+greenbone_admin_user: admin
+greenbone_admin_password: "GreenboneAdmin2026!"
+
+# Time authority: rtr-01's REDTEAM-side address. Wazuh/Greenbone both correlate
+# by timestamp, so the scanner's clock must match the rest of the lab.
+scan_ntp_server: "10.10.40.1"

@@ -34,7 +34,7 @@ Wazuh agent + container-log ingestion"]
     end
     subgraph RED["REDTEAM (on-demand)"]
         ATK["atk-01 — Kali + BloodHound collector"]
-        SCAN["scan-01 — OpenVAS/Greenbone"]
+        SCAN["scan-01 — Greenbone CE / OpenVAS (Docker)"]
     end
 ```
 
@@ -74,6 +74,6 @@ new host/segment (the scalability path)** — in [`docs/RUNBOOK.md`](docs/RUNBOO
 | 4 | Detection engineering | ✅ Complete (12 techniques) |
 | 5 | Offense in context | 🔄 In progress (BloodHound path → executed → DCSync + credential-theft detections) |
 | 6 | Network security monitoring | 🔄 In progress (Suricata + Zeek inline; attack-chain PCAP analysis correlating signature/protocol/host) |
-| 7 | Automation | ✅ Complete (Ansible IaC — **all six hosts** covered: `router`/`dc`/`siem`/`dmz`/`fileserver` + `windows` (ws-01 over SSH); `site.yml` converges the entire lab at `changed=0`; **dmz-01** stood up from a blank disk via headless Ubuntu autoinstall) |
+| 7 | Automation | ✅ Complete (Ansible IaC — **all seven hosts** covered: `router`/`dc`/`siem`/`dmz`/`fileserver`/`windows` (ws-01 over SSH) + `scan` (scan-01, Greenbone CE vuln scanner); `site.yml` converges the entire lab at `changed=0`; **dmz-01 and scan-01** stood up from blank disks via headless Ubuntu autoinstall) |
 
 Full IP plan, naming convention, and design rationale: [`docs/00-ip-plan.md`](docs/00-ip-plan.md), [`docs/design-decisions.md`](docs/design-decisions.md).

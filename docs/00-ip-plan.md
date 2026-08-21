@@ -32,7 +32,7 @@
 | siem-01 | SOC/MGMT | `10.10.30.10` | Wazuh all-in-one |
 | dmz-01 | DMZ | `10.10.20.10` | OWASP Juice Shop (Docker), Wazuh agent 005 — built headless via Ubuntu autoinstall, configured by the `dmz` Ansible role |
 | atk-01 | REDTEAM | `10.10.40.10` (DHCP — rebuilt often) | Attack tooling, BloodHound collector |
-| scan-01 | REDTEAM | `10.10.40.20` (DHCP) | OpenVAS/Greenbone scanning |
+| scan-01 | REDTEAM | `10.10.40.20` (static, below the `.100–.200` DHCP pool) | Greenbone CE / OpenVAS active vuln scanner — built headless via Ubuntu autoinstall, configured by the `scan` Ansible role |
 
 ## Ports crossing segment boundaries
 

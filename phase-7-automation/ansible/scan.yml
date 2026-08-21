@@ -1,0 +1,5 @@
+---
+- name: Configure scan-01 — Greenbone Community Edition vulnerability scanner
+  hosts: scanners
+  roles:
+    - scan

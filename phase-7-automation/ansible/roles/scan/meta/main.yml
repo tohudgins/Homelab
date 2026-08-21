@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  role_name: scan
+  description: >-
+    scan-01 — REDTEAM active vulnerability scanner: Docker + Greenbone Community
+    Edition (GVM/OpenVAS), arm64-native. Authenticated + unauthenticated scans of
+    the CORP hosts (dc-01/ws-01), cross-referenced against Wazuh's passive
+    vulnerability-detection module. Deliberately outside the SOC segment and
+    un-agented — REDTEAM can't reach the SIEM by design.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

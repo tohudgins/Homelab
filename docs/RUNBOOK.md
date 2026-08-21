@@ -61,6 +61,30 @@ install Atomic Red Team on ws-01 (interactive PowerShell — the installer promp
 ordinary domain users (plus `jdoe`); run simulations as one of these, not
 `localadmin`. All are (re)created idempotently by the `dc` role.
 
+### Vulnerability scanning (scan-01 / Greenbone CE)
+
+A different loop from attack/detect — active vulnerability assessment of the CORP
+hosts, cross-referenced against Wazuh's own passive vuln module:
+
+```bash
+make up PROFILE=vulnscan                       # rtr-01 dc-01 siem-01 scan-01
+ssh scan-01 'sudo /opt/greenbone/greenbone-scan.sh'         # create target+task, launch
+ssh scan-01 'sudo /opt/greenbone/greenbone-scan.sh status'  # watch progress
+```
+
+- The launcher (GMP via the stack's `gvm-tools`) creates a **Target** for dc-01 +
+  ws-01 (`10.10.10.10,10.10.10.50`) and a **"Full and fast" Task**, idempotently,
+  then starts it. Reachable because rtr-01 allows **REDTEAM → CORP**.
+- The **GSA web UI** (Scans › Tasks, reports, CVE detail) is on scan-01 at
+  `127.0.0.1:9392` — tunnel to it: `ssh -L 9392:127.0.0.1:9392 scan-01`, then
+  `https://127.0.0.1:9392` (admin / see the vault's Virtual Machines note).
+- **First run only:** the NVT/SCAP/CERT/GVMD_DATA feeds must finish syncing
+  (~20-40 min after the stack first comes up) before scan configs exist. `<get_feeds/>`
+  with no `<currently_syncing>` means ready; the launcher says so if they aren't.
+- **Cross-reference:** compare Greenbone's active findings on dc-01/ws-01 with
+  Wazuh's passive package-CVE detections for the same hosts — active vs. agent-based
+  vuln management on the same targets.
+
 ## 3. Add a new host (the scalability story)
 
 The lab scales by the same pattern every existing host follows — this is why it's
