@@ -72,7 +72,7 @@ new host/segment (the scalability path)** — in [`docs/RUNBOOK.md`](docs/RUNBOO
 | 2 | Identity (Active Directory) | ✅ Complete |
 | 3 | Visibility (Wazuh) | ✅ Complete |
 | 4 | Detection engineering | ✅ Complete (12 techniques) |
-| 5 | Offense in context | 🔄 In progress (BloodHound path → executed → DCSync + credential-theft detections) |
+| 5 | Offense in context | ✅ Complete (BloodHound low-priv→Tier0 path executed end-to-end from atk-01 — fs-01 bait credential → Backup Operators/DCSync → Kerberoast; **all three detections re-verified firing live** (rules 100090/100031/100080), and the re-verify found + fixed a real Kerberoast-rule off-by-one — see `phase-5-offense/attack-detect-writeups/`) |
 | 6 | Network security monitoring | 🔄 In progress (Suricata + Zeek inline; attack-chain PCAP analysis correlating signature/protocol/host) |
 | 7 | Automation | ✅ Complete (Ansible IaC — **all seven hosts** covered: `router`/`dc`/`siem`/`dmz`/`fileserver`/`windows` (ws-01 over SSH) + `scan` (scan-01, Greenbone CE vuln scanner); `site.yml` converges the entire lab at `changed=0`; **dmz-01 and scan-01** stood up from blank disks via headless Ubuntu autoinstall) |
 

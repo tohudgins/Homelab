@@ -9,6 +9,12 @@ exercise taught.
 Domain: `lab.internal` · DC: `dc-01` (Samba AD DC 4.23.6) · Attacker: `atk-01` (`10.10.40.119`) ·
 Low-priv foothold user: `jdoe` (Domain User).
 
+> [!check] Re-verified end-to-end live on 2026-08-24.
+> The full chain was re-run from `atk-01` and **all three detections fired** in one pass
+> (rules 100090 / 100031 / 100080, all level 12). The re-run also caught — and fixed — a real
+> bug in the Kerberoasting rule that had been masking it on a genuine 3-SPN roast: see §3c.
+> This is exactly why detections get *re-exercised*, not just written once and trusted.
+
 ---
 
 ## 1. The path BloodHound found
@@ -76,8 +82,10 @@ interface, which is the detectable event.
 | Attacker action | Wazuh rule | Level | ATT&CK | Fires? |
 |---|---|---|---|---|
 | Read the bait credential file on fs-01 | **100090** | 12 | T1552.001 | ✅ |
-| Kerberoast (3 TGS-REQs in <60s) | 100031 (Phase 4) | 12 | T1558.003 | ✅ |
+| Kerberoast (3 TGS-REQs in <60s) | 100031 (Phase 4) | 12 | T1558.003 | ✅ *(fixed on re-verify — see §3c)* |
 | DCSync (`DsGetNCChanges` from a non-DC) | **100080** | 12 | T1003.006 | ✅ |
+
+*All three re-confirmed firing live 2026-08-24 in one consolidated chain run (`data.timestamp` 01:06:46Z).*
 
 ### 3a. Credential theft — rule 100090
 
@@ -102,6 +110,37 @@ unambiguously an attack. The rule matches Samba's replication-handler log line f
 non-buggy client, raise `log level drsuapi:5` in `smb.conf` so every `DsGetNCChanges` is logged, then key
 on the same handler string. In a multi-DC domain the rule must additionally exclude requests whose source
 is a real DC (by IP / machine account).
+
+### 3c. Kerberoasting — rule 100031 (re-verification found and fixed a real gap)
+
+This is the detection the 2026-08-24 re-run **caught silently failing**, and it's the most instructive
+part of the exercise: a rule that was "verified" once had quietly stopped firing on the real attack. The
+base rule 100030 matches each Samba `KDC Authorization` TGS-REQ event (Samba's Event-4769 equivalent);
+100031 is a correlation rule that escalates when the same account requests 3+ in 60 s. On re-run, 100030
+fired three times but **100031 never did**. Two root causes, both real:
+
+1. **Wazuh `frequency="N"` fires on the (N+1)-th match, not the N-th.** The rule was `frequency="3"`, so
+   it actually required **four** TGS-REQs — but `impacket-GetUserSPNs` requests exactly **three** (one per
+   SPN account in the domain), landing one short every time. Fixed to `frequency="2"` (fires on the 3rd),
+   which is what the rule's own "3+ service tickets" wording always meant.
+2. **The requesting account now logs as `null`.** Against this Samba version the failing impacket roast
+   (`KRB_AP_ERR_INAPP_CKSUM`) never resolves the requester, so all three TGS-REQs log
+   `account: null` / `status: NT_STATUS_NO_SUCH_USER`. The correlation keys on
+   `same_field: KDC Authorization.account` — and because all three share the *same* value (`"null"`), they
+   still group correctly. Confirmed in `wazuh-logtest` and live.
+
+**Dead end worth recording:** source IP is the more robust invariant (a roast is "one host sweeping
+tickets," whether or not the account resolves), so I tried extracting a bare `srcip` from the JSON
+`remoteAddress` with a regex child decoder (`<parent>json</parent>`). It *does* extract the IP — but a
+regex child of the built-in `json` decoder **replaces** the parent's accumulated fields with only its own,
+stripping `type` and the whole `KDC Authorization` object, which breaks rule 100030's match entirely
+(Phase 3 stops running). Reverted; account-keying works and the finding is noted in `local_decoder.xml`.
+
+**Defender view (after fix):**
+> **L12 — Kerberoasting suspected — `null` requested 3+ service tickets in 60s.** (T1558.003)
+
+The `null` in the alert is itself a tell here: a burst of TGS-REQs that don't resolve to a real account is
+precisely the failing-roast signature against this DC.
 
 ---
 
