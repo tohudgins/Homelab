@@ -44,13 +44,26 @@ Plus a real SCA before/after remediation pass on dc-01 (48% → 55%, see below �
 capability, compliance benchmarking rather than attack-simulation rule-writing, so it isn't in the table
 above), and one AD-specific investigation honestly documented as not achieved (T1098.007, see below).
 
-**Also confirmed running, not independently verified:** Wazuh's vulnerability-detection module
-(package-CVE matching) is enabled and its feed has updated (`ossec.log` confirms `Feed update process
-completed` / `Vulnerability scanner module started`), but results live only in the OpenSearch indexer in
-this Wazuh version (no local CLI path the way SCA had) and this session didn't have indexer/API
-credentials on hand to query it directly. Lowest-priority item on this tool's own value ranking (see
-[[Wazuh]] in the vault) — didn't burn time rotating credentials on a live system to check a box that low
-on the list. Worth a real pass once credentials are sorted out.
+**Vulnerability-detection module — independently verified (2026-08-24).** Enabled with
+`<index-status>yes</index-status>`; results live only in the OpenSearch indexer in this Wazuh version (no
+local CLI path the way SCA had). Retrieved the indexer admin password from `wazuh-install-files.tar` and
+queried the `wazuh-states-vulnerabilities-*` index directly — **9,888 CVE findings** across the agents,
+proving the module is doing real package-CVE matching, not just "running":
+
+| Agent | Findings | Critical | High |
+|---|---|---|---|
+| dc-01 | 3,731 | 359 | 1,688 |
+| rtr-01 | 2,416 | 80 | 368 |
+| dmz-01 | 1,870 | 175 | 851 |
+| fs-01 | 1,870 | 175 | 851 |
+| ws-01 | 1 | 0 | 0 (agent was offline; stale inventory) |
+
+Concrete example (dc-01, sorted by CVSS): `CVE-2026-74475` / `CVE-2026-74309` / `CVE-2026-72408` … all
+**CVSS 10.0**, all against `linux-image-7.0.0-28-generic 7.0.0-28.28` — the running kernel. High counts are
+expected: these are lab boxes tracking `-generic`/rolling packages, and the module matches *every* known CVE
+for *every* installed version. The full active-vs-passive comparison against Greenbone's scan of the same
+hosts is in [`vulnerability-management-active-vs-passive.md`](vulnerability-management-active-vs-passive.md).
+Query recipe: `curl -sk -u admin:<pw> https://127.0.0.1:9200/wazuh-states-vulnerabilities*/_search`.
 
 **Deliberately deferred, not forgotten:**
 - **NSM / Suricata rule-writing** — wired Suricata's `eve.json` into Wazuh (real ingestion, verified
