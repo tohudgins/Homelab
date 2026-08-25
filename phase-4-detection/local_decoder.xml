@@ -30,3 +30,14 @@
   <regex type="pcre2">(\S+)\|([\d.]+)\|(\S+)\|(\S+)\|(\w+)\|(\w+)\|(\w+)\|(\S+)$</regex>
   <order>smb_user,srcip,smb_machine,smb_share,smb_op,smb_result,smb_mode,smb_path</order>
 </decoder>
+
+<!--
+  NOTE (2026-08-24): a child decoder chained onto the built-in `json` decoder to
+  pull a bare srcip out of "KDC Authorization".remoteAddress ("ipv4:10.10.40.119:57860")
+  was tried and rejected: a regex child of the json decoder REPLACES the parent's
+  accumulated field set with only its own <order> field, stripping `type` and the
+  "KDC Authorization" object, which breaks rule 100030's field match. So Kerberoast
+  correlation stays keyed on `KDC Authorization.account` (see rule 100031) rather
+  than source IP. Documented so the dead end isn't re-attempted.
+-->
+

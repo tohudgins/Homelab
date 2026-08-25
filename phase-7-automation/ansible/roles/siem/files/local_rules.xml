@@ -137,7 +137,22 @@
     <group>kerberos_tgs,</group>
   </rule>
 
-  <rule id="100031" level="12" frequency="3" timeframe="60" ignore="120">
+  <!--
+    frequency="2", not "3". Re-verifying Phase 5 (2026-08-24) caught the original
+    frequency="3" missing a real 3-SPN roast: Wazuh's `frequency="N"` fires on the
+    (N+1)-th match, so "3" needed FOUR TGS-REQs, but impacket-GetUserSPNs sends
+    exactly THREE (one per SPN account), landing one short. "2" fires on the 3rd,
+    which is what the "3+ service tickets" description always meant.
+
+    Still keyed on `KDC Authorization.account`. Against this Samba DC a failing
+    impacket roast logs all three TGS-REQs with account=null (NT_STATUS_NO_SUCH_USER
+    — the account never resolves), but they all share the SAME value ("null"), so
+    same_field still groups them; a successful roast from a real client shares the
+    real account. Correlating on source IP would be conceptually cleaner, but
+    extracting a bare srcip needs a child decoder that strips the json fields rule
+    100030 depends on — see the note in local_decoder.xml.
+  -->
+  <rule id="100031" level="12" frequency="2" timeframe="60" ignore="120">
     <if_matched_sid>100030</if_matched_sid>
     <same_field>KDC Authorization.account</same_field>
     <description>Kerberoasting suspected — $(KDC Authorization.account) requested 3+ service tickets in 60s.</description>
@@ -148,13 +163,12 @@
   </rule>
 
   <!--
-  Evasion: same_field correlation counts OCCURRENCES from one account, not DISTINCT SPNs requested --
-  a real attacker who already knows exactly which one or two SPNs are worth cracking (rather than
-  sweeping every SPN in the domain) stays under threshold and evades this rule entirely. That's a
-  meaningful real-world case: a targeted Kerberoast against one juiciest-looking service account looks
-  identical to a legitimate client requesting its one ticket. Not patched here -- see
-  detection-catalog.md for why (would need baselining normal per-account SPN request patterns, out of
-  scope for a rule this lab can verify against real telemetry tonight).
+  Evasion: correlation counts TGS-REQ OCCURRENCES from one account, not DISTINCT SPNs -- a targeted
+  attacker who already knows the one or two SPNs worth cracking (rather than sweeping every SPN in the
+  domain) stays under the 3-in-60s threshold and evades this rule entirely. That's a meaningful real-world
+  case: a targeted Kerberoast against one juiciest-looking service account looks identical to a legit
+  client requesting its one ticket. Not patched here (would need baselining normal per-account SPN request
+  patterns, out of scope for a rule this lab can verify against real telemetry).
   -->
 
 </group>
