@@ -14,12 +14,19 @@ servers live; inter-segment attack traffic is routed through rtr-01, so it appea
 - [`pcap-reports/01-attack-chain-nsm.md`](pcap-reports/01-attack-chain-nsm.md) — the Phase-5 attack chain
   (credential theft over SMB → Kerberoasting → DCSync) replayed and analysed three ways: Suricata
   signatures, Zeek protocol logs, and the Wazuh host detections, with a correlation matrix and an honest
-  discussion of what encryption does and doesn't hide from a network sensor.
-- [`captures/phase5-attacks.pcap`](captures/phase5-attacks.pcap) — the raw capture the report is built on.
+  discussion of what encryption does and doesn't hide from a network sensor. **Re-verified live 2026-08-24.**
+- [`pcap-reports/02-recon-scanning-nsm.md`](pcap-reports/02-recon-scanning-nsm.md) — a different traffic
+  class: an `nmap` service scan of the CORP AD servers. The **mirror image** of the DCSync finding —
+  ET Open fires no port-scan signature at all, yet Zeek's `conn.log` shows the scan unmistakably as a
+  fan-out (268 connections, 102 ports, 189 `REJ` from one source in ~2 s).
+- [`captures/phase5-attacks.pcap`](captures/phase5-attacks.pcap) · [`captures/recon-scan.pcap`](captures/recon-scan.pcap) — the raw captures.
 
 ## The headline finding
 
-Signature IDS and protocol-aware NSM catch **different** things. **DCSync has no usable Suricata signature**
-(the DRSUAPI payload is encrypted), yet Zeek logs the `DRSGetNCChanges` operation by name — so the attack
-is caught anyway. Run both, and layer the host sensor (Wazuh) underneath, and no single blinded sensor
+Signature IDS and protocol-aware NSM catch **different** things, and the two reports bracket it from both
+ends. **DCSync has no usable Suricata signature** (the DRSUAPI payload is encrypted) yet Zeek logs the
+`DRSGetNCChanges` operation by name; a **port scan** has no content to sign at all, yet Zeek sees the
+connection fan-out. In both, the signature engine is blind for a different reason and the connection-aware
+sensor covers it — and where content *is* known-bad (a `.ps1` pulled over SMB, weak-enc Kerberos) the ET
+signatures fire directly. Run both, layer the host sensor (Wazuh) underneath, and no single blinded sensor
 loses the detection.

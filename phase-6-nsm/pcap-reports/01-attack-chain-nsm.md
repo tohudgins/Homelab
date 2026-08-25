@@ -14,6 +14,15 @@ traffic is routed through rtr-01, so the attacker's packets appear here):
 The point of Phase 6 is that these answer different questions, and the gaps in one are covered by another
 — including the host sensor from Phase 4/5.
 
+> [!check] Re-verified live on 2026-08-24.
+> The full chain was re-run from `atk-01` and both sensors reproduced every artifact below from fresh
+> traffic: Suricata fired `SURICATA Kerberos 5 weak encryption parameters` (×10), `ET HUNTING Possible
+> Powershell .ps1 Script Use Over SMB` (×8), and `ET INFO SMB2 … Powershell .ps1 File` (×4), with **no
+> DCSync signature** (only `ET EXPLOIT Possible GoldenPac` ×5 on the Kerberos leg); Zeek logged
+> `smb_files` → `map-backup-share.ps1`, `kerberos` → 3× failed `TGS jdoe→krbtgt`, `ntlm` → `jdoe`/`svc-backup`,
+> and — the headline — `dce_rpc` → **`drsuapi DRSGetNCChanges` by name** (alongside DRSBind/DRSCrackNames).
+> A second report on a different traffic class (network recon) is in [`02-recon-scanning-nsm.md`](02-recon-scanning-nsm.md).
+
 ---
 
 ## Correlation matrix — one attack, four vantage points
