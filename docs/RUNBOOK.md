@@ -53,9 +53,16 @@ make converge                # ensure everything is in its known-good state
 4. **Snapshot** before a destructive test, `make restore NAME=clean` after.
 
 **On the target side (ws-01)**: Sysmon + PowerShell Script Block Logging + the
-Wazuh agent are already feeding the SIEM. To fire arbitrary ATT&CK technique tests,
-install Atomic Red Team on ws-01 (interactive PowerShell — the installer prompts):
-`IEX (IWR https://raw.githubusercontent.com/redcanaryco/invoke-atomicredteam/master/install-atomicredteam.ps1 -UseBasicParsing); Install-AtomicRedTeam -getAtomics` (a `C:\AtomicRedTeam` Defender exclusion is already set), then `Invoke-AtomicTest <Txxxx>` and hunt it.
+Wazuh agent are already feeding the SIEM. **Atomic Red Team is installed**
+(`Invoke-AtomicRedTeam` 2.1.0 + `powershell-yaml`, full atomics at
+`C:\AtomicRedTeam\atomics`, `C:\AtomicRedTeam` Defender exclusion set). Fire a test
+and hunt it: `ssh ws-01 'powershell -c "Invoke-AtomicTest T1059.001 -TestNumbers 1"'`.
+It was installed **offline by design** — the lab is internal/self-contained, so CORP
+resolves only internal names (no external DNS forwarder on dc-01) and tools are
+staged from the admin host rather than pulled from the internet. The stock
+`Install-AtomicRedTeam` one-liner is intentionally not used (it needs ws-01 to reach
+GitHub). Reproducer in `phase-5-offense/atomic-red-team/`; rationale in
+`docs/design-decisions.md`.
 
 **Realistic victim identities**: `asmith` (designated victim) and `bwilson` are
 ordinary domain users (plus `jdoe`); run simulations as one of these, not
