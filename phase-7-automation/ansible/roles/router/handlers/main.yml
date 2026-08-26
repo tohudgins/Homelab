@@ -17,6 +17,11 @@
     name: chrony
     state: restarted
 
+- name: Restart suricata
+  ansible.builtin.systemd:
+    name: suricata
+    state: restarted
+
 - name: Reload systemd
   ansible.builtin.systemd:
     daemon_reload: true

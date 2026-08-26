@@ -70,6 +70,28 @@
     state: started
 
 # --- Suricata: inline signature IDS (ruleset tuning lives in Phase 6) ---------
+# NSM-hygiene: drop `stats` and `flow` from the eve.json feed Wazuh ingests.
+# Suricata `stats` events carry ~542 fields (per-counter), which overflow Wazuh's
+# analysis JSON decoder — a single stats event every 8s produced a sustained
+# ~1500/min "Too many fields for JSON decoder" spam in the manager's ossec.log
+# (log-hygiene only; detection was unaffected). `flow` is dropped too: high-volume,
+# low SIEM value, and connection-level analysis is Zeek's job (conn.log, Phase 6).
+# Both matches are anchored on their eve-log sub-keys so the separate stats.log
+# output block is untouched; idempotent (the commented form no longer matches).
+- name: Disable Suricata eve-log 'stats' events (542-field events overflow the Wazuh JSON decoder)
+  ansible.builtin.replace:
+    path: /etc/suricata/suricata.yaml
+    regexp: '^(\s*)- stats:\n\s+totals: yes\n\s+threads: no\n\s+deltas: no'
+    replace: '\1# - stats:  # DISABLED (roles/router): 542-field stats events overflow the Wazuh JSON decoder'
+  notify: Restart suricata
+
+- name: Disable Suricata eve-log 'flow' events (high-volume SIEM noise; Zeek conn.log covers connection-level)
+  ansible.builtin.replace:
+    path: /etc/suricata/suricata.yaml
+    regexp: '^(\s*)- flow$'
+    replace: '\1# - flow  # DISABLED (roles/router): high-volume, low SIEM value; use Zeek conn.log'
+  notify: Restart suricata
+
 - name: Enable and start suricata
   ansible.builtin.systemd:
     name: suricata
