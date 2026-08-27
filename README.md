@@ -71,7 +71,7 @@ new host/segment (the scalability path)** — in [`docs/RUNBOOK.md`](docs/RUNBOO
 | 1 | Routing & segmentation | ✅ Complete |
 | 2 | Identity (Active Directory) | ✅ Complete |
 | 3 | Visibility (Wazuh) | ✅ Complete |
-| 4 | Detection engineering | ✅ Complete (12 techniques) |
+| 4 | Detection engineering | ✅ Complete (16 techniques — 12 core + a Discovery-tactic batch: T1016/T1049/T1518.001/T1069.001, `phase-4-detection/detection-catalog.md`) |
 | 5 | Offense in context | ✅ Complete (BloodHound low-priv→Tier0 path executed end-to-end from atk-01 — fs-01 bait credential → Backup Operators/DCSync → Kerberoast; **all three detections re-verified firing live** (rules 100090/100031/100080), and the re-verify found + fixed a real Kerberoast-rule off-by-one — see `phase-5-offense/attack-detect-writeups/`) |
 | 6 | Network security monitoring | ✅ Complete (Suricata + Zeek inline on rtr-01; **2 PCAP analysis reports** in `phase-6-nsm/pcap-reports/` — the Phase-5 AD attack chain and an nmap recon scan — each pairing Suricata signatures with Zeek protocol/connection logs and the Wazuh host view; both re-verified live. Headline: signature IDS and protocol-aware NSM go blind on *different* traffic, so you run both) |
 | 7 | Automation | ✅ Complete (Ansible IaC — **all seven hosts** covered: `router`/`dc`/`siem`/`dmz`/`fileserver`/`windows` (ws-01 over SSH) + `scan` (scan-01, Greenbone CE vuln scanner); `site.yml` converges the entire lab at `changed=0`; **dmz-01 and scan-01** stood up from blank disks via headless Ubuntu autoinstall) |

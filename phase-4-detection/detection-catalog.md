@@ -25,6 +25,10 @@ Rules live on siem-01 at `/var/ossec/etc/rules/local_rules.xml` (mirrored in thi
 | 10 | [T1053.005 – Scheduled Task](https://attack.mitre.org/techniques/T1053/005/) | 92154 (stock) | ws-01 (Sysmon) | ✅ verified TP |
 | 11 | [T1070 / T1070.004 – Indicator Removal: Clear Logs](https://attack.mitre.org/techniques/T1070/004/) | 63104, 63103 (stock) | ws-01 (Windows Eventlog) | ✅ verified TP (Application + Security) |
 | 12 | [T1003.001 – LSASS Memory](https://attack.mitre.org/techniques/T1003/001/) | 92900 (stock) | ws-01 (Sysmon) | ⚠️ confirmed correct by inspection; live-fire blocked by LSASS PPL (see below) |
+| 13 | [T1016 – System Network Configuration Discovery](https://attack.mitre.org/techniques/T1016/) | 100100, 100101 | ws-01 (Sysmon EID1 + PS 4104) | ✅ verified TP (native + PowerShell) — **no stock rule existed** (added 2026-08-27) |
+| 14 | [T1049 – System Network Connections Discovery](https://attack.mitre.org/techniques/T1049/) | 100102, 100103 | ws-01 (Sysmon EID1 + PS 4104) | ✅ verified TP (native + PowerShell) — **no stock rule existed** (added 2026-08-27) |
+| 15 | [T1518.001 – Security Software Discovery](https://attack.mitre.org/techniques/T1518/001/) | 100104, 100105 | ws-01 (Sysmon EID1 + PS 4104) | ✅ verified TP, **level 6** (AV/EDR/Sysmon enum = pre-attack tell); no stock rule existed (2026-08-27) |
+| 16 | [T1069.001 – Permission Groups Discovery: Local](https://attack.mitre.org/techniques/T1069/001/) | 100106, 100107 | ws-01 (Sysmon EID1 + PS 4104) | ✅ verified TP — refines stock 92031's T1087 mistag (2026-08-27) |
 
 (#6 is tagged with both IDs deliberately: the rule can't distinguish creating a new local account from
 modifying an existing one's credentials — same file, same rule, same broad-not-narrow tradeoff as the
@@ -980,3 +984,69 @@ produced no alert. Samba `full_audit` on `[public]` logs every `openat` to `smbd
 custom decoder (`samba-full-audit`, **child of the stock `smbd` decoder** — a plain sibling gets shadowed
 since first match wins) parses the pipe-delimited line into `smb_user`/`srcip`/`smb_path`. The rule fires
 on a read of `map-backup-share.ps1`, reporting the user and source IP.
+
+## Discovery-tactic additions (ATT&CK-mapping gaps, 2026-08-27)
+
+Driven by running an **Atomic Red Team** Discovery battery on ws-01 (now that ART is installed —
+`phase-5-offense/atomic-red-team/`) and diffing what fired in Wazuh against what *should* map. 21 built-in,
+offline-safe tests across seven techniques (T1087.001 / T1082 / T1016 / T1057 / T1049 / T1518.001 /
+T1069.001) → 625 alerts, 39 distinct rules. Method: exercise → observe (query the indexer by rule.id +
+`rule.mitre.id`) → write rules for the gaps → **re-run and confirm each new rule fires**.
+
+**Gap analysis (what stock coverage actually maps):**
+- Stock rule **92031** ("Discovery activity executed", T1087) matches **only `net.exe`/`net1.exe`** — so
+  `net localgroup` (Permission Groups Discovery) is caught but **mis-tagged T1087** instead of T1069.001.
+- **ipconfig / netsh / arp / route / nbtstat / nslookup (T1016)** and **netstat (T1049)** have **no stock
+  rule** — they decode fine as Sysmon EID1 but map to no technique.
+- **Security Software Discovery (T1518.001)** — enumerating Sysmon/Defender/EDR — has **no stock
+  detection** either.
+
+Eight rules added (100100–100107), each covering both telemetry paths — native binaries via **Sysmon EID1**
+(`<if_group>sysmon_event1</if_group>`, match `originalFileName`/`commandLine`) and PowerShell cmdlet
+equivalents via **Script Block Logging EID 4104** (`<if_sid>91802</if_sid>`, match `scriptBlockText`):
+
+| Rule | Technique | Telemetry | Level | Verified |
+|---|---|---|---|---|
+| 100100 | T1016 | Sysmon EID1 (ipconfig/netsh/arp/route/nbtstat/nslookup) | 4 | ✅ fires |
+| 100101 | T1016 | PS 4104 (Get-Net*/Get-DnsClientServerAddress) | 3 | ✅ fires |
+| 100102 | T1049 | Sysmon EID1 (netstat) | 4 | ✅ fires |
+| 100103 | T1049 | PS 4104 (Get-NetTCPConnection/Get-NetUDPEndpoint) | 3 | ✅ fires |
+| 100104 | T1518.001 | Sysmon EID1 (sc/reg/tasklist/net querying AV/EDR/Sysmon) | 6 | ✅ fires |
+| 100105 | T1518.001 | PS 4104 (Get-MpComputerStatus/Get-MpPreference/…) | 6 | ✅ fires |
+| 100106 | T1069.001 | Sysmon EID1 (net localgroup — refines 92031) | 3 | ✅ fires |
+| 100107 | T1069.001 | PS 4104 (Get-LocalGroup/Get-LocalGroupMember) | 3 | ✅ fires |
+
+**Severity model:** pure host/network discovery (T1016/T1049/T1069.001) stays low (3–4) — these run
+constantly in legitimate admin/logon activity, so they're tagged-and-queryable for hunting and for the
+ATT&CK Navigator coverage layer, not paged on. Security-software discovery is level 6: "what's watching
+me?" is a much stronger pre-attack tell and far rarer in normal activity.
+
+**Three findings surfaced only by verifying (not by writing the rules):**
+1. **Wazuh reports one rule per event, so a level *tie* silently shadows.** At level 3, the native
+   T1016/T1049 rules never appeared — the same events also match stock **92032** (L3, generic
+   "Suspicious cmd shell execution", tagged T1087/T1059.003) when spawned via `cmd /c`, and the stock rule
+   won the tie, keeping the imprecise tag. Bumping 100100/100102 to **level 4** makes the precise mapping
+   win. (This is also why the L6 security-software rules always win, and why 100106 — a *child* of 92031 —
+   supersedes its parent.)
+2. **Script Block Logging can log a whole multi-command script as one 4104 event**, so several of these PS
+   rules matched the *same* event and only the highest-level one was reported — `Get-LocalGroup` (100107)
+   looked like it wasn't firing until run in isolation. Real per-command invocations log separately, so
+   this is a test artifact, not a rule bug — but worth knowing when verifying script-block rules.
+3. **False positive to note:** ART's own harness trips stock rule **92213** (L15, "Executable dropped in
+   folder commonly used by malware", T1105) ~26× per battery as it stages atomic payloads to disk. Not
+   real malware — a tuning artifact of running ART itself; a real environment would exclude the atomics
+   path or treat 92213-from-the-ART-runner as expected.
+
+**Also found while doing this (fixed, see `phase-7-automation`):** ws-01's clock was ~3h fast — its
+timezone was Pacific while the host/domain are US Eastern, and Windows reading the VM RTC as local time
+pushed its computed UTC 3h ahead, silently mis-timestamping all Sysmon telemetry relative to the SIEM.
+(The verification query missed the first battery entirely until re-run by manager-receipt time.) Fixed by
+correcting the zone and disciplining `w32time` to rtr-01's chrony (10.10.10.1, the lab's internal NTP);
+codified in the `windows` role, converges at `changed=0`.
+
+**Evasion / limits (honest):** the ideal actionable layer is a correlation rule that fires *high* when many
+*distinct* discovery commands hit one host in a short window (a host-enumeration sweep, vs. a single benign
+ipconfig). That needs cross-rule correlation via `<if_matched_group>`, which is non-functional in this
+Wazuh build — the same limitation already documented for the T1110 sshd rules — so it's deferred rather
+than shipped broken. These per-technique rules are precise ATT&CK mapping + telemetry coverage, not a
+low-FP paging signal on their own.

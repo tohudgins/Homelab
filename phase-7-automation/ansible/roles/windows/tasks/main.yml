@@ -35,6 +35,45 @@
     start_mode: auto
     state: started
 
+# --- Time: correct timezone + discipline w32time to the lab's internal NTP -----
+# ws-01 shipped set to Pacific while the host/domain are US Eastern; combined with
+# Windows reading the VM RTC as local time, that put its computed UTC ~3h fast,
+# which silently mis-timestamped Sysmon telemetry relative to the SIEM. Fix as code:
+# correct the zone and point w32time at rtr-01 (10.10.10.1 — the lab's chrony NTP
+# server, the same address dnsmasq hands out per segment). All registry-based so it
+# is idempotent (win_shell w32tm /config would report "changed" every run).
+- name: Set timezone to US Eastern
+  community.windows.win_timezone:
+    timezone: Eastern Standard Time
+
+- name: Point w32time at rtr-01 as its NTP peer
+  ansible.windows.win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters
+    name: "{{ item.name }}"
+    data: "{{ item.data }}"
+    type: string
+  loop:
+    - { name: NtpServer, data: "{{ ntp_server }},0x9" }
+    - { name: Type, data: NTP }
+  notify: Restart w32time
+
+- name: Allow w32time to correct an arbitrarily large offset (self-heal after drift)
+  ansible.windows.win_regedit:
+    path: HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Config
+    name: "{{ item }}"
+    data: 4294967295
+    type: dword
+  loop:
+    - MaxPosPhaseCorrection
+    - MaxNegPhaseCorrection
+  notify: Restart w32time
+
+- name: Ensure the Windows Time service is running
+  ansible.windows.win_service:
+    name: w32time
+    start_mode: auto
+    state: started
+
 # --- Soft verification (informational; log may have rotated) ------------------
 - name: Report the agent's last "Connected to the server" log line
   ansible.windows.win_shell: Select-String -Path 'C:\Program Files (x86)\ossec-agent\ossec.log' -Pattern 'Connected to the server' | Select-Object -Last 1 -ExpandProperty Line

@@ -339,3 +339,144 @@
   </rule>
 
 </group>
+
+<!--
+  Discovery tactic (ws-01) — closing ATT&CK-mapping gaps found by running an Atomic Red Team
+  Discovery battery (T1016/T1049/T1082/T1057/T1087.001/T1069.001/T1518.001) and diffing what the
+  stock ruleset actually maps. Findings that drove these rules:
+
+    * Stock rule 92031 ("Discovery activity executed", T1087) matches ONLY net.exe/net1.exe — so
+      `net localgroup`/`net group` (which is Permission Groups Discovery) is caught but MIS-tagged as
+      T1087 Account Discovery rather than T1069.001. 100106 refines that mapping.
+    * ipconfig / netsh / arp / route / nbtstat / nslookup (T1016), and netstat (T1049), have NO stock
+      rule at all in this ruleset — they generate Sysmon EID1 events that decode fine but never map to
+      their technique. 100100–100103 add that coverage (native binary + PowerShell cmdlet variants).
+    * Security Software Discovery (T1518.001) — an attacker enumerating Sysmon/Defender/EDR before
+      acting — also has no stock detection. 100104/100105 add it, and deliberately at a HIGHER level
+      (6) than the rest: "what's watching me?" is a much stronger pre-attack signal than benign host
+      recon, and far less common in normal admin activity.
+
+  Severity model: pure host/network discovery (T1016/T1049/T1069.001) stays LOW (level 3) — these run
+  constantly in legitimate admin/logon activity, so they are tagged-and-queryable for hunting and for
+  the ATT&CK Navigator coverage layer, not paged on. Security-software discovery is level 6.
+
+  Telemetry: native binaries come through Sysmon EID1 (chain <if_group>sysmon_event1</if_group>,
+  match win.eventdata.originalFileName / commandLine); PowerShell cmdlet equivalents come through
+  Script Block Logging EID 4104 (chain <if_sid>91802</if_sid>, match win.eventdata.scriptBlockText) —
+  the same two sources the stock 92xxx/91xxx discovery rules use.
+
+  Known limitation (NOT a rule below): the ideal actionable layer is a correlation rule that fires
+  HIGH when many DISTINCT discovery commands hit one host in a short window (a host-enumeration sweep,
+  vs. a single benign ipconfig). That needs cross-rule correlation via <if_matched_group>, which is
+  non-functional in this Wazuh build — the same limitation already documented and worked around for
+  the T1110 sshd rules (100010/100011). <if_matched_sid> works but takes a single SID, which can't
+  span the whole discovery family, so the sweep-correlation is deferred rather than shipped broken.
+-->
+<group name="local,windows,sysmon,discovery,">
+
+  <!-- T1016 — System Network Configuration Discovery (native binaries).
+       Level 4 (not 3) on purpose: when these run via `cmd /c` the event ALSO matches stock rule
+       92032 (L3, generic "Suspicious cmd shell execution", tagged T1087/T1059.003). Wazuh reports one
+       rule per event, and on a level TIE the stock rule won — so a level-3 version of this rule was
+       silently shadowed and the event kept the imprecise T1087 tag. L4 wins the event so it carries
+       the correct T1016 mapping regardless of whether the parent is cmd.exe or a direct spawn.
+       (Verified by exercising: at L3 this never appeared; at L4 it fires. Same one-alert-per-event
+       precedence that makes the L6 security-software rules below always win.) -->
+  <rule id="100100" level="4">
+    <if_group>sysmon_event1</if_group>
+    <field name="win.eventdata.originalFileName" type="pcre2">(?i)(ipconfig|arp|route|nbtstat|nslookup|netsh)\.exe</field>
+    <options>no_full_log</options>
+    <description>Network configuration discovery — $(win.eventdata.originalFileName) on $(win.eventdata.parentImage)</description>
+    <mitre>
+      <id>T1016</id>
+    </mitre>
+    <group>discovery,recon,</group>
+  </rule>
+
+  <!-- T1016 — PowerShell cmdlet variant (Script Block Logging) -->
+  <rule id="100101" level="3">
+    <if_sid>91802</if_sid>
+    <field name="win.eventdata.scriptBlockText" type="pcre2">(?i)Get-Net(IPConfiguration|IPAddress|Route|Neighbor|Adapter)\b|Get-DnsClientServerAddress</field>
+    <options>no_full_log</options>
+    <description>Network configuration discovery via PowerShell — $(win.eventdata.scriptBlockText)</description>
+    <mitre>
+      <id>T1016</id>
+    </mitre>
+    <group>discovery,recon,</group>
+  </rule>
+
+  <!-- T1049 — System Network Connections Discovery (netstat). Level 4 for the same 92032 tie-break
+       reason documented on 100100 above. -->
+  <rule id="100102" level="4">
+    <if_group>sysmon_event1</if_group>
+    <field name="win.eventdata.originalFileName" type="pcre2">(?i)netstat\.exe</field>
+    <options>no_full_log</options>
+    <description>Network connections discovery — netstat on $(win.eventdata.parentImage)</description>
+    <mitre>
+      <id>T1049</id>
+    </mitre>
+    <group>discovery,recon,</group>
+  </rule>
+
+  <!-- T1049 — PowerShell cmdlet variant -->
+  <rule id="100103" level="3">
+    <if_sid>91802</if_sid>
+    <field name="win.eventdata.scriptBlockText" type="pcre2">(?i)Get-NetTCPConnection\b|Get-NetUDPEndpoint\b</field>
+    <options>no_full_log</options>
+    <description>Network connections discovery via PowerShell — $(win.eventdata.scriptBlockText)</description>
+    <mitre>
+      <id>T1049</id>
+    </mitre>
+    <group>discovery,recon,</group>
+  </rule>
+
+  <!-- T1518.001 — Security Software Discovery (native: sc/reg/tasklist/net querying AV/EDR/Sysmon). Level 6. -->
+  <rule id="100104" level="6">
+    <if_group>sysmon_event1</if_group>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)(sc|reg|tasklist|net|net1|sc\.exe)\b.{0,80}(sysmon|windefend|msmpeng|mssense|\bsense\b|securityhealth|mcafee|crowdstrike|falcon|carbonblack|cylance|sophos|symantec|windows\s*defender)</field>
+    <options>no_full_log</options>
+    <description>Security software discovery — enumerating AV/EDR/Sysmon: $(win.eventdata.commandLine)</description>
+    <mitre>
+      <id>T1518.001</id>
+    </mitre>
+    <group>discovery,recon,defense_evasion,</group>
+  </rule>
+
+  <!-- T1518.001 — PowerShell cmdlet variant (Defender/Sysmon enumeration). Level 6. -->
+  <rule id="100105" level="6">
+    <if_sid>91802</if_sid>
+    <field name="win.eventdata.scriptBlockText" type="pcre2">(?i)Get-Mp(ComputerStatus|Preference|Threat|ThreatDetection)\b|Get-(Service|Process)\b.{0,60}(Sysmon|WinDefend|MsMpEng|Sense)</field>
+    <options>no_full_log</options>
+    <description>Security software discovery via PowerShell — $(win.eventdata.scriptBlockText)</description>
+    <mitre>
+      <id>T1518.001</id>
+    </mitre>
+    <group>discovery,recon,defense_evasion,</group>
+  </rule>
+
+  <!-- T1069.001 — Permission Groups Discovery: Local. Refines stock 92031 (net.exe, mis-tagged T1087)
+       to the correct technique when the net command is specifically local group enumeration. -->
+  <rule id="100106" level="3">
+    <if_sid>92031</if_sid>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)\b(localgroup|group)\b</field>
+    <options>no_full_log</options>
+    <description>Local permission-group discovery — $(win.eventdata.commandLine)</description>
+    <mitre>
+      <id>T1069.001</id>
+    </mitre>
+    <group>discovery,recon,</group>
+  </rule>
+
+  <!-- T1069.001 — PowerShell cmdlet variant -->
+  <rule id="100107" level="3">
+    <if_sid>91802</if_sid>
+    <field name="win.eventdata.scriptBlockText" type="pcre2">(?i)Get-LocalGroup(Member)?\b</field>
+    <options>no_full_log</options>
+    <description>Local permission-group discovery via PowerShell — $(win.eventdata.scriptBlockText)</description>
+    <mitre>
+      <id>T1069.001</id>
+    </mitre>
+    <group>discovery,recon,</group>
+  </rule>
+
+</group>
