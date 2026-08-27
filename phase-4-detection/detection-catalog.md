@@ -38,6 +38,7 @@ Rules live on siem-01 at `/var/ossec/etc/rules/local_rules.xml` (mirrored in thi
 | 23 | [T1218.011 – System Binary Proxy Execution: Rundll32](https://attack.mitre.org/techniques/T1218/011/) | 100115 | ws-01 (Sysmon) | ✅ verified TP (script moniker) — no stock T1218 mapping (2026-08-27) |
 | 24 | [T1218.005 – System Binary Proxy Execution: Mshta](https://attack.mitre.org/techniques/T1218/005/) | 100116 | ws-01 (Sysmon) | ✅ verified TP (script moniker) — no stock T1218 mapping (2026-08-27) |
 | 25 | [T1548.002 – Abuse Elevation Control: Bypass UAC](https://attack.mitre.org/techniques/T1548/002/) | 100117, 100118 | ws-01 (Sysmon EID13) | ✅ verified TP — closes the mscfile/Event-Viewer gap in stock 92304, + maps disable-UAC-via-reg (2026-08-27) |
+| 26 | [T1021.002 – Remote Services: SMB/Windows Admin Shares](https://attack.mitre.org/techniques/T1021/002/) | 100119, 100120 | ws-01 → dc-01 (net use / New-SmbMapping) | ✅ verified TP (C$/ADMIN$ access; IPC$ excluded as noise) — stock only mistagged T1059.003 (2026-08-27) |
 
 (#6 is tagged with both IDs deliberately: the rule can't distinguish creating a new local account from
 modifying an existing one's credentials — same file, same rule, same broad-not-narrow tradeoff as the
@@ -1141,3 +1142,24 @@ worth stating, since "the stock rule already handles this one" is a legitimate c
 `.Start()` with *Access is denied* even from an elevated session — most likely Defender real-time
 protection killing the auto-elevated child. The registry-hijack half still executes and is what these
 rules key on, so detection is verified regardless of whether the elevation itself completes.
+
+## T1021.002 — SMB / Windows Admin Shares (Lateral Movement), batch 5 (2026-08-27)
+
+Ran admin-share access from ws-01 to dc-01 (`net use` / `New-SmbMapping` to C$/ADMIN$/IPC$). Technique 26
+— the first **Lateral Movement** technique in the catalog. Two rules (100119/100120).
+
+**The gap:** accessing a remote host's ADMIN$ or drive-letter$ share is a classic lateral-movement /
+remote-exec precursor, but stock only fired the generic net.exe rule 92036 (mistagged
+T1059.003/T1574.001). 100119 (L5) maps the `net use`/`copy`/`dir \\host\C$` command-line pattern to
+T1021.002; 100120 (L4) maps the PowerShell `New-SmbMapping`/`New-PSDrive` variant.
+
+**Deliberate exclusion:** `IPC$` is *not* matched — every normal SMB session opens IPC$, so it's pure
+noise. The regex `\\HOST\(ADMIN|<single-drive-letter>)$` matches C$/D$/ADMIN$ but not the 3-letter IPC$;
+verified live that `net use \\dc-01\IPC$` and the benign `\\dc-01\SYSVOL` still fall through to the generic
+rule while C$/ADMIN$ fire 100119. A good example of a rule where what you *exclude* is as important as
+what you match.
+
+**Topology note:** this lab is all-Linux except ws-01, so Windows→Windows PsExec (T1021.002-3) and WinRM
+(T1021.006) have no target — SMB admin-share access to the Samba DC is the topology-appropriate
+lateral-movement surface. The intended end-to-end path (ws-01 → the writable `\\fs-01\public` bait share →
+read the planted credential) is already covered by rule 100090 (T1552.001) when fs-01 is up.

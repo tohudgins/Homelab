@@ -689,3 +689,44 @@
   </rule>
 
 </group>
+
+<!--
+  T1021.002 — Remote Services: SMB / Windows Admin Shares (ws-01, 2026-08-27, batch 5).
+
+  Ran admin-share access from ws-01 to dc-01 (net use / New-SmbMapping to C$/ADMIN$/IPC$). Accessing a
+  remote host's ADMIN$ or drive-letter$ share is a classic lateral-movement / remote-exec precursor, but
+  stock only fired the generic net.exe rule 92036 (mistagged T1059.003/T1574.001) — nothing mapped it to
+  T1021.002. (This lab is all-Linux except ws-01, so Windows→Windows PsExec/WinRM has no target; SMB
+  admin-share access to the DC is the topology-appropriate lateral-movement surface.)
+
+  IPC$ is deliberately excluded from the match — every normal SMB session opens IPC$, so it's pure noise;
+  the regex `\\HOST\(ADMIN|<single-drive-letter>)$` matches C$/D$/ADMIN$ but not the 3-letter IPC$.
+  Level 5 to win the one-rule-per-event tie over the stock net.exe (92036, L3) and cmd (92004, L4) rules.
+-->
+<group name="local,windows,sysmon,lateral_movement,">
+
+  <!-- T1021.002 — admin-share UNC in a command line (net use / copy / dir \\host\C$ or \ADMIN$) -->
+  <rule id="100119" level="5">
+    <if_group>sysmon_event1</if_group>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)\\\\(ADMIN|[A-Za-z])\$</field>
+    <options>no_full_log</options>
+    <description>Admin-share access (possible lateral movement) — $(win.eventdata.commandLine)</description>
+    <mitre>
+      <id>T1021.002</id>
+    </mitre>
+    <group>lateral_movement,attack,</group>
+  </rule>
+
+  <!-- T1021.002 — PowerShell remote share mapping (New-SmbMapping / New-PSDrive to a UNC) -->
+  <rule id="100120" level="4">
+    <if_sid>91802</if_sid>
+    <field name="win.eventdata.scriptBlockText" type="pcre2">(?i)New-SmbMapping\b|New-PSDrive\b.{0,80}\\\\</field>
+    <options>no_full_log</options>
+    <description>Remote share mapping via PowerShell (possible lateral movement) — $(win.eventdata.scriptBlockText)</description>
+    <mitre>
+      <id>T1021.002</id>
+    </mitre>
+    <group>lateral_movement,attack,</group>
+  </rule>
+
+</group>
