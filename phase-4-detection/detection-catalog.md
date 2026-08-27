@@ -37,6 +37,7 @@ Rules live on siem-01 at `/var/ossec/etc/rules/local_rules.xml` (mirrored in thi
 | 22 | [T1218.010 – System Binary Proxy Execution: Regsvr32](https://attack.mitre.org/techniques/T1218/010/) | 100114 | ws-01 (Sysmon) | ✅ verified TP (Squiblydoo scriptlet) — was mistagged T1087 by stock (2026-08-27) |
 | 23 | [T1218.011 – System Binary Proxy Execution: Rundll32](https://attack.mitre.org/techniques/T1218/011/) | 100115 | ws-01 (Sysmon) | ✅ verified TP (script moniker) — no stock T1218 mapping (2026-08-27) |
 | 24 | [T1218.005 – System Binary Proxy Execution: Mshta](https://attack.mitre.org/techniques/T1218/005/) | 100116 | ws-01 (Sysmon) | ✅ verified TP (script moniker) — no stock T1218 mapping (2026-08-27) |
+| 25 | [T1548.002 – Abuse Elevation Control: Bypass UAC](https://attack.mitre.org/techniques/T1548/002/) | 100117, 100118 | ws-01 (Sysmon EID13) | ✅ verified TP — closes the mscfile/Event-Viewer gap in stock 92304, + maps disable-UAC-via-reg (2026-08-27) |
 
 (#6 is tagged with both IDs deliberately: the rule can't distinguish creating a new local account from
 modifying an existing one's credentials — same file, same rule, same broad-not-narrow tradeoff as the
@@ -1117,3 +1118,26 @@ telltale command line**, so detection is verified by invoking the binary directl
 moniker (the same "confirmed by exercising the observable, not the payload" approach as the LSASS-PPL
 case). Lesson: check the assumption on the host before writing the finding — a plausible story (VBScript
 is dead) was simply false here.
+
+## T1548.002 — Bypass UAC (Privilege Escalation), batch 4 (2026-08-27)
+
+Ran the classic registry-hijack UAC bypasses (fodhelper / eventvwr / sdclt / disable-via-reg). Technique
+25 — the first **Privilege Escalation** technique in the catalog. Two rules (100117/100118).
+
+**Coverage diff:** stock rule 92304 (L6) catches `Classes\(Folder|ms-settings)\shell\open\command`
+hijacks and 92306 escalates to L12 — but only when the writing process is cmd/powershell.
+
+| Rule | Gap closed |
+|---|---|
+| 100117 (L12) | **Event Viewer bypass had zero coverage.** 92304's regex is literally `(FOLDER\|MS-SETTINGS)` — the `mscfile\shell\open\command` hijack the eventvwr bypass uses isn't in it. Confirmed: the mscfile write produced *no* alert. This is the mirror image of the T1547.001 Run-key gap (#9) — a stock rule enumerating specific subkeys and missing one. |
+| 100118 (L10) | **Disabling UAC via the policy registry** (`EnableLUA` / `ConsentPromptBehaviorAdmin`) was detected only as T1027/T1112 (reg.exe obfuscation via rule 92041), never mapped to T1548.002. Now mapped. |
+
+**Verified** by re-running the eventvwr (mscfile) and disable-UAC (EnableLUA) atomics with `-Cleanup`; both
+new rules fired and UAC was confirmed restored (`EnableLUA=1`) afterward. The `sdclt` DelegateExecute
+variant was already well-covered by stock 92306 (it writes via PowerShell), so no rule was added for it —
+worth stating, since "the stock rule already handles this one" is a legitimate catalog outcome.
+
+**Aside worth noting:** the fodhelper (`ms-settings`) and rundll32/mshta ART tests error at the harness
+`.Start()` with *Access is denied* even from an elevated session — most likely Defender real-time
+protection killing the auto-elevated child. The registry-hijack half still executes and is what these
+rules key on, so detection is verified regardless of whether the elevation itself completes.

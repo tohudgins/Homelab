@@ -644,3 +644,48 @@
   </rule>
 
 </group>
+
+<!--
+  T1548.002 — Abuse Elevation Control Mechanism: Bypass UAC (ws-01, 2026-08-27, batch 4).
+
+  Ran the classic registry-hijack UAC bypasses (fodhelper / eventvwr / sdclt / disable-via-reg) and diffed
+  coverage. Stock rule 92304 (level 6) catches `Classes\(Folder|ms-settings)\shell\open\command` hijacks,
+  and 92306 escalates to L12 *only when the writer is cmd/powershell*. Two real gaps:
+
+    * **Event Viewer bypass has NO coverage.** 92304's regex is literally `(FOLDER|MS-SETTINGS)` — the
+      `mscfile\shell\open\command` hijack the eventvwr bypass uses isn't in it, so the single most classic
+      UAC bypass sails straight through (confirmed: the mscfile write produced zero alerts). 100117 closes
+      it. This is the mirror image of the T1547.001 Run-key gap already documented in this catalog — a
+      stock rule enumerating specific subkeys and missing one.
+    * **Disabling UAC via the policy registry** (EnableLUA / ConsentPromptBehaviorAdmin) was detected only
+      as T1027/T1112 (reg.exe obfuscation), never mapped to T1548.002. 100118 maps it.
+-->
+<group name="local,windows,sysmon,privilege_escalation,">
+
+  <!-- T1548.002 — Event Viewer UAC bypass (mscfile hijack) — the subkey stock 92304 forgot -->
+  <rule id="100117" level="12">
+    <if_group>sysmon_event_13</if_group>
+    <field name="win.eventdata.targetObject" type="pcre2">(?i)CLASSES\\\\MSCFILE\\\\SHELL\\\\OPEN\\\\COMMAND</field>
+    <options>no_full_log</options>
+    <description>UAC bypass via mscfile hijack (Event Viewer auto-elevate) — $(win.eventdata.targetObject)</description>
+    <mitre>
+      <id>T1548.002</id>
+      <id>T1112</id>
+    </mitre>
+    <group>privilege_escalation,defense_evasion,attack,</group>
+  </rule>
+
+  <!-- T1548.002 — Disable UAC via policy registry (EnableLUA / ConsentPromptBehaviorAdmin) -->
+  <rule id="100118" level="10">
+    <if_group>sysmon_event_13</if_group>
+    <field name="win.eventdata.targetObject" type="pcre2">(?i)CURRENTVERSION\\\\POLICIES\\\\SYSTEM\\\\(ENABLELUA|CONSENTPROMPTBEHAVIORADMIN|FILTERADMINISTRATORTOKEN)$</field>
+    <options>no_full_log</options>
+    <description>UAC weakened via policy registry — $(win.eventdata.targetObject) set to $(win.eventdata.details)</description>
+    <mitre>
+      <id>T1548.002</id>
+      <id>T1112</id>
+    </mitre>
+    <group>privilege_escalation,defense_evasion,attack,</group>
+  </rule>
+
+</group>
