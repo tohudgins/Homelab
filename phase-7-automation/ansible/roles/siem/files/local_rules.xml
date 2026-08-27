@@ -458,7 +458,7 @@
        to the correct technique when the net command is specifically local group enumeration. -->
   <rule id="100106" level="3">
     <if_sid>92031</if_sid>
-    <field name="win.eventdata.commandLine" type="pcre2">(?i)\b(localgroup|group)\b</field>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)\blocalgroup\b</field>
     <options>no_full_log</options>
     <description>Local permission-group discovery — $(win.eventdata.commandLine)</description>
     <mitre>
@@ -475,6 +475,111 @@
     <description>Local permission-group discovery via PowerShell — $(win.eventdata.scriptBlockText)</description>
     <mitre>
       <id>T1069.001</id>
+    </mitre>
+    <group>discovery,recon,</group>
+  </rule>
+
+</group>
+
+<!--
+  Discovery tactic — DOMAIN-scoped variants (ws-01, 2026-08-27, batch 2).
+
+  Extends the local-discovery batch above to the AD-facing commands, found by running the domain
+  variants against dc-01 and diffing the mapping. Two problems these fix:
+
+    * `net group` (with or without /domain) queries the DC for GLOBAL groups = T1069.002 (Domain), while
+      `net localgroup` is the LOCAL machine = T1069.001. Rule 100106 above originally matched both and
+      tagged everything .001; it's now tightened to `localgroup` only, and 100109 here owns the domain
+      case. (net.exe vs net1.exe: `net group` re-execs as net1.exe, so both originalFileNames appear.)
+    * `nltest /dclist` (Remote System Discovery, T1018) fired no specific rule, and `nltest
+      /domain_trusts` (Domain Trust Discovery, T1482 — a real AD attack-path recon step) was mis-tagged
+      T1087 by the generic cmd rule. 100110/100111 map them correctly.
+
+  All level 4 so they win the one-rule-per-event tie over the generic stock discovery rules (92031/92036,
+  L3) and over the local-scope custom rules — see the precedence note on 100100. Domain-wide enumeration
+  is also a genuinely stronger signal than local host recon, so the higher level is warranted on its own.
+-->
+<group name="local,windows,sysmon,discovery,">
+
+  <!-- T1087.002 — Domain Account Discovery (net user /domain) -->
+  <rule id="100108" level="4">
+    <if_group>sysmon_event1</if_group>
+    <field name="win.eventdata.originalFileName" type="pcre2">(?i)net1?\.exe</field>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)\buser\b.{0,40}/domain</field>
+    <options>no_full_log</options>
+    <description>Domain account discovery — $(win.eventdata.commandLine)</description>
+    <mitre>
+      <id>T1087.002</id>
+    </mitre>
+    <group>discovery,recon,</group>
+  </rule>
+
+  <!-- T1069.002 — Domain Groups Discovery (net group; \bgroup\b excludes "localgroup") -->
+  <rule id="100109" level="4">
+    <if_group>sysmon_event1</if_group>
+    <field name="win.eventdata.originalFileName" type="pcre2">(?i)net1?\.exe</field>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)\bgroup\b</field>
+    <options>no_full_log</options>
+    <description>Domain group discovery — $(win.eventdata.commandLine)</description>
+    <mitre>
+      <id>T1069.002</id>
+    </mitre>
+    <group>discovery,recon,</group>
+  </rule>
+
+  <!-- T1018 — Remote System Discovery (nltest dclist / dsgetdc) -->
+  <!-- Two quirks make this the trickiest of the batch: (1) nltest's PE OriginalFileName is "nltestrk.exe"
+       (Resource Kit heritage), not "nltest.exe", so an originalFileName match silently misses it — key on
+       the distinctive /dclist|/dsgetdc switch in the commandLine instead. (2) the direct nltest.exe
+       /dclist process event is logged inconsistently here, but the `cmd /c "nltest /dclist…"` wrapper
+       event reliably carries the switch — so this matches commandLine on ANY sysmon_event1 process, and is
+       level 5 to win the one-rule-per-event tie over the stock cmd rule 92004 (L4) that also matches it. -->
+  <rule id="100110" level="5">
+    <if_group>sysmon_event1</if_group>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)/(dclist|dsgetdc)</field>
+    <options>no_full_log</options>
+    <description>Remote system / DC discovery — $(win.eventdata.commandLine)</description>
+    <mitre>
+      <id>T1018</id>
+    </mitre>
+    <group>discovery,recon,</group>
+  </rule>
+
+  <!-- T1482 — Domain Trust Discovery (nltest domain_trusts / trusted_domains) -->
+  <rule id="100111" level="4">
+    <if_group>sysmon_event1</if_group>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)(domain_trusts|trusted_domains)</field>
+    <options>no_full_log</options>
+    <description>Domain trust discovery — $(win.eventdata.commandLine)</description>
+    <mitre>
+      <id>T1482</id>
+    </mitre>
+    <group>discovery,recon,</group>
+  </rule>
+
+  <!-- T1087.002 / T1018 — PowerShell domain enumeration via ADSI or the AD module (no RSAT needed for
+       ADSI/DirectorySearcher — the common living-off-the-land domain-enum path) -->
+  <rule id="100112" level="4">
+    <if_sid>91802</if_sid>
+    <field name="win.eventdata.scriptBlockText" type="pcre2">(?i)adsisearcher|DirectorySearcher|System\.DirectoryServices|Get-AD(User|Computer|Group|GroupMember|Domain|Trust|DomainController)\b</field>
+    <options>no_full_log</options>
+    <description>Domain enumeration via PowerShell — $(win.eventdata.scriptBlockText)</description>
+    <mitre>
+      <id>T1087.002</id>
+    </mitre>
+    <group>discovery,recon,</group>
+  </rule>
+
+  <!-- T1201 — Password Policy Discovery (net accounts). Level 4 to win the one-rule-per-event tie over
+       stock 92031/92036 (L3), same reason as the T1016/T1049 rules above. -->
+  <rule id="100113" level="4">
+    <if_group>sysmon_event1</if_group>
+    <field name="win.eventdata.originalFileName" type="pcre2">(?i)net1?\.exe</field>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)\baccounts\b</field>
+    <options>no_full_log</options>
+    <description>Password policy discovery — $(win.eventdata.commandLine)</description>
+    <mitre>
+      <id>T1201</id>
     </mitre>
     <group>discovery,recon,</group>
   </rule>

@@ -29,6 +29,11 @@ Rules live on siem-01 at `/var/ossec/etc/rules/local_rules.xml` (mirrored in thi
 | 14 | [T1049 – System Network Connections Discovery](https://attack.mitre.org/techniques/T1049/) | 100102, 100103 | ws-01 (Sysmon EID1 + PS 4104) | ✅ verified TP (native + PowerShell) — **no stock rule existed** (added 2026-08-27) |
 | 15 | [T1518.001 – Security Software Discovery](https://attack.mitre.org/techniques/T1518/001/) | 100104, 100105 | ws-01 (Sysmon EID1 + PS 4104) | ✅ verified TP, **level 6** (AV/EDR/Sysmon enum = pre-attack tell); no stock rule existed (2026-08-27) |
 | 16 | [T1069.001 – Permission Groups Discovery: Local](https://attack.mitre.org/techniques/T1069/001/) | 100106, 100107 | ws-01 (Sysmon EID1 + PS 4104) | ✅ verified TP — refines stock 92031's T1087 mistag (2026-08-27) |
+| 17 | [T1087.002 – Domain Account Discovery](https://attack.mitre.org/techniques/T1087/002/) | 100108, 100112 | ws-01 → dc-01 (net /domain, ADSI) | ✅ verified TP (2026-08-27) |
+| 18 | [T1069.002 – Permission Groups Discovery: Domain](https://attack.mitre.org/techniques/T1069/002/) | 100109 | ws-01 → dc-01 (net group) | ✅ verified TP — fixes local/domain conflation in 100106 (2026-08-27) |
+| 19 | [T1018 – Remote System Discovery](https://attack.mitre.org/techniques/T1018/) | 100110 | ws-01 → dc-01 (nltest /dclist) | ✅ verified TP (2026-08-27) |
+| 20 | [T1482 – Domain Trust Discovery](https://attack.mitre.org/techniques/T1482/) | 100111 | ws-01 → dc-01 (nltest /domain_trusts) | ✅ verified TP — was mistagged T1087 by stock (2026-08-27) |
+| 21 | [T1201 – Password Policy Discovery](https://attack.mitre.org/techniques/T1201/) | 100113 | ws-01 → dc-01 (net accounts) | ✅ verified TP (2026-08-27) |
 
 (#6 is tagged with both IDs deliberately: the rule can't distinguish creating a new local account from
 modifying an existing one's credentials — same file, same rule, same broad-not-narrow tradeoff as the
@@ -1050,3 +1055,33 @@ ipconfig). That needs cross-rule correlation via `<if_matched_group>`, which is 
 Wazuh build — the same limitation already documented for the T1110 sshd rules — so it's deferred rather
 than shipped broken. These per-technique rules are precise ATT&CK mapping + telemetry coverage, not a
 low-FP paging signal on their own.
+
+## Discovery-tactic additions, batch 2 — domain-scoped (2026-08-27)
+
+Extends the local-discovery batch to the AD-facing commands, run against dc-01 and mapped by diffing.
+Six rules (100108–100113), all **level 4–5** to win the one-rule-per-event tie over the generic stock
+discovery rules (the level-tie lesson from batch 1). Techniques 17–21.
+
+| Rule | Technique | Command | Fix / gap it closes |
+|---|---|---|---|
+| 100108 | T1087.002 Domain Account | `net user /domain` | stock only tagged generic T1087 |
+| 100109 | T1069.002 Domain Groups | `net group [/domain]` | **corrects a bug in 100106**, which had conflated `net group` (domain) with `net localgroup` (local) and tagged both T1069.001 |
+| 100110 | T1018 Remote System | `nltest /dclist` | no stock rule |
+| 100111 | T1482 Domain Trust | `nltest /domain_trusts` | stock mistagged it T1087 |
+| 100112 | T1087.002 (PowerShell) | `[adsisearcher]`, `Get-AD*` | no stock rule; ADSI needs no RSAT (LotL domain enum) |
+| 100113 | T1201 Password Policy | `net accounts` | no stock rule |
+
+**The `net group` vs `net localgroup` bug (worth calling out):** `net group` queries the DC for global
+groups = T1069.**002**; `net localgroup` is the local machine = T1069.**001**. The batch-1 rule 100106
+matched `\b(localgroup|group)\b` and tagged everything .001. Tightened 100106 to `localgroup` only and
+gave 100109 the domain case (`\bgroup\b` — the word boundary excludes "localgroup"). A reminder that a
+sub-technique split can hinge on one word in the command line.
+
+**Two nltest quirks, found only by reading the raw Sysmon events:**
+1. **nltest's PE `OriginalFileName` is `nltestrk.exe`** (Resource Kit heritage), not `nltest.exe` — so a
+   rule keyed on `originalFileName` silently misses it (net.exe-style matching does *not* transfer). Key
+   on the distinctive `/dclist`/`/domain_trusts` switch in the command line instead.
+2. **The direct `nltest.exe /dclist` process event is logged inconsistently here**, while the
+   `cmd /c "nltest /dclist…"` wrapper event reliably carries the switch. So 100110 matches the command
+   line on any process and is **level 5** to beat the stock cmd rule 92004 (L4) that also matches the
+   wrapper — catching the invocation whichever event survives.
