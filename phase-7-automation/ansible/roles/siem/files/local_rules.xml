@@ -585,3 +585,62 @@
   </rule>
 
 </group>
+
+<!--
+  T1218 — System Binary Proxy Execution (LOLBins) on ws-01 (2026-08-27, batch 3).
+
+  Found by running an ART T1218 battery (mshta / regsvr32 / rundll32). Findings that drove these:
+    * The LOLBins that execute (regsvr32 with a COM scriptlet = "Squiblydoo", rundll32) are detected only
+      by the generic stock cmd rule 92032 and MIS-tagged T1087 — nothing maps them to T1218.
+    * NOT a VBScript-deprecation problem: VBScript is Installed and functional here (cscript runs a .vbs,
+      `mshta vbscript:close` exits 0). ART's mshta/rundll32-vbscript tests error at the harness `.Start()`
+      (Access denied) — most likely Defender real-time protection killing the malicious child-spawn chain
+      the payload builds — but the LOLBin process still launches with its telltale command line, so these
+      rules are verified by invoking the binaries directly with a representative command line.
+
+  High-signal patterns only (script monikers / scriptlets / INF-exec / HTA), deliberately NOT the bare
+  binaries (rundll32 in particular runs constantly for legitimate reasons — plain Control_RunDLL is not
+  matched). Level 4 to win the one-rule-per-event tie over the generic stock rules, per the precedence
+  note earlier in this file.
+-->
+<group name="local,windows,sysmon,defense_evasion,">
+
+  <!-- T1218.010 — Regsvr32 (Squiblydoo: /i: with a COM scriptlet / scrobj.dll) -->
+  <rule id="100114" level="4">
+    <if_group>sysmon_event1</if_group>
+    <field name="win.eventdata.originalFileName" type="pcre2">(?i)regsvr32\.exe</field>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)(scrobj\.dll|/i:)</field>
+    <options>no_full_log</options>
+    <description>Regsvr32 proxy execution (scriptlet/Squiblydoo) — $(win.eventdata.commandLine)</description>
+    <mitre>
+      <id>T1218.010</id>
+    </mitre>
+    <group>defense_evasion,lolbin,attack,</group>
+  </rule>
+
+  <!-- T1218.011 — Rundll32 abuse: script monikers or INF-execution LOLBAS (not plain Control_RunDLL) -->
+  <rule id="100115" level="4">
+    <if_group>sysmon_event1</if_group>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)rundll32.{0,80}(javascript:|vbscript:|RunHTMLApplication|LaunchINFSection|mshtml)</field>
+    <options>no_full_log</options>
+    <description>Rundll32 proxy execution (script moniker / INF LOLBAS) — $(win.eventdata.commandLine)</description>
+    <mitre>
+      <id>T1218.011</id>
+    </mitre>
+    <group>defense_evasion,lolbin,attack,</group>
+  </rule>
+
+  <!-- T1218.005 — Mshta abuse: vbscript:/javascript: monikers, remote HTA, or a .hta payload -->
+  <rule id="100116" level="4">
+    <if_group>sysmon_event1</if_group>
+    <field name="win.eventdata.originalFileName" type="pcre2">(?i)mshta\.exe</field>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)(vbscript:|javascript:|https?:|\.hta\b)</field>
+    <options>no_full_log</options>
+    <description>Mshta proxy execution (script moniker / HTA) — $(win.eventdata.commandLine)</description>
+    <mitre>
+      <id>T1218.005</id>
+    </mitre>
+    <group>defense_evasion,lolbin,attack,</group>
+  </rule>
+
+</group>

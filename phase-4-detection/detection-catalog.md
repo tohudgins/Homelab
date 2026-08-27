@@ -34,6 +34,9 @@ Rules live on siem-01 at `/var/ossec/etc/rules/local_rules.xml` (mirrored in thi
 | 19 | [T1018 – Remote System Discovery](https://attack.mitre.org/techniques/T1018/) | 100110 | ws-01 → dc-01 (nltest /dclist) | ✅ verified TP (2026-08-27) |
 | 20 | [T1482 – Domain Trust Discovery](https://attack.mitre.org/techniques/T1482/) | 100111 | ws-01 → dc-01 (nltest /domain_trusts) | ✅ verified TP — was mistagged T1087 by stock (2026-08-27) |
 | 21 | [T1201 – Password Policy Discovery](https://attack.mitre.org/techniques/T1201/) | 100113 | ws-01 → dc-01 (net accounts) | ✅ verified TP (2026-08-27) |
+| 22 | [T1218.010 – System Binary Proxy Execution: Regsvr32](https://attack.mitre.org/techniques/T1218/010/) | 100114 | ws-01 (Sysmon) | ✅ verified TP (Squiblydoo scriptlet) — was mistagged T1087 by stock (2026-08-27) |
+| 23 | [T1218.011 – System Binary Proxy Execution: Rundll32](https://attack.mitre.org/techniques/T1218/011/) | 100115 | ws-01 (Sysmon) | ✅ verified TP (script moniker) — no stock T1218 mapping (2026-08-27) |
+| 24 | [T1218.005 – System Binary Proxy Execution: Mshta](https://attack.mitre.org/techniques/T1218/005/) | 100116 | ws-01 (Sysmon) | ✅ verified TP (script moniker) — no stock T1218 mapping (2026-08-27) |
 
 (#6 is tagged with both IDs deliberately: the rule can't distinguish creating a new local account from
 modifying an existing one's credentials — same file, same rule, same broad-not-narrow tradeoff as the
@@ -1085,3 +1088,32 @@ sub-technique split can hinge on one word in the command line.
    `cmd /c "nltest /dclist…"` wrapper event reliably carries the switch. So 100110 matches the command
    line on any process and is **level 5** to beat the stock cmd rule 92004 (L4) that also matches the
    wrapper — catching the invocation whichever event survives.
+
+## T1218 — System Binary Proxy Execution (LOLBins), batch 3 (2026-08-27)
+
+Ran an ART T1218 battery (mshta / regsvr32 / rundll32). Techniques 22–24; three rules (100114–100116),
+all level 4 to win the one-rule-per-event tie over the generic stock cmd rule.
+
+| Rule | Technique | LOLBin | Pattern matched |
+|---|---|---|---|
+| 100114 | T1218.010 | regsvr32 | `scrobj.dll` / `/i:` scriptlet (Squiblydoo) |
+| 100115 | T1218.011 | rundll32 | `javascript:` / `vbscript:` / `RunHTMLApplication` / `LaunchINFSection` moniker |
+| 100116 | T1218.005 | mshta | `vbscript:` / `javascript:` / `http(s):` / `.hta` |
+
+**The gap:** the LOLBins that execute (regsvr32 Squiblydoo, rundll32) were detected only by the generic
+stock cmd rule 92032 and **mis-tagged T1087** — nothing mapped them to T1218 System Binary Proxy
+Execution. These rules add the correct mapping. Deliberately high-signal patterns only (script monikers /
+scriptlets / INF-exec / HTA), not the bare binaries — rundll32 in particular runs constantly for
+legitimate reasons, so plain `Control_RunDLL` is intentionally not matched (accepted evasion tradeoff).
+
+**A wrong hypothesis, corrected by checking (worth recording):** the ART mshta-vbscript and
+rundll32-vbscript tests both errored at the harness `.Start()` with *Access is denied*, which looked like
+VBScript deprecation (Microsoft is retiring it). **It wasn't** — verified on the host that the `VBSCRIPT`
+Windows capability is *Installed*, `cscript` runs a `.vbs`, and `mshta vbscript:close` exits 0. Attack
+Surface Reduction is also not configured (empty rule set). The most likely cause is Defender real-time
+protection killing the specific malicious *child-spawn* chain the ART payloads build (mshta → WScript.Shell
+→ spawn) — a live defense, not a missing engine. Either way the LOLBin **process still launches with its
+telltale command line**, so detection is verified by invoking the binary directly with a representative
+moniker (the same "confirmed by exercising the observable, not the payload" approach as the LSASS-PPL
+case). Lesson: check the assumption on the host before writing the finding — a plausible story (VBScript
+is dead) was simply false here.
