@@ -74,6 +74,19 @@
     start_mode: auto
     state: started
 
+# --- Active Response: kill the offending process on a high-confidence LOLBin alert ---
+# The manager (siem role) wires these scripts to rules 100114-100116 via ossec.conf. remove-threat.ps1
+# reads the AR alert JSON from stdin and kills the process id it names. Two hard-won details are baked
+# into the script: read ONE line with a timeout (never ReadToEnd(), which hangs the agent's single
+# execd thread since execd sends no EOF), and log via FileShare.ReadWrite (logcollector holds the file).
+- name: Deploy the remove-threat active-response scripts to the agent
+  ansible.windows.win_copy:
+    src: "{{ item }}"
+    dest: 'C:\Program Files (x86)\ossec-agent\active-response\bin\{{ item }}'
+  loop:
+    - remove-threat.cmd
+    - remove-threat.ps1
+
 # --- Soft verification (informational; log may have rotated) ------------------
 - name: Report the agent's last "Connected to the server" log line
   ansible.windows.win_shell: Select-String -Path 'C:\Program Files (x86)\ossec-agent\ossec.log' -Pattern 'Connected to the server' | Select-Object -Last 1 -ExpandProperty Line

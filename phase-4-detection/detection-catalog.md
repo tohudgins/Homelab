@@ -1163,3 +1163,54 @@ what you match.
 (T1021.006) have no target — SMB admin-share access to the Samba DC is the topology-appropriate
 lateral-movement surface. The intended end-to-end path (ws-01 → the writable `\\fs-01\public` bait share →
 read the planted credential) is already covered by rule 100090 (T1552.001) when fs-01 is up.
+
+## Active Response — process-kill on the Windows endpoint (2026-08-28)
+
+The Linux side already auto-responds (firewall-drop on the sshd brute-force rules 100010/100011; the
+custom disable-ad-account script on the Kerberos rule 100041). This adds **detect-and-respond on ws-01**:
+when a high-confidence LOLBin execution fires (100114 regsvr32 / 100115 rundll32 / 100116 mshta), the
+manager pushes an active-response to the agent, which **kills the offending process** and logs it —
+turning the SIEM from detect-only into detect-and-respond on the Windows endpoint.
+
+**Components**
+- `remove-threat.ps1` + `remove-threat.cmd` — deployed to the agent's `active-response\bin\` **as code**
+  by the `windows` role (`roles/windows/files/`, converges `changed=0`). The `.ps1` reads the AR alert
+  JSON from stdin and `Stop-Process` on the `data.win.eventdata.processId` it names.
+- Manager `ossec.conf` (applied the same manual way as the existing ARs):
+  ```xml
+  <command>
+    <name>win-remove-threat</name>
+    <executable>remove-threat.cmd</executable>
+    <timeout_allowed>yes</timeout_allowed>
+  </command>
+  <active-response>
+    <command>win-remove-threat</command>
+    <location>local</location>
+    <rules_id>100114,100115,100116</rules_id>
+    <timeout>60</timeout>
+  </active-response>
+  ```
+
+**Verified end-to-end (2026-08-28):** manager remoted logs `Active response sent` to agent 003; the agent
+runs the script live (~1.5s); it reads the alert, extracts the PID, kills it, and logs
+`KILLED pid=<n> image=<img> (rule <id>)` to `active-responses.log` (which the agent forwards back to the
+SIEM — the *response* becomes its own alert). Confirmed on a live long-lived victim process.
+
+**Two findings that made this real detection-engineering work, not a config paste:**
+1. **`[Console]::In.ReadToEnd()` hangs the agent's single-threaded execd.** execd passes the AR JSON on
+   stdin but never closes the stream, so `ReadToEnd()` blocks *forever*. The agent's execd is
+   single-threaded, so after the first AR it stayed blocked — every later AR was *received but never
+   executed*, and the queued scripts only completed (logging "could not kill, process gone") at the next
+   agent restart when stdin finally closed. Diagnosed by finding a `cmd.exe`→`powershell.exe` pair
+   (children of `wazuh-agent`) stuck for 20+ minutes, plus agent debug showing `receive_msg '#!-execd'`
+   with **no** matching `ExecdRun`. Fix: read one line with a timeout (`ReadLineAsync().Wait(5000)`).
+2. **`active-responses.log` needs `FileShare.ReadWrite` to write.** The agent's logcollector holds that
+   file open, so a plain `Add-Content` silently fails while the agent runs (the log lines only appeared
+   at restart). Fix: open with `[System.IO.File]::Open(..., 'Append', 'Write', 'ReadWrite')`.
+
+**On the test vectors (honest note):** demonstrating the *kill* took effort because the LOLBins the rules
+match are intrinsically short-lived here — `mshta` self-exits within a second or two over the headless
+session-0, and a Squiblydoo `regsvr32` gets terminated by Defender — both often faster than the ~1.5–6s
+detect→respond latency, so a transient test process is frequently already gone when the AR lands (logged
+as "could not kill, process not found"). That's a property of the *test target*, not the response: a real
+process that runs more than a few seconds is killed, as verified against a controlled long-lived victim.
