@@ -76,6 +76,18 @@
     group: root
     mode: "0755"
 
+# Credentialed (authenticated) variant: SSHes into dc-01 as the dedicated
+# gvm-scan service account and reads the package manifest itself. Demonstrates
+# the active/passive convergence question — see
+# phase-4-detection/vulnerability-management-active-vs-passive.md.
+- name: Deploy the credentialed scan launcher (greenbone-cred-scan.sh)
+  ansible.builtin.copy:
+    src: greenbone-cred-scan.sh
+    dest: "{{ scan_deploy_dir }}/greenbone-cred-scan.sh"
+    owner: root
+    group: root
+    mode: "0755"
+
 # `docker compose up -d` is Greenbone's own documented deploy: it pulls any
 # missing images and starts the stack, including the one-shot feed-loader and
 # TLS-generation containers that populate volumes and then exit 0. The dedicated
