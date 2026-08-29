@@ -92,6 +92,36 @@
     replace: '\1# - flow  # DISABLED (roles/router): high-volume, low SIEM value; use Zeek conn.log'
   notify: Restart suricata
 
+# Explicitly enable JA3/JA3S TLS fingerprinting for DETECTION (not just eve
+# logging). In the default 'auto' mode the ja3s.hash detection buffer can go
+# unpopulated even while eve logs a ja3s value, so a ja3s.hash rule silently
+# never matches. Needed by local.rules sid 9100001 (Sliver Go-TLS JA3S).
+- name: Enable JA3/JA3S fingerprinting (TLS app-layer)
+  ansible.builtin.replace:
+    path: /etc/suricata/suricata.yaml
+    regexp: '^(\s*)#?\s*ja3-fingerprints:\s*(auto|no|yes)\s*$'
+    replace: '\1ja3-fingerprints: yes'
+  notify: Restart suricata
+
+# Custom detection-as-code rules (C2/adversary emulation — Sliver). Loaded
+# alongside the ET Open ruleset. Companion to the Wazuh local_rules.xml.
+- name: Deploy custom Suricata rules (local.rules)
+  ansible.builtin.copy:
+    src: suricata-local.rules
+    dest: /var/lib/suricata/rules/local.rules
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart suricata
+
+- name: Register local.rules in suricata.yaml rule-files
+  ansible.builtin.lineinfile:
+    path: /etc/suricata/suricata.yaml
+    line: "  - local.rules"
+    insertafter: '^\s*-\s*suricata\.rules\s*$'
+    firstmatch: true
+  notify: Restart suricata
+
 - name: Enable and start suricata
   ansible.builtin.systemd:
     name: suricata
