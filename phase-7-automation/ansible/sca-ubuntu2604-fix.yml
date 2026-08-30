@@ -1,0 +1,29 @@
+---
+# Enable CIS SCA (Security Configuration Assessment) scanning on the lab's
+# Ubuntu 26.04 agents.
+#
+# Wazuh ships no CIS benchmark policy for Ubuntu 26.04, so agents run the closest
+# one (cis_ubuntu22-04.yml) — but that policy's `requirements:` gate demands
+# `Ubuntu 22.04` in /etc/os-release, so on 26.04 it self-skips and scans 0 of its
+# 207 checks ("scan finished. Duration: 0 seconds"). Relaxing the gate to match
+# any Ubuntu lets the checks run; the vast majority of CIS Linux controls (SSH
+# config, file perms, kernel params, partition mount options, auditd, …) are
+# version-agnostic. Result on a fresh fs-01: 47% (93 pass / 103 fail).
+#
+# Run:  ansible-playbook -i inventory/hosts.yml sca-ubuntu2604-fix.yml
+- name: Enable CIS SCA scanning on Ubuntu 26.04 agents
+  hosts: fileservers:domain_controllers:dmz
+  become: true
+  tasks:
+    - name: Relax the cis_ubuntu22-04 SCA version gate (22.04 -> any Ubuntu)
+      ansible.builtin.replace:
+        path: /var/ossec/ruleset/sca/cis_ubuntu22-04.yml
+        regexp: 'f:/etc/os-release -> r:Ubuntu 22\.04'
+        replace: 'f:/etc/os-release -> r:Ubuntu'
+      notify: Restart wazuh-agent
+
+  handlers:
+    - name: Restart wazuh-agent
+      ansible.builtin.systemd:
+        name: wazuh-agent
+        state: restarted
