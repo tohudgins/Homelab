@@ -730,3 +730,34 @@
   </rule>
 
 </group>
+
+<!--
+  ============================================================================
+  Linux endpoint — C2 implant / malware execution from a world-writable path.
+  Closes the endpoint blind spot the Phase 8 Sliver C2 hunt exposed: an
+  in-memory beacon executed from /tmp was invisible to the host agent while the
+  network sensor caught it. The fs-01 `susp-exec-path` command monitor (fileserver
+  role) walks /proc/*/exe every 30s and emits `susp-exec path=<p> pid=<n>` for any
+  process backed by a binary in /tmp, /dev/shm, /var/tmp, or deleted-while-running.
+  A process executing from a world-writable directory is a strong T1204/T1059
+  signal — legitimate services run from /usr, /bin, /opt, not /tmp.
+  ============================================================================
+-->
+<group name="local,linux,c2,">
+
+  <!-- Child of rule 530 (Wazuh process/command monitoring): a full_command
+       localfile's output arrives as `ossec: output: '<alias>': <line>`, decoded
+       by the ossec decoder and parented to 530 at level 0. Match its content. -->
+  <rule id="100200" level="12">
+    <if_sid>530</if_sid>
+    <match>susp-exec path=</match>
+    <description>Process executing from a world-writable path — possible dropped C2 implant or malware</description>
+    <mitre>
+      <id>T1204.002</id>
+      <id>T1059.004</id>
+      <id>T1071.001</id>
+    </mitre>
+    <group>c2,attack,</group>
+  </rule>
+
+</group>

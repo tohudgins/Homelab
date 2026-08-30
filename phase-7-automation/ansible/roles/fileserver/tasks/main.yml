@@ -95,6 +95,28 @@
       </ossec_config>
   notify: Restart wazuh-agent
 
+# Endpoint detection for a dropped C2 implant / malware executing from a
+# world-writable path (the gap the Phase 8 Sliver hunt exposed: an in-memory
+# beacon run from /tmp was invisible to the host agent). A local logcollector
+# command walks /proc/*/exe every 30s and reports any process whose backing
+# binary lives in /tmp, /dev/shm, /var/tmp, or has been deleted-while-running
+# (a classic evasion). Local ossec.conf command → runs without remote_commands.
+# Paired with Wazuh rule 100200 (siem role local_rules.xml).
+- name: Endpoint command monitor — process executing from a world-writable path
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: "<!-- {mark} ANSIBLE MANAGED: fs-01 suspicious-exec monitor -->"
+    block: |
+      <ossec_config>
+        <localfile>
+          <log_format>full_command</log_format>
+          <alias>susp-exec-path</alias>
+          <command>for e in /proc/[0-9]*/exe; do t=$(readlink "$e" 2>/dev/null); case "$t" in /tmp/*|/dev/shm/*|/var/tmp/*|*"(deleted)") d=${e%/exe}; echo "susp-exec path=$t pid=${d##*/}";; esac; done</command>
+          <frequency>30</frequency>
+        </localfile>
+      </ossec_config>
+  notify: Restart wazuh-agent
+
 - name: Enable and start the Wazuh agent
   ansible.builtin.systemd:
     name: wazuh-agent

