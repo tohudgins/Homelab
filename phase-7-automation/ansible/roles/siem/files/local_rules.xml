@@ -761,3 +761,41 @@
   </rule>
 
 </group>
+
+<!--
+  ============================================================================
+  Threat-intelligence enrichment — CDB blocklist lookup on NSM alerts.
+  Every Suricata alert (Wazuh rule 86601, groups ids/suricata) carries decoded
+  `src_ip`/`dest_ip` fields. These children look them up against the
+  `threat-intel-ips` CDB list (etc/lists/threat-intel-ips, registered in
+  ossec.conf <ruleset>; ~735 high-confidence malicious IPs from the ipsum feed
+  + the lab Sliver C2 IP) with lookup="address_match_key" (CIDR-aware), and
+  escalate any hit to level 12. This turns "an alert fired" into "an alert fired
+  AND the peer IP is on a known-malicious blocklist" — context, not just a match.
+  The lab C2 IP (10.10.40.119) is in the list so the Phase 8 beacon traffic
+  produces a threat-intel hit end-to-end.
+  ============================================================================
+-->
+<group name="local,threat_intel,">
+
+  <rule id="100210" level="12">
+    <if_sid>86601</if_sid>
+    <list field="dest_ip" lookup="address_match_key">etc/lists/threat-intel-ips</list>
+    <description>Threat intel: NSM alert to a known-malicious destination IP (blocklist match) — $(dest_ip)</description>
+    <mitre>
+      <id>T1071</id>
+    </mitre>
+    <group>threat_intel,attack,</group>
+  </rule>
+
+  <rule id="100211" level="12">
+    <if_sid>86601</if_sid>
+    <list field="src_ip" lookup="address_match_key">etc/lists/threat-intel-ips</list>
+    <description>Threat intel: NSM alert from a known-malicious source IP (blocklist match) — $(src_ip)</description>
+    <mitre>
+      <id>T1071</id>
+    </mitre>
+    <group>threat_intel,attack,</group>
+  </rule>
+
+</group>

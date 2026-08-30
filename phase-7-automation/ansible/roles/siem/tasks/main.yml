@@ -23,6 +23,25 @@
     mode: "0660"
   notify: Restart wazuh-manager
 
+# Threat-intel CDB list — deployed and registered before the rules that query it
+# (rules 100210/100211). The manager compiles etc/lists/* into .cdb at restart.
+- name: Deploy threat-intel CDB list (known-malicious IPs)
+  ansible.builtin.copy:
+    src: lists/threat-intel-ips
+    dest: /var/ossec/etc/lists/threat-intel-ips
+    owner: "{{ wazuh_group }}"
+    group: "{{ wazuh_group }}"
+    mode: "0660"
+  notify: Restart wazuh-manager
+
+- name: Register the threat-intel list in ossec.conf <ruleset>
+  ansible.builtin.lineinfile:
+    path: /var/ossec/etc/ossec.conf
+    line: "    <list>etc/lists/threat-intel-ips</list>"
+    insertafter: "<list>etc/lists/audit-keys</list>"
+    firstmatch: true
+  notify: Restart wazuh-manager
+
 - name: Deploy custom rules (detection-as-code)
   ansible.builtin.copy:
     src: local_rules.xml
