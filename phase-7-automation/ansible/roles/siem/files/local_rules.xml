@@ -799,3 +799,45 @@
   </rule>
 
 </group>
+
+<!--
+  ============================================================================
+  MISP integration — the professional TIP as the live IOC engine behind Wazuh.
+  integratord runs custom-misp.py on matching alerts; it queries the MISP API for
+  the alert's IOCs (IPs/hashes) and, on a hit, injects `1:misp:{...}` back into
+  analysisd (decoded by the `misp` decoder). These rules fire on that injected
+  event: 100301 = a known IOC matched (level 12), 100302 = integration error.
+  This supersedes the static CDB list (rules 100210/100211) with a real platform
+  that correlates + shares intel. See phase-7-automation/provisioning/misp-01/.
+  ============================================================================
+-->
+<group name="misp,threat_intel,">
+
+  <!-- The injected `1:misp:{...}` event is valid JSON, so Wazuh's built-in json
+       decoder flattens it (integration, misp.value, misp.source.*). Key on that,
+       not a custom decoded_as. -->
+  <rule id="100300" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="integration">^misp$</field>
+    <description>MISP integration event</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <rule id="100301" level="12">
+    <if_sid>100300</if_sid>
+    <field name="misp.value">\.+</field>
+    <description>MISP: known IoC $(misp.value) ($(misp.category)) matched in the threat-intel platform — triggered by rule $(misp.source.rule)</description>
+    <mitre>
+      <id>T1071</id>
+    </mitre>
+    <group>threat_intel,attack,</group>
+  </rule>
+
+  <rule id="100302" level="5">
+    <if_sid>100300</if_sid>
+    <field name="misp.error">\.+</field>
+    <description>MISP: integration error — $(misp.error)</description>
+    <group>threat_intel,</group>
+  </rule>
+
+</group>

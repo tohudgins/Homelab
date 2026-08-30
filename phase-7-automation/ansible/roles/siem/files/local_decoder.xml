@@ -41,3 +41,12 @@
   than source IP. Documented so the dead end isn't re-attempted.
 -->
 
+
+<!--
+  MISP integration: custom-misp.py injects `1:misp:{"integration": "misp", ...}`.
+  No custom decoder needed — Wazuh's built-in `json` decoder flattens it into
+  integration / misp.value / misp.source.* fields, which rules 100300+ match on
+  (decoded_as json). A custom decoded_as would only shadow the json decoder and
+  break the field match (learned by exercising, 2026-08-30).
+-->
+

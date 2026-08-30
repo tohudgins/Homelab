@@ -12,3 +12,9 @@ wazuh_services:
 wazuh_rules_dir: /var/ossec/etc/rules
 wazuh_decoders_dir: /var/ossec/etc/decoders
 wazuh_group: wazuh
+
+# MISP integration (integratord -> MISP IOC lookup). misp-01 in the SOC segment;
+# the API key is a lab-documented secret (regenerate with
+# `cake user change_authkey admin@misp.lab.internal` on misp-01 and update here).
+misp_hook_url: "https://10.10.30.20"
+misp_api_key: "XUFMa9Bs4xf0r8rDUHtq6eWfhF08aqlLfusVaxNz"
