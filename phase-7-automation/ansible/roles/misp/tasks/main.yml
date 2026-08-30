@@ -1,0 +1,85 @@
+---
+# ============================================================================
+# misp-01 — deploy the MISP threat-intel platform from the official
+# MISP/misp-docker stack (arm64-native). Reproducible counterpart to the manual
+# 2026-08-29 build; the base VM comes from provisioning/misp-01/ (autoinstall).
+# MISP is the professional TIP that becomes the IOC source of truth feeding
+# Wazuh (the MISP->Wazuh integratord integration is a separate role/step).
+# ============================================================================
+
+- name: Install Docker Engine + compose plugin (official convenience script)
+  ansible.builtin.shell: curl -fsSL https://get.docker.com | sh
+  args:
+    creates: /usr/bin/docker
+  become: true
+
+- name: Add the login user to the docker group
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true
+  become: true
+
+- name: Clone the official misp-docker stack
+  ansible.builtin.git:
+    repo: "{{ misp_repo }}"
+    dest: "{{ misp_deploy_dir }}"
+    depth: 1
+    version: master
+  become: true
+
+# Seed .env from the shipped template ONCE, then set the lab values. force:false
+# keeps a later hand-edit / generated secrets from being clobbered on re-run.
+- name: Seed .env from template.env (first run only)
+  ansible.builtin.copy:
+    src: "{{ misp_deploy_dir }}/template.env"
+    dest: "{{ misp_deploy_dir }}/.env"
+    remote_src: true
+    force: false
+    mode: "0640"
+  become: true
+
+- name: Configure .env essentials (base URL, admin, GPG passphrase)
+  ansible.builtin.lineinfile:
+    path: "{{ misp_deploy_dir }}/.env"
+    regexp: "^{{ item.k }}="
+    line: "{{ item.k }}={{ item.v }}"
+  loop:
+    - { k: "BASE_URL", v: "{{ misp_base_url }}" }
+    - { k: "ADMIN_EMAIL", v: "{{ misp_admin_email }}" }
+    - { k: "ADMIN_PASSWORD", v: "{{ misp_admin_password }}" }
+    - { k: "ADMIN_ORG", v: "{{ misp_admin_org }}" }
+    - { k: "GPG_PASSPHRASE", v: "{{ misp_gpg_passphrase }}" }
+  loop_control:
+    label: "{{ item.k }}"
+  become: true
+
+- name: Pull the MISP images (arm64)
+  ansible.builtin.command:
+    cmd: docker compose pull
+    chdir: "{{ misp_deploy_dir }}"
+  become: true
+  changed_when: false
+
+- name: Bring up the MISP stack
+  ansible.builtin.command:
+    cmd: docker compose up -d
+    chdir: "{{ misp_deploy_dir }}"
+  become: true
+  register: misp_up
+  changed_when: "'Started' in misp_up.stderr or 'Created' in misp_up.stderr"
+
+- name: Wait for the MISP web UI to answer
+  ansible.builtin.shell: >
+    docker exec misp-docker-misp-core-1
+    curl -sk -o /dev/null -w '%{http_code}' https://127.0.0.1/users/login
+  become: true
+  register: misp_web
+  until: misp_web.stdout in ['200', '302']
+  retries: 30
+  delay: 20
+  changed_when: false
+
+# Feeds (CIRCL OSINT, abuse.ch Feodo/URLhaus) are enabled + fetched once via the
+# API/CLI after first boot — a stateful, one-time action, documented in the
+# writeup rather than run on every converge. See phase-8-threat-intel/.

@@ -1,0 +1,12 @@
+---
+# misp-01 — MISP threat-intel platform (official MISP/misp-docker stack).
+misp_deploy_dir: /opt/misp-docker
+misp_repo: https://github.com/MISP/misp-docker.git
+# Lab-documented secrets (recorded in the vault Virtual Machines note), same
+# posture as the Greenbone admin password. Fresh deploys regenerate MISP's own
+# ENCRYPTION_KEY/SALT/UUID (left empty in .env).
+misp_base_url: "https://10.10.30.20"
+misp_admin_email: "admin@misp.lab.internal"
+misp_admin_password: "MispAdmin2026@Lab"
+misp_admin_org: "LAB"
+misp_gpg_passphrase: "MispGpg2026Lab"

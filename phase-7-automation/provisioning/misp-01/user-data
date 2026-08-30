@@ -1,0 +1,35 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  identity:
+    hostname: misp-01
+    username: tohudgins
+    # Password: MispLab2026!  (SHA-512 crypt) — key-based auth is primary.
+    password: "$6$1df24c37e36e96ae$mmKQPerM0s.1AqUrz/GAim6VPBQ/sNIXBGL9nAn.ve.Qi.XLCIYpQm4WZOnx4jdJjBpvEbWDz7UqYdQqMoOVS0"
+  ssh:
+    install-server: true
+    allow-pw: true
+    authorized-keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH7GQV6ykcpEB9lPX4PtS48LOUIeL2N/gA4w5biGD+XS tohudgins@mac-homelab-jumphost"
+  network:
+    version: 2
+    ethernets:
+      socnic:
+        match:
+          name: "en*"
+        addresses:
+          - 10.10.30.20/24
+        routes:
+          - to: default
+            via: 10.10.30.1
+        nameservers:
+          addresses: [10.10.30.1]
+  storage:
+    layout:
+      name: direct
+  # Power off (don't reboot) so the installer can't loop back into the CD;
+  # the CDs are detached before first real boot.
+  shutdown: poweroff

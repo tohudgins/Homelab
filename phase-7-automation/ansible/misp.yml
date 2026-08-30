@@ -1,0 +1,9 @@
+---
+# Deploy the MISP threat-intel platform on misp-01 (SOC segment).
+# Base VM provisioned from provisioning/misp-01/ (autoinstall); this configures
+# Docker + the official misp-docker stack. See roles/misp.
+- name: Configure misp-01 — MISP threat-intelligence platform
+  hosts: threat_intel
+  become: true
+  roles:
+    - misp

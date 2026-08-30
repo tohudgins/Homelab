@@ -1,0 +1,5 @@
+---
+galaxy_info:
+  role_name: misp
+  description: MISP threat-intelligence platform on Docker (misp-01, SOC segment)
+dependencies: []
