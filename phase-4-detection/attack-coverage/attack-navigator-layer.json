@@ -1,0 +1,250 @@
+{
+  "name": "Homelab \u2014 detection coverage",
+  "versions": {
+    "attack": "14",
+    "navigator": "4.9.1",
+    "layer": "4.5"
+  },
+  "domain": "enterprise-attack",
+  "description": "Detection coverage generated from the homelab ruleset: 31 techniques with a custom detection, 9 validated end-to-end by the purple-team harness. Dark green = validated, light green = detection exists. Regenerate with generate-coverage.py.",
+  "techniques": [
+    {
+      "techniqueID": "T1003.006",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100080",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1016",
+      "score": 100,
+      "color": "#2e7d32",
+      "comment": "VALIDATED (purple-team) \u2014 100100, 100101",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1018",
+      "score": 100,
+      "color": "#2e7d32",
+      "comment": "VALIDATED (purple-team) \u2014 100110",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1021.002",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100119, 100120",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1049",
+      "score": 100,
+      "color": "#2e7d32",
+      "comment": "VALIDATED (purple-team) \u2014 100102, 100103",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1053.003",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100050",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1059.004",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100200",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1069.001",
+      "score": 100,
+      "color": "#2e7d32",
+      "comment": "VALIDATED (purple-team) \u2014 100106, 100107",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1069.002",
+      "score": 100,
+      "color": "#2e7d32",
+      "comment": "VALIDATED (purple-team) \u2014 100109",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1071",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100210, 100211, 100301, suricata:9100002",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1071.001",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100200, suricata:9100001",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1071.004",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100310",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1087.002",
+      "score": 100,
+      "color": "#2e7d32",
+      "comment": "VALIDATED (purple-team) \u2014 100108, 100112",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1098",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100051",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1110",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100010, 100011, 100041",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1110.001",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100010, 100011, 100040, 100041",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1112",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100117, 100118",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1136.001",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100051",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1201",
+      "score": 100,
+      "color": "#2e7d32",
+      "comment": "VALIDATED (purple-team) \u2014 100113",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1204.002",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100200",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1218.005",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100116",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1218.010",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100114",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1218.011",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100115",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1482",
+      "score": 100,
+      "color": "#2e7d32",
+      "comment": "VALIDATED (purple-team) \u2014 100111",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1484.001",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100020",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1518.001",
+      "score": 100,
+      "color": "#2e7d32",
+      "comment": "VALIDATED (purple-team) \u2014 100104, 100105",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1547.001",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100070",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1548.002",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100117, 100118",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1552.001",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100090",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1558.003",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100031",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1562.001",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100060",
+      "enabled": true
+    }
+  ],
+  "gradient": {
+    "colors": [
+      "#66bb6a",
+      "#2e7d32"
+    ],
+    "minValue": 50,
+    "maxValue": 100
+  },
+  "legendItems": [
+    {
+      "label": "Validated (run->detect->PASS)",
+      "color": "#2e7d32"
+    },
+    {
+      "label": "Detection rule exists",
+      "color": "#66bb6a"
+    }
+  ],
+  "showTacticRowBackground": true,
+  "tacticRowBackground": "#205b2e",
+  "selectTechniquesAcrossTactics": true
+}
