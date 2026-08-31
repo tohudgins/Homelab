@@ -546,9 +546,14 @@
   </rule>
 
   <!-- T1482 — Domain Trust Discovery (nltest domain_trusts / trusted_domains) -->
+  <!-- Broadened 2026-08-31 after the purple-team run: the nltest-only regex missed
+       the dsquery/adfind variant (T1482 atomic test 1), which enumerates trusts via
+       an LDAP filter on objectClass=trustedDomain. Added `trustedDomain` to cover
+       dsquery `-filter "(objectClass=trustedDomain)"` and adfind. (PowerView
+       Get-DomainTrust is PowerShell — a scriptBlockText rule, tracked separately.) -->
   <rule id="100111" level="4">
     <if_group>sysmon_event1</if_group>
-    <field name="win.eventdata.commandLine" type="pcre2">(?i)(domain_trusts|trusted_domains)</field>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)(domain_trusts|trusted_domains|trustedDomain)</field>
     <options>no_full_log</options>
     <description>Domain trust discovery — $(win.eventdata.commandLine)</description>
     <mitre>

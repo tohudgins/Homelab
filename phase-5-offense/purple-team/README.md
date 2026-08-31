@@ -54,15 +54,22 @@ Getting to 9/9 took three iterations, and each failure was a real finding a dete
    but rule 100111 only matches **`nltest`** — a real gap. The rules are deliberately command-specific, so
    these atomic variants of the same techniques would **evade** them:
 
-   | Technique | Covered (detected) | **Uncovered variant (evasion) — future rule work** |
+   | Technique | Covered (detected) | Uncovered variant (evasion) — future rule work |
    |---|---|---|
-   | T1482 Domain Trust Discovery | `nltest /domain_trusts` (100111) | `dsquery`, PowerView `Get-DomainTrust`, `adfind` |
+   | T1482 Domain Trust Discovery | `nltest`, **`dsquery`, `adfind`** (100111 — broadened, see below) | PowerView `Get-DomainTrust` (PowerShell) |
    | T1018 Remote System Discovery | `nltest /dclist` (100110) | `net view`, ping-sweep, `nslookup`, `adfind` |
    | T1069.001 Local Groups | `net localgroup` (100106) | `wmic group`, `Get-LocalGroup`, SharpHound |
 
    These aren't failures of the pipeline — they're the pipeline doing its job: mapping exactly which *variants*
-   of each technique the current ruleset sees, and which an attacker could use to slip past. Broadening the
-   rules to cover them (and re-running to confirm) is the next detection-engineering increment.
+   of each technique the current ruleset sees, and which an attacker could use to slip past.
+
+   **Closing one (the loop end-to-end):** the run flagged that rule 100111 caught only `nltest` domain-trust
+   discovery. Broadened its regex from `(domain_trusts|trusted_domains)` to add `trustedDomain` — now covering
+   the `dsquery`/`adfind` variants (which enumerate trusts via an LDAP `objectClass=trustedDomain` filter),
+   verified to match those commands while still not matching benign `net user`. (The dsquery *atomic* can't be
+   exercised on ws-01 — RSAT/`dsquery` isn't installed on a workstation — so this closure is verified at the
+   detection level; its rule structure is identical to the harness-confirmed `nltest` path.) Broadening the
+   `net view` / `wmic group` / PowerView variants the same way is the ongoing increment.
 
 ## Extending
 Add a `{technique, test, desc, expect_rules}` object to `tests.json`. Point it at any ATT&CK technique with an
