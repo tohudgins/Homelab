@@ -1,0 +1,17 @@
+{
+  "target_ssh": "ws-01",
+  "target_agent": "ws-01",
+  "siem_ssh": "siem-01",
+  "settle_seconds": 25,
+  "tests": [
+    {"technique": "T1016",     "test": 1, "desc": "System Network Configuration Discovery (ipconfig/arp/route)", "expect_rules": ["100100", "100101"]},
+    {"technique": "T1049",     "test": 1, "desc": "System Network Connections Discovery (netstat)",              "expect_rules": ["100102", "100103"]},
+    {"technique": "T1518.001", "test": 1, "desc": "Security Software Discovery (AV/EDR enumeration)",             "expect_rules": ["100104", "100105"]},
+    {"technique": "T1069.001", "test": 2, "desc": "Permission Groups Discovery: Local (net localgroup)",          "expect_rules": ["100106", "100107"]},
+    {"technique": "T1087.002", "test": 1, "desc": "Account Discovery: Domain (net user /domain)",                 "expect_rules": ["100108", "100112"]},
+    {"technique": "T1069.002", "test": 1, "desc": "Permission Groups Discovery: Domain (net group /domain)",      "expect_rules": ["100109"]},
+    {"technique": "T1018",     "test": 3, "desc": "Remote System Discovery (nltest /dclist)",                     "expect_rules": ["100110"]},
+    {"technique": "T1482",     "test": 2, "desc": "Domain Trust Discovery (nltest /domain_trusts)",               "expect_rules": ["100111"]},
+    {"technique": "T1201",     "test": 6, "desc": "Password Policy Discovery (net accounts)",                     "expect_rules": ["100113"]}
+  ]
+}
