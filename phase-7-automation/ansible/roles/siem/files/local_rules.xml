@@ -846,3 +846,30 @@
   </rule>
 
 </group>
+
+<!--
+  ============================================================================
+  DNS threat-intel — actionable use of the Sysmon DNS telemetry (EID22) that the
+  SwiftOnSecurity config added (2026-08-31). Wazuh decodes EID22 into
+  win.eventdata.queryName (group sysmon_event_22, base rule level 0 = not
+  alerted). This child does a fast CDB lookup of the queried name against the
+  malicious-domains list (~1,190 ThreatFox domains + a lab test domain) and
+  escalates a hit to level 12 — the domain analogue of the IP list (100210/211),
+  done with a CDB lookup (not a per-query API call) because DNS is high-volume.
+  NB: match_key is exact, so a subdomain of a listed domain won't match — a known
+  limitation (Wazuh has no suffix-match lookup); documented, not hidden.
+  ============================================================================
+-->
+<group name="local,windows,sysmon,dns,threat_intel,">
+
+  <rule id="100310" level="12">
+    <if_group>sysmon_event_22</if_group>
+    <list field="win.eventdata.queryName" lookup="match_key">etc/lists/malicious-domains</list>
+    <description>DNS query to a known-malicious domain — $(win.eventdata.queryName)</description>
+    <mitre>
+      <id>T1071.004</id>
+    </mitre>
+    <group>threat_intel,attack,dns,</group>
+  </rule>
+
+</group>

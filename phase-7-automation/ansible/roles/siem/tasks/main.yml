@@ -42,6 +42,25 @@
     firstmatch: true
   notify: Restart wazuh-manager
 
+# Malicious-domains CDB list — queried by rule 100310 against Sysmon EID22
+# (win.eventdata.queryName), the DNS telemetry the SwiftOnSecurity config added.
+- name: Deploy threat-intel CDB list (known-malicious domains)
+  ansible.builtin.copy:
+    src: lists/malicious-domains
+    dest: /var/ossec/etc/lists/malicious-domains
+    owner: "{{ wazuh_group }}"
+    group: "{{ wazuh_group }}"
+    mode: "0660"
+  notify: Restart wazuh-manager
+
+- name: Register the malicious-domains list in ossec.conf <ruleset>
+  ansible.builtin.lineinfile:
+    path: /var/ossec/etc/ossec.conf
+    line: "    <list>etc/lists/malicious-domains</list>"
+    insertafter: "<list>etc/lists/threat-intel-ips</list>"
+    firstmatch: true
+  notify: Restart wazuh-manager
+
 - name: Deploy custom rules (detection-as-code)
   ansible.builtin.copy:
     src: local_rules.xml
