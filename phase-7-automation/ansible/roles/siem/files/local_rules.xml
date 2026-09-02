@@ -223,6 +223,63 @@
 </group>
 
 <!--
+  T1110.003 — Brute Force: Password Spraying (SMB/NTLM, the horizontal counterpart to 100040/100041)
+
+  100041 above keys on same_field Authentication.clientAccount — it fires only when ONE account fails
+  4+ times (a vertical brute force). A password SPRAY is the opposite shape: ONE password tried once
+  against MANY accounts, so no single account crosses the threshold and 100041 never fires. Confirmed
+  live: `nxc smb 10.10.10.10 -u <all-users> -p Summer2026` produced eight distinct-account SMB results
+  (seven failures + the one weak-password reuse it found, svc-sql) and 100041 stayed silent — a real,
+  reproducible detection gap.
+
+  Two things had to be added to close it:
+  1. Telemetry. SMB session-setup auth on a Samba AD DC is handled by *smbd*, which logs to
+     /var/log/samba/log.smbd — NOT log.samba (the AD DC process, all the Kerberoast/brute rules ever
+     saw). SMB failures were therefore invisible to Wazuh. Added log.smbd as a second json localfile on
+     dc-01. Samba emits the same eventId 4625 for a failed SMB NTLM logon, serviceDescription "SMB2".
+  2. Correlation on the burst, NOT on the account. 100401 deliberately omits same_field, so it counts
+     failed SMB logons across the whole domain in the window — which is exactly the spray signature.
+
+  Source-IP attribution would be conceptually cleaner (a spray is "one host sweeping accounts"), but
+  Authentication.remoteAddress carries a per-connection source PORT ("ipv4:10.10.40.119:44274") so it
+  can't group, and extracting a bare srcip needs a child decoder that strips the parent json fields —
+  the same documented dead-end noted on the Kerberoast rule. Frequency-of-SMB-failures is the robust
+  signal in a single-DC lab; a production tuning would baseline normal failure volume and add srcip.
+-->
+<group name="local,authentication_failures,">
+
+  <rule id="100400" level="5">
+    <decoded_as>json</decoded_as>
+    <field name="type">^Authentication$</field>
+    <field name="Authentication.eventId">^4625$</field>
+    <field name="Authentication.serviceDescription">^SMB2$</field>
+    <options>no_full_log</options>
+    <description>Samba SMB: failed NTLM logon for $(Authentication.clientAccount) from $(Authentication.remoteAddress).</description>
+    <mitre>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failed,</group>
+  </rule>
+
+  <!--
+    frequency="4" fires on the 5th match (Wazuh's N+1 quirk, as documented on 100031). A spray sweeps
+    many accounts, so 5+ failed SMB logons in the window is the threshold. No same_field: that is the
+    whole point — the failures are across DIFFERENT accounts, which is why the per-account brute rule
+    (100041) can never see it.
+  -->
+  <rule id="100401" level="12" frequency="4" timeframe="120" ignore="120">
+    <if_matched_sid>100400</if_matched_sid>
+    <description>Password spray suspected — 5+ failed SMB logons across the domain in 120s (single-source credential attack; 100041's per-account brute rule would miss this horizontal pattern).</description>
+    <mitre>
+      <id>T1110</id>
+      <id>T1110.003</id>
+    </mitre>
+    <group>authentication_failures,attack,</group>
+  </rule>
+
+</group>
+
+<!--
   T1562.001 — Impair Defenses: Disable or Modify Tools
 
   Arguably the single highest-value rule in this catalog: an attacker who disables the monitoring itself

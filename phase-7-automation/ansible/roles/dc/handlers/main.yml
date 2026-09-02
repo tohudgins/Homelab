@@ -6,3 +6,10 @@
   ansible.builtin.systemd:
     name: "{{ samba_service }}"
     state: restarted
+
+# Reloads the Wazuh agent's localfile config (e.g. the log.smbd SMB-auth source).
+# Independent of the SSH session driving Ansible, so the run survives it.
+- name: Restart wazuh-agent
+  ansible.builtin.systemd:
+    name: wazuh-agent
+    state: restarted

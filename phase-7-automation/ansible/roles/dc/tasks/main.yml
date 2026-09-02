@@ -32,6 +32,27 @@
     validate: testparm -s %s
   notify: Restart samba-ad-dc
 
+# --- Telemetry: ship smbd's SMB/NTLM auth log to Wazuh (password-spray detection) ---
+# smbd handles SMB session-setup auth and logs it to log.smbd, NOT log.samba (the AD DC
+# process, which is all the Kerberoast/Kerberos-brute rules ever read). Failed SMB logons
+# (eventId 4625, serviceDescription "SMB2") were therefore invisible to Wazuh, so a
+# password SPRAY (one password across many accounts) went undetected — the per-account
+# Kerberos brute rule (100041) can't see it by design. Added as a separate <ossec_config>
+# block (Wazuh merges them) so the existing log.samba localfile is left untouched.
+# Feeds siem-role rules 100400/100401 (T1110.003 — Password Spraying).
+- name: Ship smbd SMB-auth log to Wazuh (password-spray detection telemetry)
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: "<!-- {mark} ANSIBLE MANAGED: dc-01 SMB auth log (log.smbd) -->"
+    block: |
+      <ossec_config>
+        <localfile>
+          <log_format>json</log_format>
+          <location>/var/log/samba/log.smbd</location>
+        </localfile>
+      </ossec_config>
+  notify: Restart wazuh-agent
+
 # --- Accounts (create-only; existing accounts are never touched) --------------
 - name: Enumerate current domain users
   ansible.builtin.command: samba-tool user list

@@ -39,6 +39,7 @@ Rules live on siem-01 at `/var/ossec/etc/rules/local_rules.xml` (mirrored in thi
 | 24 | [T1218.005 – System Binary Proxy Execution: Mshta](https://attack.mitre.org/techniques/T1218/005/) | 100116 | ws-01 (Sysmon) | ✅ verified TP (script moniker) — no stock T1218 mapping (2026-08-27) |
 | 25 | [T1548.002 – Abuse Elevation Control: Bypass UAC](https://attack.mitre.org/techniques/T1548/002/) | 100117, 100118 | ws-01 (Sysmon EID13) | ✅ verified TP — closes the mscfile/Event-Viewer gap in stock 92304, + maps disable-UAC-via-reg (2026-08-27) |
 | 26 | [T1021.002 – Remote Services: SMB/Windows Admin Shares](https://attack.mitre.org/techniques/T1021/002/) | 100119, 100120 | ws-01 → dc-01 (net use / New-SmbMapping) | ✅ verified TP (C$/ADMIN$ access; IPC$ excluded as noise) — stock only mistagged T1059.003 (2026-08-27) |
+| 27 | [T1110.003 – Brute Force: Password Spraying](https://attack.mitre.org/techniques/T1110/003/) | 100400, 100401 | dc-01 (Samba smbd audit / `log.smbd`) | ✅ verified TP live — spray returned a real cred (`svc-sql`); per-account rule 100041 confirmed blind to it. Required new telemetry (`log.smbd` was unmonitored) (2026-09-02) — see [`phase-5-offense/attack-detect-writeups/02-password-spray-smb.md`](../phase-5-offense/attack-detect-writeups/02-password-spray-smb.md) |
 
 (#6 is tagged with both IDs deliberately: the rule can't distinguish creating a new local account from
 modifying an existing one's credentials — same file, same rule, same broad-not-narrow tradeoff as the
