@@ -23,6 +23,7 @@ REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 WAZUH_RULES = os.path.join(REPO, "phase-7-automation/ansible/roles/siem/files/local_rules.xml")
 SURICATA_RULES = os.path.join(REPO, "phase-7-automation/ansible/roles/router/files/suricata-local.rules")
 PT_TESTS = os.path.join(REPO, "phase-5-offense/purple-team/tests.json")
+AD_VALIDATE = os.path.join(REPO, "phase-5-offense/purple-team/ad-validate.py")
 
 OUT = os.path.join(HERE, "attack-navigator-layer.json")
 
@@ -54,9 +55,15 @@ def suricata_techniques():
 
 
 def validated_techniques():
-    if not os.path.exists(PT_TESTS):
-        return set()
-    return {norm(t["technique"]) for t in json.load(open(PT_TESTS)).get("tests", [])}
+    # A technique is "validated" when an automated harness runs the attack and proves
+    # the detection fired: purple-team.py (Atomic tests on ws-01, tests.json) OR
+    # ad-validate.py (real domain attacks from atk-01 — scenarios that declare a technique).
+    v = set()
+    if os.path.exists(PT_TESTS):
+        v |= {norm(t["technique"]) for t in json.load(open(PT_TESTS)).get("tests", [])}
+    if os.path.exists(AD_VALIDATE):
+        v |= {norm(m) for m in re.findall(r'"technique":\s*"(T[0-9.]+)"', open(AD_VALIDATE).read())}
+    return v
 
 
 def main():

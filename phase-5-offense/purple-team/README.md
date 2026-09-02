@@ -71,6 +71,31 @@ Getting to 9/9 took three iterations, and each failure was a real finding a dete
    detection level; its rule structure is identical to the harness-confirmed `nltest` path.) Broadening the
    `net view` / `wmic group` / PowerView variants the same way is the ongoing increment.
 
+## AD attack validation — `ad-validate.py` (the atk-01 counterpart)
+`purple-team.py` validates *endpoint* detections by running Atomic Red Team on ws-01. `ad-validate.py` applies
+the identical "attack → prove the detection fired" discipline to *domain* attacks launched from **atk-01**
+(Kali) against the Samba AD DC — same before/after alert-log diff, same PASS/FAIL/exit-code contract. It's the
+repeatable practice range and CI gate for the AD detection surface.
+
+```
+[PASS] Password Spray    rules 100401   one password x many accounts (T1110.003)
+[PASS] Kerberoasting     rules 100031   request 3+ service tickets in 60s (T1558.003)
+[PASS] DCSync            rules 100080   DsGetNCChanges from a non-DC (T1003.006)
+[SKIP] Credential Theft  needs fs-01 (unreachable)  read planted cred on the weak share (T1552.001)
+== 3/3 AD detections validated (1 skipped) ==
+```
+
+These attacks **complete on Samba** — SMB/NTLM password spraying returns a real credential, and the
+TGS-REQ / DsGetNCChanges reach the DC (which logs them) even where impacket's later parse fails against Samba;
+see `../attack-detect-writeups/` for per-attack detail and the documented interop boundaries (Kerberoast crack,
+DCSync dump, and AS-REP roasting all hit Samba-vs-Windows walls — the *telemetry*, hence the *detection*,
+fires regardless). A scenario gated on a host that's down (cred-theft needs fs-01) **SKIPs** cleanly instead of
+failing. Scenarios that declare a `technique` are read by `generate-coverage.py`, so a passing AD attack
+promotes that technique to **validated (dark green)** on the ATT&CK coverage map (now 12 validated total).
+
+Run: `./ad-validate.py` (needs SSH to atk-01 + siem-01; weak lab creds are baked in — already public in
+`phase-2-identity/known-weaknesses.md`).
+
 ## Extending
 Add a `{technique, test, desc, expect_rules}` object to `tests.json`. Point it at any ATT&CK technique with an
 Atomic Red Team test and the Wazuh rule(s) that should catch it; the harness handles the rest. This scales the
