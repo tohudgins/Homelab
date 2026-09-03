@@ -1,0 +1,9 @@
+---
+# Deploy DFIR-IRIS (SOC-operations case management) on misp-01 (SOC segment),
+# alongside MISP. Standalone like misp.yml (heavy Docker platform, run on its own).
+# The Wazuh -> IRIS integration is applied by siem.yml (custom-iris + <integration>).
+- name: Configure misp-01 — DFIR-IRIS incident-response case management
+  hosts: threat_intel
+  become: true
+  roles:
+    - iris

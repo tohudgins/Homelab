@@ -1,0 +1,85 @@
+---
+# ============================================================================
+# DFIR-IRIS on misp-01 — the SOC-operations layer (case management / IR workflow).
+# Chosen over TheHive+Cortex: IRIS is arm64-native (app+postgres+nginx+rabbitmq),
+# where TheHive's stack is amd64-only + 4 JVMs (qemu emulation + RAM-heavy on this
+# 24GB ARM64 host). Turns Wazuh detections (via the siem role's custom-iris
+# integratord integration) into triageable analyst cases. Reproducible counterpart
+# to the manual 2026-09-02 build; base VM is the same misp-01 that runs MISP.
+# ============================================================================
+
+- name: Install Docker Engine + compose plugin (official convenience script)
+  ansible.builtin.shell: curl -fsSL https://get.docker.com | sh
+  args:
+    creates: /usr/bin/docker
+  become: true
+
+- name: Add the login user to the docker group
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: true
+  become: true
+
+- name: Clone the official iris-web stack (pinned release)
+  ansible.builtin.git:
+    repo: "{{ iris_repo }}"
+    dest: "{{ iris_deploy_dir }}"
+    version: "{{ iris_version }}"
+  become: true
+
+# Seed .env from the shipped model ONCE, then set the lab values. force:false keeps
+# a later hand-edit from being clobbered on re-run (same pattern as the misp role).
+- name: Seed .env from .env.model (first run only)
+  ansible.builtin.copy:
+    src: "{{ iris_deploy_dir }}/.env.model"
+    dest: "{{ iris_deploy_dir }}/.env"
+    remote_src: true
+    force: false
+    mode: "0640"
+  become: true
+
+- name: Configure .env (listen port, pinned image tags, secrets, admin password)
+  ansible.builtin.lineinfile:
+    path: "{{ iris_deploy_dir }}/.env"
+    regexp: "^#?{{ item.k }}="
+    line: "{{ item.k }}={{ item.v }}"
+  loop:
+    - { k: "INTERFACE_HTTPS_PORT", v: "{{ iris_https_port }}" }
+    - { k: "DB_IMAGE_TAG", v: "{{ iris_version }}" }
+    - { k: "APP_IMAGE_TAG", v: "{{ iris_version }}" }
+    - { k: "NGINX_IMAGE_TAG", v: "{{ iris_version }}" }
+    - { k: "POSTGRES_PASSWORD", v: "{{ iris_postgres_password }}" }
+    - { k: "POSTGRES_ADMIN_PASSWORD", v: "{{ iris_postgres_admin_password }}" }
+    - { k: "IRIS_SECRET_KEY", v: "{{ iris_secret_key }}" }
+    - { k: "IRIS_SECURITY_PASSWORD_SALT", v: "{{ iris_security_salt }}" }
+    - { k: "IRIS_ADM_PASSWORD", v: "{{ iris_admin_password }}" }
+  loop_control:
+    label: "{{ item.k }}"
+  become: true
+
+- name: Pull the IRIS images (arm64)
+  ansible.builtin.command:
+    cmd: docker compose pull
+    chdir: "{{ iris_deploy_dir }}"
+  become: true
+  changed_when: false
+
+- name: Bring up the IRIS stack
+  ansible.builtin.command:
+    cmd: docker compose up -d
+    chdir: "{{ iris_deploy_dir }}"
+  become: true
+  register: iris_up
+  changed_when: "'Started' in iris_up.stderr or 'Created' in iris_up.stderr"
+
+- name: Wait for the IRIS web UI to answer on {{ iris_https_port }}
+  ansible.builtin.shell: >
+    curl -sk -o /dev/null -w '%{http_code}'
+    https://127.0.0.1:{{ iris_https_port }}/login
+  become: true
+  register: iris_web
+  until: iris_web.stdout in ['200', '302']
+  retries: 30
+  delay: 10
+  changed_when: false

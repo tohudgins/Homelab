@@ -18,3 +18,9 @@ wazuh_group: wazuh
 # `cake user change_authkey admin@misp.lab.internal` on misp-01 and update here).
 misp_hook_url: "https://10.10.30.20"
 misp_api_key: "XUFMa9Bs4xf0r8rDUHtq6eWfhF08aqlLfusVaxNz"
+
+# DFIR-IRIS integration (integratord -> IRIS alert creation). IRIS runs on the SOC
+# Docker host misp-01 (port 8443, since MISP owns 443). The key is an IRIS admin
+# user API key (regenerate in the IRIS UI: profile -> Renew API key, update here).
+iris_hook_url: "https://10.10.30.20:8443"
+iris_api_key: "7fvj6kV3Bmwf0fTtrA9D7P1u77eZwYPFrbgWVJmyENRVbzGyMWLdlZuPf8-lzUB_s1eFvrXuZTmslJc0ySMCcA"

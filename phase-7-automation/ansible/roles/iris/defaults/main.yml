@@ -1,0 +1,20 @@
+---
+# DFIR-IRIS incident-response case-management platform, deployed on misp-01 (SOC
+# segment) alongside MISP. arm64-native (app + postgres + nginx + rabbitmq), unlike
+# TheHive+Cortex whose images are amd64-only and stack is 4 JVMs — a poor fit for
+# this ARM64/24GB host. Reproducible counterpart to the manual 2026-09-02 build.
+# The Wazuh -> IRIS alert-forwarding integration lives in the `siem` role
+# (custom-iris + the <integration> block).
+iris_repo: "https://github.com/dfir-iris/iris-web.git"
+iris_version: "v2.4.20"            # pinned; arm64-verified in ghcr for all three images
+iris_deploy_dir: /opt/iris-web
+iris_https_port: 8443             # MISP already binds 443 on this host
+
+# Lab secrets — this is an internal, non-internet-exposed lab, the same posture as
+# the MISP api_key / weak AD passwords already committed in this repo. A real
+# deployment rotates these (IRIS UI -> profile, and the DB) and stores them vaulted.
+iris_admin_password: "QxeOJN+llFqMlfF2tWPw"
+iris_postgres_password: "a49f572ff4822b1f354f630977af536d451333791e6bd6cc"
+iris_postgres_admin_password: "0f7723885d421289605e1ee5653f9b99482fe643452cef7b"
+iris_secret_key: "9b7ee3e86ca79a037db67b48ca6b3784ec4351aa9ca868fc11e07eb6f383dbf0"
+iris_security_salt: "9ed1f655810218c83f77a12105d43acacb4a74e83920ac868403f4cb2341391c"

@@ -1,0 +1,14 @@
+#!/bin/sh
+# Wazuh integratord wrapper — runs custom-iris.py with the alert file + args.
+# Uses system python3 (which has `requests`); the Wazuh-bundled python does not.
+WPYTHON_BIN="framework/python/bin/python3"
+SCRIPT_PATH_NAME="$0"
+DIR_NAME="$(cd "$(dirname "${SCRIPT_PATH_NAME}")"; pwd -P)"
+SCRIPT_NAME="$(basename "${SCRIPT_PATH_NAME}")"
+PYTHON_SCRIPT="${DIR_NAME}/${SCRIPT_NAME}.py"
+
+if [ "${DIR_NAME}/../${WPYTHON_BIN}" ] && "${DIR_NAME}/../${WPYTHON_BIN}" -c "import requests" 2>/dev/null; then
+    "${DIR_NAME}/../${WPYTHON_BIN}" "${PYTHON_SCRIPT}" "$@"
+else
+    /usr/bin/env python3 "${PYTHON_SCRIPT}" "$@"
+fi
