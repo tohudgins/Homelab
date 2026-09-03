@@ -76,9 +76,16 @@ siem-01 off from everything arriving via rtr-01, including my own admin session.
   attacker (or an operator) who trips the AR against a shared/gateway IP can blackhole legitimate traffic.
 - **Recovery** used the segmentation itself: `misp-01` (same SOC segment, a *different* unblocked source IP)
   could still reach siem-01, so I jumped `-J misp-01` onto siem-01 and removed the two DROP rules.
-- **Follow-up (noted, not yet done):** give the `firewall-drop` AR a bounded `<timeout>` and/or an
-  allow-list for infrastructure IPs (gateway, admin host), so a brute-force can't turn into a self-inflicted
-  outage. The current block is effective but unbounded.
+- **Fixed (2026-09-03):** on inspection the block was *not* unbounded — the `firewall-drop` AR already carries
+  `<timeout>600</timeout>` (rules_id 100010,100011), so any block self-heals in 10 minutes. The real gap was the
+  allow-list: only loopback sat in the AR `<global>` `<white_list>`, so the segment gateways / jump host could
+  still be blackholed for those 10 minutes. Added the four segment-gateway IPs (`10.10.10.1` CORP / `10.10.20.1`
+  DMZ / `10.10.30.1` SOC-jump / `10.10.40.1` REDTEAM, all = rtr-01) to the whitelist and codified it in the
+  `siem` role (`ansible-playbook siem.yml` converges `changed=0`). **Verified:** re-running the same brute-force
+  through the jump still fires rule 100011 (L12) but adds **no** `iptables DROP` for `10.10.30.1`
+  (`wazuh-analysisd: INFO: White listing IP: '10.10.30.1'`), and the admin path stays up. A whitelisted source
+  is filtered at analysisd *before* the AR is dispatched, so `active-responses.log` shows no firewall-drop this
+  time — the exact opposite of the original incident.
 
 ## Reproduce
 ```bash

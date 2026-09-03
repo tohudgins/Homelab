@@ -135,6 +135,29 @@
       </ossec_config>
   notify: Restart wazuh-manager
 
+# Active-response self-DoS guard: firewall-drop (rules 100010/100011) blocks the
+# source IP *as siem-01 sees it*. Traffic that arrives via the jump/gateway shows
+# up as a segment gateway IP (rtr-01 is the gateway on every segment AND the SSH
+# jump host), so a brute-force test blackholed 10.10.30.1 and cut the admin path.
+# Whitelisting the four gateway IPs means the AR can never drop critical infra.
+# CORP=10.10.10.1  DMZ=10.10.20.1  SOC/jump=10.10.30.1  REDTEAM=10.10.40.1.
+# Wazuh merges every <global> across ossec_config sections (the stock config
+# already ships two), so this rides as its own block like the integrations above.
+- name: Whitelist segment-gateway IPs from active response (infra self-DoS guard)
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: "<!-- {mark} ANSIBLE MANAGED: infra whitelist (active-response self-DoS guard) -->"
+    block: |
+      <ossec_config>
+        <global>
+          <white_list>10.10.10.1</white_list>
+          <white_list>10.10.20.1</white_list>
+          <white_list>10.10.30.1</white_list>
+          <white_list>10.10.40.1</white_list>
+        </global>
+      </ossec_config>
+  notify: Restart wazuh-manager
+
 # Apply the restart now (not at play end) so the verification below runs against
 # the freshly-loaded ruleset — a broken rule file fails here, loudly, instead of
 # silently leaving analysisd down.
