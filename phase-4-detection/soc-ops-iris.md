@@ -89,4 +89,18 @@ ssh siem-01 "sudo grep -a 'custom-iris' /var/ossec/logs/ossec.log"   # integrato
 curl -sk https://10.10.30.20:8443/alerts/filter -H 'Authorization: Bearer <iris_api_key>'  # alert landed
 ```
 - IRIS UI: `https://10.10.30.20:8443` — `administrator` / (see the private VM inventory note).
-- Next natural step: enrich an IRIS alert's IOCs via its **MISP module**, and promote an alert to a full case.
+
+## 6. The analyst workflow, demonstrated (2026-09-03)
+Closed the loop the way an analyst would, all via the IRIS API against real data:
+1. **Escalated** the spray alert (#2) into **Case #2** — the full Wazuh context carried into the case.
+2. **Investigated:** added the attacker IP (`10.10.40.119`) and the compromised account (`svc-sql`) as
+   **IOCs**, and a **timeline** event for the detection.
+3. **Responded:** added a remediation **task** ("rotate svc-sql + all svc-* passwords; audit Kerberoastable
+   SPN accounts").
+4. **Enriched with intel:** cross-referenced the indicators against **MISP** — `10.10.40.119` → **0 matches**
+   (internal origin, no known-bad-infra overlap), with the enrichment path verified live against a real feed
+   C2 IP (`218.106.246.195` → MISP event 5, "C2 IP"). Verdict recorded on the case timeline.
+
+That is the whole point of the layer: **Wazuh detects → integratord opens an IRIS alert → the analyst
+escalates to a case, builds the timeline and tasks, and enriches with MISP intel** — three professional tools
+working as one SOC.
