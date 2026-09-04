@@ -14,7 +14,9 @@
     {"technique": "T1482",     "test": 2, "desc": "Domain Trust Discovery (nltest /domain_trusts)",               "expect_rules": ["100111"]},
     {"technique": "T1201",     "test": 6, "desc": "Password Policy Discovery (net accounts)",                     "expect_rules": ["100113"]},
     {"technique": "T1057",     "test": 2, "desc": "Process Discovery (tasklist) [Sigma]",                         "expect_rules": ["100502", "100503"]},
-    {"technique": "T1033",     "test": 1, "desc": "System Owner/User Discovery (whoami) [Sigma]",                 "expect_rules": ["100504", "100505"]}
+    {"technique": "T1033",     "test": 1, "desc": "System Owner/User Discovery (whoami) [Sigma]",                 "expect_rules": ["100504", "100505"]},
+    {"technique": "T1082",     "test": 1, "desc": "System Information Discovery (systeminfo) [Sigma]",            "expect_rules": ["100509", "100510"]},
+    {"technique": "T1007",     "test": 1, "desc": "System Service Discovery (sc query) [Sigma]",                  "expect_rules": ["100507", "100508"]}
   ],
-  "_comment_t1105": "T1105 (certutil urlcache download, Sigma rules 100500/100501) is deliberately NOT in this live battery: Microsoft Defender (real-time protection ON) kills certutil download before the process spawns, so the technique produces no telemetry to detect on this host — a defense-in-depth finding, not a detection gap. The rules' logic is proven instead by phase-4-detection/sigma/sigma-selftest.py (TP + precision), and the rules are deployed and parsed live. See phase-4-detection/sigma/README.md."
+  "_comment_not_in_battery": "Two Sigma rules are verified outside this ART battery, both documented in phase-4-detection/sigma/README.md and proven by phase-4-detection/sigma/sigma-selftest.py: (1) T1105 certutil download (rules 100500/1) — Microsoft Defender kills certutil download before it spawns, so there's no telemetry (defense-in-depth, not a gap). (2) T1562.001 Defender exclusion via PowerShell (ps_script rule 100506) — this host's offline Atomic Red Team bundle has no T1562.001 atomic, so it was live-fired manually (Add-MpPreference -ExclusionPath) to prove the ps_script->Wazuh path fires end-to-end, then the exclusion was removed."
 }

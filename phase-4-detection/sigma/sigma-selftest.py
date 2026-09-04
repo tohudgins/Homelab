@@ -76,6 +76,24 @@ CASES = [
     ("powershell (not a user-discovery binary) — precision", "100504",
      {"win.eventdata.originalFileName": "PowerShell.EXE", "win.eventdata.image": r"C:\...\powershell.exe",
       "win.eventdata.commandLine": "powershell whoami"}, False),
+    # T1082 — system information discovery (systeminfo)
+    ("systeminfo (originalFileName variant)", "100509",
+     {"win.eventdata.originalFileName": "systeminfo.exe", "win.eventdata.image": r"C:\Windows\System32\systeminfo.exe",
+      "win.eventdata.commandLine": "systeminfo"}, True),
+    # T1007 — system service discovery (sc query) — needs sc.exe AND a query verb
+    ("sc query (bin + verb)", "100507",
+     {"win.eventdata.originalFileName": "sc.exe", "win.eventdata.image": r"C:\Windows\System32\sc.exe",
+      "win.eventdata.commandLine": "sc query state= all"}, True),
+    ("sc create (bin, wrong verb) — precision", "100507",
+     {"win.eventdata.originalFileName": "sc.exe", "win.eventdata.image": r"C:\Windows\System32\sc.exe",
+      "win.eventdata.commandLine": "sc create evil binPath= C:\\evil.exe"}, False),
+    # T1562.001 — Defender exclusion via PowerShell (ps_script, EID 4104) — cmdlet AND -Exclusion*
+    ("Add-MpPreference -ExclusionPath (cmdlet + exclusion)", "100506",
+     {"win.eventdata.scriptBlockText": "Add-MpPreference -ExclusionPath C:\\Users\\Public"}, True),
+    ("Set-MpPreference -DisableRealtimeMonitoring (no exclusion) — precision", "100506",
+     {"win.eventdata.scriptBlockText": "Set-MpPreference -DisableRealtimeMonitoring $true"}, False),
+    ("Get-MpPreference (read only, no exclusion) — precision", "100506",
+     {"win.eventdata.scriptBlockText": "Get-MpPreference | Select ExclusionPath"}, False),
 ]
 
 

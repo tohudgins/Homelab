@@ -1,0 +1,34 @@
+title: Windows Defender Exclusion Added Via PowerShell
+id: 326e5f27-ffc1-4716-8da0-39b085542138
+status: experimental
+description: |
+    Detects adding a Microsoft Defender exclusion via PowerShell
+    (Add-/Set-MpPreference with an -Exclusion* parameter). Attackers carve out a
+    path/process/extension exclusion so their subsequent tooling runs unscanned —
+    a common defense-evasion step. Requires Script Block Logging (Sysmon/PS EID 4104).
+references:
+    - https://attack.mitre.org/techniques/T1562/001/
+author: Tyler Hudgins (homelab)
+date: 2026-09-04
+tags:
+    - attack.defense-evasion
+    - attack.t1562.001
+logsource:
+    category: ps_script
+    product: windows
+    definition: 'Requirements: Script Block Logging must be enabled'
+detection:
+    selection_cmdlet:
+        ScriptBlockText|contains:
+            - 'Add-MpPreference'
+            - 'Set-MpPreference'
+    selection_exclusion:
+        ScriptBlockText|contains:
+            - '-ExclusionPath'
+            - '-ExclusionExtension'
+            - '-ExclusionProcess'
+            - '-ExclusionIpAddress'
+    condition: all of selection_*
+falsepositives:
+    - Legitimate administration adding an exclusion (should be rare and reviewed)
+level: high

@@ -1,0 +1,30 @@
+title: System Service Discovery Via Sc.EXE
+id: 48a2cb25-3721-47f0-b793-f42ddb9cab40
+status: experimental
+description: |
+    Detects service enumeration with sc.exe (query / queryex / getkeyname),
+    used to inventory installed services — often to find a service to abuse for
+    persistence or privilege escalation, or to spot AV/EDR services.
+references:
+    - https://attack.mitre.org/techniques/T1007/
+author: Tyler Hudgins (homelab)
+date: 2026-09-04
+tags:
+    - attack.discovery
+    - attack.t1007
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection_bin:
+        - OriginalFileName: 'sc.exe'
+        - Image|endswith: '\sc.exe'
+    selection_verb:
+        CommandLine|contains:
+            - ' query'
+            - ' queryex'
+            - ' getkeyname'
+    condition: selection_bin and selection_verb
+falsepositives:
+    - Administrative service inventory
+level: low

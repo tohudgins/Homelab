@@ -43,6 +43,9 @@ Rules live on siem-01 at `/var/ossec/etc/rules/local_rules.xml` (mirrored in thi
 | 28 | [T1057 – Process Discovery](https://attack.mitre.org/techniques/T1057/) | 100502, 100503 | ws-01 (Sysmon EID1) | ✅ verified TP live (purple-team) — **authored as Sigma**, compiled by `sigma/sigma-to-wazuh.py` (2026-09-04) |
 | 29 | [T1033 – System Owner/User Discovery](https://attack.mitre.org/techniques/T1033/) | 100504, 100505 | ws-01 (Sysmon EID1) | ✅ verified TP live (purple-team; whoami/quser/qwinsta) — **Sigma-compiled** (2026-09-04) |
 | 30 | [T1105 – Ingress Tool Transfer](https://attack.mitre.org/techniques/T1105/) (+ T1027) | 100500, 100501 | ws-01 (Sysmon EID1) | ⚠️ rule deployed + parsed; logic verified by `sigma/sigma-selftest.py` (TP + precision). **Live-fire blocked by Defender** (kills `certutil` download pre-spawn → no telemetry; a defense-in-depth finding). **Verbatim upstream SigmaHQ rule** (2026-09-04) |
+| 31 | [T1082 – System Information Discovery](https://attack.mitre.org/techniques/T1082/) | 100509, 100510 | ws-01 (Sysmon EID1) | ✅ verified TP live (purple-team; systeminfo) — **Sigma-compiled** (2026-09-04) |
+| 32 | [T1007 – System Service Discovery](https://attack.mitre.org/techniques/T1007/) | 100507, 100508 | ws-01 (Sysmon EID1) | ✅ verified TP live (purple-team; `sc query`) — **Sigma-compiled** (2026-09-04) |
+| 33 | [T1562.001 – Impair Defenses (Windows)](https://attack.mitre.org/techniques/T1562/001/) | 100506 | ws-01 (PowerShell EID 4104) | ✅ verified TP live (manual — `Add-MpPreference -ExclusionPath` → L12) — **first `ps_script` Sigma rule**; complements the Linux 100060 (2026-09-04) |
 
 (#6 is tagged with both IDs deliberately: the rule can't distinguish creating a new local account from
 modifying an existing one's credentials — same file, same rule, same broad-not-narrow tradeoff as the
@@ -1221,18 +1224,22 @@ process that runs more than a few seconds is killed, as verified against a contr
 
 ## Sigma detection-as-code (2026-09-04)
 
-Rules 28–30 above aren't hand-written Wazuh XML — they're authored as portable **Sigma** and compiled to
+Rules 28–33 above aren't hand-written Wazuh XML — they're authored as portable **Sigma** and compiled to
 Wazuh rules by a purpose-built `sigma-to-wazuh.py` (there's no clean off-the-shelf Sigma→Wazuh path: no
 official pySigma backend, the community Python tool is abandoned, and the Go successor's generic field maps
-don't know this lab's decoders). The compiler maps `windows/process_creation` Sigma onto
-`<if_group>sysmon_event1</if_group>` + `win.eventdata.*` pcre2 fields, multiplies OR-logic out into multiple
-Wazuh rules (Wazuh has no rule-level OR), carries MITRE tags + level through, and keeps stable Sigma-GUID→ID
-mappings. Full writeup, converter design, and honest limitations: [`sigma/README.md`](sigma/README.md).
+don't know this lab's decoders). A per-logsource dispatch maps `windows/process_creation` onto
+`<if_group>sysmon_event1</if_group>` + `win.eventdata.*` and `windows/ps_script` (PowerShell EID 4104) onto
+`<if_sid>91802</if_sid>` + `win.eventdata.scriptBlockText`; OR-logic is multiplied out into multiple Wazuh
+rules (Wazuh has no rule-level OR), MITRE tags + level carry through, and Sigma-GUID→ID mappings stay stable.
+Full writeup, converter design, and honest limitations: [`sigma/README.md`](sigma/README.md).
 
-- **T1057 / T1033** — verified firing end-to-end on ws-01 (purple-team battery now **11/11**).
+- **T1057 / T1033 / T1082 / T1007** — verified firing end-to-end on ws-01 (purple-team battery now **13/13**).
+- **T1562.001** (rule 100506) — the first **`ps_script`** rule, proving the compiler's second logsource. ART's
+  offline bundle here has no T1562.001 atomic, so it was live-fired manually (`Add-MpPreference -ExclusionPath`
+  → rule 100506 fired **L12** on real EID 4104 telemetry, then the exclusion was removed).
 - **T1105** — the certutil rule is the **verbatim upstream SigmaHQ rule**, proving the compiler ingests real
   community Sigma. It can't be exercised live here because **Defender kills `certutil` download before it
   spawns** — no process, no telemetry: the endpoint control *is* the outer detection layer, and the Sigma
   rule is the layer that catches it wherever that control is absent or bypassed. Its logic (true-positive +
-  precision, incl. no FP on benign `certutil -hashfile`) is proven by `sigma/sigma-selftest.py`.
+  precision, incl. no FP on benign `certutil -hashfile`) is proven by `sigma/sigma-selftest.py` (now **15/15**).
 

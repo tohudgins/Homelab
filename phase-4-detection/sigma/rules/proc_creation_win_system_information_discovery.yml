@@ -1,0 +1,25 @@
+title: System Information Discovery
+id: d3040e48-cf18-416a-ae0d-6d6f5d564e5a
+status: experimental
+description: |
+    Detects execution of systeminfo.exe, used by operators and malware to
+    fingerprint the host (OS build, patch level, domain, hardware) for
+    situational awareness early in a compromise.
+references:
+    - https://attack.mitre.org/techniques/T1082/
+author: Tyler Hudgins (homelab)
+date: 2026-09-04
+tags:
+    - attack.discovery
+    - attack.t1082
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        - OriginalFileName: 'systeminfo.exe'
+        - Image|endswith: '\systeminfo.exe'
+    condition: selection
+falsepositives:
+    - Inventory and support scripts
+level: low

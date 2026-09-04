@@ -52,10 +52,16 @@ DEFAULT_OUT = os.path.join(
 DEFAULT_IDMAP = os.path.join(HERE, "id-map.json")
 DEFAULT_RULES = os.path.join(HERE, "rules")
 
-# --- Sigma (Windows process_creation) field -> Wazuh decoded field -----------
-# These are the fields Wazuh's stock Sysmon decoders expose for EID 1; keeping
-# the map explicit (rather than a generic tool's guess) is the whole point.
-FIELD_MAP = {
+# --- Sigma logsource -> Wazuh (anchor + field map) ---------------------------
+# Each supported Sigma logsource is pinned to (a) the Wazuh rule this lab's stock
+# ruleset already uses as the parent for that telemetry, and (b) the decoded
+# field names Wazuh exposes. Keeping these explicit — rather than a generic
+# tool's guess — is the whole point of a lab-tuned compiler.
+#
+# process_creation  = Sysmon EID 1  -> group sysmon_event1, win.eventdata.*
+# ps_script         = PowerShell Script Block Logging EID 4104 -> stock rule
+#                     91802 ("PowerShell executed a ScriptBlock"), scriptBlockText
+PROC_FIELDS = {
     "Image": "win.eventdata.image",
     "OriginalFileName": "win.eventdata.originalFileName",
     "CommandLine": "win.eventdata.commandLine",
@@ -69,6 +75,21 @@ FIELD_MAP = {
     "Product": "win.eventdata.product",
     "Description": "win.eventdata.description",
     "Hashes": "win.eventdata.hashes",
+}
+PS_FIELDS = {
+    "ScriptBlockText": "win.eventdata.scriptBlockText",
+    "Path": "win.eventdata.path",
+    "ScriptBlockId": "win.eventdata.scriptBlockId",
+}
+# (product, category) -> {"anchor": (kind, value), "fields": {...},
+#                         "show": preferred field to interpolate into the description}
+LOGSOURCE = {
+    ("windows", "process_creation"): {
+        "anchor": ("if_group", "sysmon_event1"), "fields": PROC_FIELDS,
+        "show": ("win.eventdata.commandLine", "win.eventdata.image")},
+    ("windows", "ps_script"): {
+        "anchor": ("if_sid", "91802"), "fields": PS_FIELDS,
+        "show": ("win.eventdata.scriptBlockText",)},
 }
 
 # Sigma severity -> Wazuh level. L12 = "confirmed attack technique" in this lab's
@@ -119,7 +140,7 @@ def build_pattern(values, modifiers):
     return "(?i)" + body
 
 
-def _compile_map(sel):
+def _compile_map(sel, field_map):
     """A Sigma map {field|mod: value(s)} -> AND-list of Wazuh field matchers:
        [(wazuh_field, pcre2_pattern), ...]  (all AND'd together)."""
     matchers = []
@@ -129,11 +150,11 @@ def _compile_map(sel):
         unknown = mods - SUPPORTED_MODIFIERS
         if unknown:
             raise SkipRule(f"unsupported field modifier(s) {sorted(unknown)} on '{key}'")
-        if field not in FIELD_MAP:
-            raise SkipRule(f"field '{field}' not in the process_creation map")
+        if field not in field_map:
+            raise SkipRule(f"field '{field}' not mapped for this logsource")
         if raw is None:
             raise SkipRule(f"null match on '{key}' (field-exists test) unsupported")
-        wfield = FIELD_MAP[field]
+        wfield = field_map[field]
         values = raw if isinstance(raw, list) else [raw]
         if "all" in mods:
             # every value must be present -> one <field> per value (Wazuh AND's them)
@@ -144,7 +165,7 @@ def _compile_map(sel):
     return matchers
 
 
-def compile_selection(sel):
+def compile_selection(sel, field_map):
     """A Sigma selection -> list of ALTERNATIVES (an OR), where each alternative
     is an AND-list of (wazuh_field, pcre2) matchers.
       - a map            -> 1 alternative
@@ -152,12 +173,12 @@ def compile_selection(sel):
     Wazuh AND's <field> lines and has no rule-level OR, so a multi-alternative
     selection is later multiplied out into multiple Wazuh rules (Cartesian)."""
     if isinstance(sel, dict):
-        return [_compile_map(sel)]
+        return [_compile_map(sel, field_map)]
     if isinstance(sel, list):
         if not all(isinstance(x, dict) for x in sel):
             raise SkipRule("selection is a list of keywords (full-text search) "
                            "— no field context to map to a Wazuh field")
-        return [_compile_map(x) for x in sel]
+        return [_compile_map(x, field_map) for x in sel]
     raise SkipRule(f"unsupported selection type {type(sel).__name__}")
 
 
@@ -274,9 +295,10 @@ class IdAllocator:
 
 
 # --- emit --------------------------------------------------------------------
-def render_rule(rid, level, matchers, negs, desc, techniques, groups, comment):
+def render_rule(rid, level, anchor, matchers, negs, desc, techniques, groups, comment):
+    kind, value = anchor          # ("if_group", "sysmon_event1") | ("if_sid", "91802")
     lines = [f"  <!-- {comment} -->", f'  <rule id="{rid}" level="{level}">']
-    lines.append("    <if_group>sysmon_event1</if_group>")
+    lines.append(f"    <{kind}>{value}</{kind}>")
     for wfield, pat in matchers:
         lines.append(f'    <field name="{wfield}" type="pcre2">{xml_escape(pat)}</field>')
     for wfield, pat in negs:
@@ -303,9 +325,12 @@ def compile_file(path, alloc):
         raise SkipRule("no logsource+detection document")
 
     ls = doc.get("logsource", {})
-    if ls.get("product") != "windows" or ls.get("category") != "process_creation":
-        raise SkipRule(f"logsource {ls.get('product')}/{ls.get('category')} "
-                       "unsupported (only windows/process_creation in v1)")
+    lskey = (ls.get("product"), ls.get("category"))
+    cfg = LOGSOURCE.get(lskey)
+    if cfg is None:
+        raise SkipRule(f"logsource {lskey[0]}/{lskey[1]} unsupported "
+                       f"(have: {', '.join(f'{p}/{c}' for p, c in LOGSOURCE)})")
+    anchor, field_map, show_pref = cfg["anchor"], cfg["fields"], cfg["show"]
 
     detection = doc["detection"]
     cond = detection.get("condition")
@@ -314,7 +339,7 @@ def compile_file(path, alloc):
     selections = {k: v for k, v in detection.items() if k != "condition"}
 
     # pre-compile every named selection (raises SkipRule on anything unmappable)
-    compiled = {name: compile_selection(sel) for name, sel in selections.items()}
+    compiled = {name: compile_selection(sel, field_map) for name, sel in selections.items()}
     variants = parse_condition(cond, selections)
 
     guid = doc.get("id") or os.path.basename(path)
@@ -349,14 +374,14 @@ def compile_file(path, alloc):
         key = guid if not multi else f"{guid}#{idx}"
         rid = alloc.get(key)
         # interpolate a helpful field into the description if present
-        shown = next((wf for wf, _ in matchers
-                      if wf in ("win.eventdata.commandLine", "win.eventdata.image")), None)
+        present = {wf for wf, _ in matchers}
+        shown = next((wf for wf in show_pref if wf in present), None)
         suffix = f" — $({shown})" if shown else ""
         desc = f"[Sigma] {title}{suffix}"
         comment = f"Sigma: {title} | id={guid} | src={os.path.basename(path)}"
         if multi:
             comment += f" | variant {idx + 1}/{len(emitted)}"
-        rendered.append(render_rule(rid, level, matchers, negs, desc,
+        rendered.append(render_rule(rid, level, anchor, matchers, negs, desc,
                                     techniques, groups, comment))
     return rendered, {"title": title, "techniques": techniques, "variants": len(emitted)}
 
