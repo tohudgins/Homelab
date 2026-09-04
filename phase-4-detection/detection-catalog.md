@@ -40,6 +40,9 @@ Rules live on siem-01 at `/var/ossec/etc/rules/local_rules.xml` (mirrored in thi
 | 25 | [T1548.002 – Abuse Elevation Control: Bypass UAC](https://attack.mitre.org/techniques/T1548/002/) | 100117, 100118 | ws-01 (Sysmon EID13) | ✅ verified TP — closes the mscfile/Event-Viewer gap in stock 92304, + maps disable-UAC-via-reg (2026-08-27) |
 | 26 | [T1021.002 – Remote Services: SMB/Windows Admin Shares](https://attack.mitre.org/techniques/T1021/002/) | 100119, 100120 | ws-01 → dc-01 (net use / New-SmbMapping) | ✅ verified TP (C$/ADMIN$ access; IPC$ excluded as noise) — stock only mistagged T1059.003 (2026-08-27) |
 | 27 | [T1110.003 – Brute Force: Password Spraying](https://attack.mitre.org/techniques/T1110/003/) | 100400, 100401 | dc-01 (Samba smbd audit / `log.smbd`) | ✅ verified TP live — spray returned a real cred (`svc-sql`); per-account rule 100041 confirmed blind to it. Required new telemetry (`log.smbd` was unmonitored) (2026-09-02) — see [`phase-5-offense/attack-detect-writeups/02-password-spray-smb.md`](../phase-5-offense/attack-detect-writeups/02-password-spray-smb.md) |
+| 28 | [T1057 – Process Discovery](https://attack.mitre.org/techniques/T1057/) | 100502, 100503 | ws-01 (Sysmon EID1) | ✅ verified TP live (purple-team) — **authored as Sigma**, compiled by `sigma/sigma-to-wazuh.py` (2026-09-04) |
+| 29 | [T1033 – System Owner/User Discovery](https://attack.mitre.org/techniques/T1033/) | 100504, 100505 | ws-01 (Sysmon EID1) | ✅ verified TP live (purple-team; whoami/quser/qwinsta) — **Sigma-compiled** (2026-09-04) |
+| 30 | [T1105 – Ingress Tool Transfer](https://attack.mitre.org/techniques/T1105/) (+ T1027) | 100500, 100501 | ws-01 (Sysmon EID1) | ⚠️ rule deployed + parsed; logic verified by `sigma/sigma-selftest.py` (TP + precision). **Live-fire blocked by Defender** (kills `certutil` download pre-spawn → no telemetry; a defense-in-depth finding). **Verbatim upstream SigmaHQ rule** (2026-09-04) |
 
 (#6 is tagged with both IDs deliberately: the rule can't distinguish creating a new local account from
 modifying an existing one's credentials — same file, same rule, same broad-not-narrow tradeoff as the
@@ -1215,3 +1218,21 @@ session-0, and a Squiblydoo `regsvr32` gets terminated by Defender — both ofte
 detect→respond latency, so a transient test process is frequently already gone when the AR lands (logged
 as "could not kill, process not found"). That's a property of the *test target*, not the response: a real
 process that runs more than a few seconds is killed, as verified against a controlled long-lived victim.
+
+## Sigma detection-as-code (2026-09-04)
+
+Rules 28–30 above aren't hand-written Wazuh XML — they're authored as portable **Sigma** and compiled to
+Wazuh rules by a purpose-built `sigma-to-wazuh.py` (there's no clean off-the-shelf Sigma→Wazuh path: no
+official pySigma backend, the community Python tool is abandoned, and the Go successor's generic field maps
+don't know this lab's decoders). The compiler maps `windows/process_creation` Sigma onto
+`<if_group>sysmon_event1</if_group>` + `win.eventdata.*` pcre2 fields, multiplies OR-logic out into multiple
+Wazuh rules (Wazuh has no rule-level OR), carries MITRE tags + level through, and keeps stable Sigma-GUID→ID
+mappings. Full writeup, converter design, and honest limitations: [`sigma/README.md`](sigma/README.md).
+
+- **T1057 / T1033** — verified firing end-to-end on ws-01 (purple-team battery now **11/11**).
+- **T1105** — the certutil rule is the **verbatim upstream SigmaHQ rule**, proving the compiler ingests real
+  community Sigma. It can't be exercised live here because **Defender kills `certutil` download before it
+  spawns** — no process, no telemetry: the endpoint control *is* the outer detection layer, and the Sigma
+  rule is the layer that catches it wherever that control is absent or bypassed. Its logic (true-positive +
+  precision, incl. no FP on benign `certutil -hashfile`) is proven by `sigma/sigma-selftest.py`.
+

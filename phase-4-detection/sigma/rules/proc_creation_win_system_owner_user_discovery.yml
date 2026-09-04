@@ -1,0 +1,31 @@
+title: System Owner Or User Discovery
+id: f26d8bf4-c262-4161-b925-243dd54ddb29
+status: experimental
+description: |
+    Detects execution of whoami.exe / quser.exe / qwinsta.exe — utilities an
+    attacker uses to identify the current user, privileges, and logged-on
+    sessions after gaining execution on a host.
+references:
+    - https://attack.mitre.org/techniques/T1033/
+author: Tyler Hudgins (homelab)
+date: 2026-09-03
+tags:
+    - attack.discovery
+    - attack.t1033
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection_bin:
+        - OriginalFileName:
+              - 'whoami.exe'
+              - 'quser.exe'
+              - 'qwinsta.exe'
+        - Image|endswith:
+              - '\whoami.exe'
+              - '\quser.exe'
+              - '\qwinsta.exe'
+    condition: selection_bin
+falsepositives:
+    - Administrators and support staff checking session/identity context
+level: low

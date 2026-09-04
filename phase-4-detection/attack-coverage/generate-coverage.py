@@ -20,7 +20,12 @@ import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
-WAZUH_RULES = os.path.join(REPO, "phase-7-automation/ansible/roles/siem/files/local_rules.xml")
+WAZUH_RULE_FILES = [
+    os.path.join(REPO, "phase-7-automation/ansible/roles/siem/files/local_rules.xml"),
+    # Sigma-compiled rules (phase-4-detection/sigma/) — a generated artifact, but
+    # every <mitre><id> in it counts toward coverage the same as a hand-written rule.
+    os.path.join(REPO, "phase-7-automation/ansible/roles/siem/files/sigma_local_rules.xml"),
+]
 SURICATA_RULES = os.path.join(REPO, "phase-7-automation/ansible/roles/router/files/suricata-local.rules")
 PT_TESTS = os.path.join(REPO, "phase-5-offense/purple-team/tests.json")
 AD_VALIDATE = os.path.join(REPO, "phase-5-offense/purple-team/ad-validate.py")
@@ -35,11 +40,14 @@ def norm(t):
 
 def wazuh_techniques():
     cov = {}  # technique -> set(rule ids)
-    xml = open(WAZUH_RULES).read()
-    for m in re.finditer(r'<rule id="(\d+)"[^>]*>(.*?)</rule>', xml, re.S):
-        rid, body = m.group(1), m.group(2)
-        for t in re.findall(r'<id>(T[0-9.]+)</id>', body):
-            cov.setdefault(norm(t), set()).add(rid)
+    for path in WAZUH_RULE_FILES:
+        if not os.path.exists(path):
+            continue
+        xml = open(path).read()
+        for m in re.finditer(r'<rule id="(\d+)"[^>]*>(.*?)</rule>', xml, re.S):
+            rid, body = m.group(1), m.group(2)
+            for t in re.findall(r'<id>(T[0-9.]+)</id>', body):
+                cov.setdefault(norm(t), set()).add(rid)
     return cov
 
 

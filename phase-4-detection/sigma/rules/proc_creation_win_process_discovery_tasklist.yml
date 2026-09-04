@@ -1,0 +1,26 @@
+title: Process Discovery Via Tasklist
+id: 2bcf956a-6a97-4372-b54e-21242f4d1df9
+status: experimental
+description: |
+    Detects execution of tasklist.exe, commonly used by operators and malware to
+    enumerate running processes for situational awareness (e.g. spotting AV/EDR,
+    analysis tooling, or a target process) early in a compromise.
+references:
+    - https://attack.mitre.org/techniques/T1057/
+    - https://lolbas-project.github.io/
+author: Tyler Hudgins (homelab)
+date: 2026-09-03
+tags:
+    - attack.discovery
+    - attack.t1057
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        - OriginalFileName: 'tasklist.exe'
+        - Image|endswith: '\tasklist.exe'
+    condition: selection
+falsepositives:
+    - Legitimate administration and inventory scripts
+level: low

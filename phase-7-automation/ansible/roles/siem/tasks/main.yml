@@ -70,6 +70,20 @@
     mode: "0660"
   notify: Restart wazuh-manager
 
+# Sigma detection-as-code: portable Sigma YAML (phase-4-detection/sigma/rules/)
+# compiled to Wazuh XML by sigma-to-wazuh.py. This is a GENERATED artifact —
+# edit the Sigma sources and re-run the compiler, never this file. Wazuh loads
+# every *.xml under etc/rules/ (the <rule_dir>etc/rules</rule_dir> default), so
+# it sits alongside local_rules.xml without any ossec.conf change.
+- name: Deploy Sigma-compiled rules (detection-as-code)
+  ansible.builtin.copy:
+    src: sigma_local_rules.xml
+    dest: "{{ wazuh_rules_dir }}/sigma_local_rules.xml"
+    owner: root
+    group: "{{ wazuh_group }}"
+    mode: "0660"
+  notify: Restart wazuh-manager
+
 # --- MISP integration: integratord -> MISP IOC lookup ------------------------
 # The professional TIP as the live IOC engine behind Wazuh. integratord runs
 # custom-misp on matching alerts (level>=3); the script self-filters to alerts
