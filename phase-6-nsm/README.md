@@ -19,6 +19,11 @@ servers live; inter-segment attack traffic is routed through rtr-01, so it appea
   class: an `nmap` service scan of the CORP AD servers. The **mirror image** of the DCSync finding —
   ET Open fires no port-scan signature at all, yet Zeek's `conn.log` shows the scan unmistakably as a
   fan-out (268 connections, 102 ports, 189 `REJ` from one source in ~2 s).
+- [`dns-tunneling.md`](dns-tunneling.md) — detecting **exfiltration over DNS** (T1071.004 / T1048.003), verified
+  against a live `iodine` tunnel (fs-01→atk-01). Two ways: a real-time Suricata rule (sid 9100010, long encoded
+  query names to REDTEAM at volume — fired 100×) and a quantitative Zeek `dns.log` hunt
+  ([`hunt-dns-tunnel.py`](hunt-dns-tunnel.py)) that scored the tunnel zone 94 (360 queries, 100% unique, mean
+  127c/max 681c) against normal DNS in single digits. **Verified live 2026-09-05.**
 - [`captures/phase5-attacks.pcap`](captures/phase5-attacks.pcap) · [`captures/recon-scan.pcap`](captures/recon-scan.pcap) — the raw captures.
 
 ## The headline finding

@@ -29,3 +29,22 @@ alert tls $HOME_NET any -> 10.10.40.0/24 443 (msg:"LAB SLIVER C2 HTTPS beacon - 
 # beacon's ~5s interval a source produces >10 SYNs/min, so 10-in-60s fires while
 # ordinary browsing (which reuses connections) does not.
 alert tcp $HOME_NET any -> 10.10.40.0/24 443 (msg:"LAB C2 beaconing - repeated conns to REDTEAM:443 (T1071)"; flags:S; detection_filter:track by_src, count 10, seconds 60; classtype:trojan-activity; sid:9100002; rev:1; metadata:mitre_tactic TA0011, mitre_technique T1071;)
+
+# ============================================================================
+# DNS tunneling / exfiltration over DNS (T1071.004 Application Layer Protocol:
+# DNS; T1048.003 Exfiltration Over Alternative Protocol). An implant encodes
+# data into the subdomain labels of an attacker-controlled zone; outbound DNS is
+# almost always permitted, so it slips egress filtering. Verified against an
+# iodine tunnel from fs-01 (CORP) to atk-01 (REDTEAM) — Zeek/Suricata logged
+# query names 590-1000+ chars long (normal names are <40). Full writeup +
+# quantitative dns.log hunt: phase-6-nsm/dns-tunneling.md.
+# ============================================================================
+
+# (3) DNS tunneling — abnormally long, high-entropy query names to REDTEAM, at
+# volume. The length alone is a strong signal (a 100+ char qname is already
+# abnormal; a tunnel's are far longer); the detection_filter requires 20 such
+# names/min from one source, so a rare long lookup doesn't alert but a tunnel's
+# sustained stream does. Encoding-agnostic (matches the length/shape, not a
+# specific codec). Scoped to REDTEAM:53 — a CORP host streaming long DNS names to
+# the attacker segment is the anomaly.
+alert dns $HOME_NET any -> 10.10.40.0/24 53 (msg:"LAB DNS tunneling - long encoded query names to REDTEAM (T1071.004 / T1048.003)"; dns.query; pcre:"/^.{100}/"; detection_filter:track by_src, count 20, seconds 60; classtype:data-theft; sid:9100010; rev:2; metadata:mitre_tactic TA0010, mitre_technique T1071_004, mitre_technique T1048_003;)
