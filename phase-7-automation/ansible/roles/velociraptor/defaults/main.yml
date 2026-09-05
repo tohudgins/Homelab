@@ -1,0 +1,35 @@
+---
+# Velociraptor — endpoint DFIR + VQL fleet hunting. Single arm64-native Go binary:
+# the server (frontend + GUI) runs on siem-01 (SOC), clients enroll from CORP.
+# Offline-install pattern (like isos/): the release binaries are fetched to the
+# controller once and this role copies them in — no host-side internet needed.
+#
+# ARCH NOTE: there is NO windows-arm64 Velociraptor build (checked v0.77.2). ws-01
+# is Windows-on-ARM64, so its client is the windows-amd64 binary run under Windows
+# 11's x64 emulation. Linux hosts use the native linux-arm64 build. The Windows
+# client is deployed by a documented script (see the writeup), matching this repo's
+# "Windows managed manually" posture — this role automates the server + Linux fleet.
+
+velociraptor_version: "0.77.2"
+velociraptor_server_ip: "10.10.30.10"        # siem-01 on SOC — clients dial this
+velociraptor_frontend_port: 8000              # client comms (opened CORP->SOC in nftables)
+velociraptor_gui_port: 8889                   # GUI (reach via SSH tunnel; binds localhost)
+
+# GUI admin. Internal, non-internet-exposed lab — same secret posture as the iris
+# role's committed password. A real deployment rotates this and stores it vaulted.
+velociraptor_gui_user: "admin"
+velociraptor_gui_password: "VelociLab2026!"
+
+# Controller-side staging dir holding the release binaries (gitignored; fetched from
+# github.com/Velocidex/velociraptor releases per the offline pattern).
+velociraptor_binary_dir: "{{ playbook_dir }}/../../phase-4-detection/velociraptor/binaries"
+velociraptor_linux_binary: "velociraptor-v{{ velociraptor_version }}-linux-arm64"
+
+# On-host layout
+velociraptor_bin: /usr/local/bin/velociraptor
+velociraptor_config_dir: /etc/velociraptor
+velociraptor_datastore: /opt/velociraptor/datastore
+
+# Where the server play drops the derived client config on the CONTROLLER, for the
+# client play to pick up (one `ansible-playbook velociraptor.yml` run, server first).
+velociraptor_client_config_fetch: "/tmp/velociraptor-client.config.yaml"

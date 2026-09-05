@@ -1,0 +1,109 @@
+---
+# --- Velociraptor SERVER on siem-01 -----------------------------------------
+- name: Create config + datastore directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0750"
+  loop:
+    - "{{ velociraptor_config_dir }}"
+    - "{{ velociraptor_datastore }}"
+
+- name: Deploy the Velociraptor binary (offline — copied from controller staging)
+  ansible.builtin.copy:
+    src: "{{ velociraptor_binary_dir }}/{{ velociraptor_linux_binary }}"
+    dest: "{{ velociraptor_bin }}"
+    mode: "0755"
+  notify:
+    - Restart velociraptor server
+
+- name: Check for an existing server config (generate-once)
+  ansible.builtin.stat:
+    path: "{{ velociraptor_config_dir }}/server.config.yaml"
+  register: velo_server_cfg
+
+# Treat an absent OR zero-byte file as "needs generation" (a half-written config
+# from an interrupted run must not be adopted).
+- name: Decide whether to generate the config
+  ansible.builtin.set_fact:
+    velo_need_gen: "{{ (not velo_server_cfg.stat.exists) or (velo_server_cfg.stat.size | default(0) == 0) }}"
+
+# Self-signed deployment, non-interactive. --merge patches the generated defaults:
+# clients dial the SOC IP; the datastore is durable (not /var/tmp); GUI stays on
+# localhost (reached via SSH tunnel). Passed via argv (no shell) so the JSON isn't
+# mangled; generated once so the CA/keys are stable and enrolled clients keep trusting.
+- name: Generate the server config
+  ansible.builtin.command:
+    argv:
+      - "{{ velociraptor_bin }}"
+      - config
+      - generate
+      - --merge
+      - >-
+        {"Client":{"server_urls":["https://{{ velociraptor_server_ip }}:{{ velociraptor_frontend_port }}/"]},"Datastore":{"location":"{{ velociraptor_datastore }}","filestore_directory":"{{ velociraptor_datastore }}"},"GUI":{"bind_address":"127.0.0.1"},"Frontend":{"bind_address":"0.0.0.0"}}
+  register: velo_gen
+  when: velo_need_gen
+
+- name: Write the server config
+  ansible.builtin.copy:
+    content: "{{ velo_gen.stdout }}\n"
+    dest: "{{ velociraptor_config_dir }}/server.config.yaml"
+    mode: "0640"
+  when: velo_need_gen
+  notify:
+    - Restart velociraptor server
+
+- name: Create the GUI admin user (first install only)
+  ansible.builtin.command:
+    argv:
+      - "{{ velociraptor_bin }}"
+      - --config
+      - "{{ velociraptor_config_dir }}/server.config.yaml"
+      - user
+      - add
+      - "{{ velociraptor_gui_user }}"
+      - "{{ velociraptor_gui_password }}"
+      - --role
+      - administrator
+  when: velo_need_gen
+
+- name: Derive the client config (first install only)
+  ansible.builtin.command:
+    argv:
+      - "{{ velociraptor_bin }}"
+      - --config
+      - "{{ velociraptor_config_dir }}/server.config.yaml"
+      - config
+      - client
+  register: velo_client_gen
+  when: velo_need_gen
+
+- name: Write the client config
+  ansible.builtin.copy:
+    content: "{{ velo_client_gen.stdout }}\n"
+    dest: "{{ velociraptor_config_dir }}/client.config.yaml"
+    mode: "0640"
+  when: velo_need_gen
+
+- name: Install the server systemd unit
+  ansible.builtin.template:
+    src: velociraptor-server.service.j2
+    dest: /etc/systemd/system/velociraptor-server.service
+    mode: "0644"
+  notify:
+    - Restart velociraptor server
+
+- name: Enable and start the Velociraptor server
+  ansible.builtin.systemd:
+    name: velociraptor-server
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# Hand the derived client config to the controller so the client play can deploy it
+# in this same `ansible-playbook velociraptor.yml` run (server play runs first).
+- name: Fetch the client config to the controller
+  ansible.builtin.fetch:
+    src: "{{ velociraptor_config_dir }}/client.config.yaml"
+    dest: "{{ velociraptor_client_config_fetch }}"
+    flat: true

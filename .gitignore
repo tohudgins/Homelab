@@ -13,3 +13,7 @@ phase-7-automation/ansible/.vault_pass
 
 # Lab-control secrets (ws-01 encryption passphrase etc.)
 scripts/.lab-secrets
+
+# Velociraptor binaries — large (~70MB each), fetched from GitHub releases per the
+# offline-install pattern (like isos/); staged locally, deployed by the ansible role.
+phase-4-detection/velociraptor/binaries/

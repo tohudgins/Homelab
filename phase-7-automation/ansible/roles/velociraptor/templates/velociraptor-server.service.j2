@@ -1,0 +1,14 @@
+[Unit]
+Description=Velociraptor DFIR server (frontend + GUI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={{ velociraptor_bin }} --config {{ velociraptor_config_dir }}/server.config.yaml frontend
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

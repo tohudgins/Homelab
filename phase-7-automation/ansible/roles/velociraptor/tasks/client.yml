@@ -1,0 +1,38 @@
+---
+# --- Velociraptor CLIENT on Linux endpoints (dc-01, fs-01) -------------------
+- name: Create config directory
+  ansible.builtin.file:
+    path: "{{ velociraptor_config_dir }}"
+    state: directory
+    mode: "0750"
+
+- name: Deploy the Velociraptor binary (offline — copied from controller staging)
+  ansible.builtin.copy:
+    src: "{{ velociraptor_binary_dir }}/{{ velociraptor_linux_binary }}"
+    dest: "{{ velociraptor_bin }}"
+    mode: "0755"
+  notify:
+    - Restart velociraptor client
+
+- name: Deploy the client config (derived + fetched from the server play)
+  ansible.builtin.copy:
+    src: "{{ velociraptor_client_config_fetch }}"
+    dest: "{{ velociraptor_config_dir }}/client.config.yaml"
+    mode: "0640"
+  notify:
+    - Restart velociraptor client
+
+- name: Install the client systemd unit
+  ansible.builtin.template:
+    src: velociraptor-client.service.j2
+    dest: /etc/systemd/system/velociraptor-client.service
+    mode: "0644"
+  notify:
+    - Restart velociraptor client
+
+- name: Enable and start the Velociraptor client
+  ansible.builtin.systemd:
+    name: velociraptor-client
+    enabled: true
+    state: started
+    daemon_reload: true

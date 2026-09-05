@@ -1,0 +1,45 @@
+name: Custom.Hunt.ImplantIOC
+description: |
+  Fleet hunt for two implant indicators, one per platform, in a single hunt:
+
+  - **Linux** — ELF executables staged in world-writable directories
+    (/tmp, /dev/shm, /var/tmp). This is the exact IOC the Add-1 Sliver C2
+    exercise produced (the beacon ran from /tmp on fs-01) and that Wazuh rule
+    100200 catches at execution time; here Velociraptor sweeps the *fleet's
+    disks* for the dropped file itself, hashed, whether or not it is running.
+
+  - **Windows** — autostart entries under the Run / RunOnce registry keys
+    (T1547.001 Boot or Logon Autostart Execution), the classic persistence
+    location, across HKLM and every loaded user hive.
+
+  Cross-platform by design: each client runs only the source whose precondition
+  matches its OS, so one hunt covers the whole fleet. Hunt-as-code — the Velociraptor
+  counterpart to the Sigma detection-as-code track.
+author: Tyler Hudgins (homelab)
+
+sources:
+  - name: LinuxWorldWritableELF
+    precondition: SELECT OS FROM info() WHERE OS = "linux"
+    query: |
+      SELECT OSPath AS Path,
+             Size,
+             timestamp(epoch=Mtime) AS Modified,
+             hash(path=OSPath).SHA256 AS SHA256
+      FROM glob(globs=["/tmp/**", "/dev/shm/**", "/var/tmp/**"])
+      WHERE NOT IsDir
+        AND Size > 4
+        AND read_file(filename=OSPath, length=4) =~ "ELF"
+
+  - name: WindowsRunKeys
+    precondition: SELECT OS FROM info() WHERE OS = "windows"
+    query: |
+      SELECT OSPath AS Path,
+             Name,
+             Data.value AS Command
+      FROM glob(globs=[
+             "HKEY_USERS\\*\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\*",
+             "HKEY_USERS\\*\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce\\*",
+             "HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\*",
+             "HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce\\*"],
+           accessor="registry")
+      WHERE Data.value

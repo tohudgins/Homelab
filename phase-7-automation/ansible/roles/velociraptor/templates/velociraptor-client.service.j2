@@ -1,0 +1,14 @@
+[Unit]
+Description=Velociraptor DFIR client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={{ velociraptor_bin }} --config {{ velociraptor_config_dir }}/client.config.yaml client
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

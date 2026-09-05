@@ -1,0 +1,12 @@
+---
+- name: Restart velociraptor server
+  ansible.builtin.systemd:
+    name: velociraptor-server
+    state: restarted
+    daemon_reload: true
+
+- name: Restart velociraptor client
+  ansible.builtin.systemd:
+    name: velociraptor-client
+    state: restarted
+    daemon_reload: true

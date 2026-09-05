@@ -1,0 +1,28 @@
+---
+# Deploy Velociraptor: the DFIR server on siem-01 (SOC) and Linux clients on CORP.
+# One invocation, server play first so the client play can pick up the derived
+# client config the server play fetched to the controller.
+#
+# PREREQUISITE (offline pattern): fetch the release binaries to the controller once —
+#   gh release download v0.77.2 -R Velocidex/velociraptor \
+#     -p 'velociraptor-v0.77.2-linux-arm64' -p 'velociraptor-v0.77.2-windows-amd64.exe' \
+#     -D phase-4-detection/velociraptor/binaries/
+# The CORP->SOC:8000 firewall path is opened by the `router` role.
+# The Windows client (ws-01) is installed by the script in the writeup (no ansible
+# Windows management in this lab yet) — see phase-4-detection/velociraptor/README.md.
+
+- name: Velociraptor DFIR server (siem-01)
+  hosts: siem
+  become: true
+  vars:
+    velociraptor_mode: server
+  roles:
+    - velociraptor
+
+- name: Velociraptor Linux clients (dc-01, fs-01)
+  hosts: domain_controllers:fileservers
+  become: true
+  vars:
+    velociraptor_mode: client
+  roles:
+    - velociraptor

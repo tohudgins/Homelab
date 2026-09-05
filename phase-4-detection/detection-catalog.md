@@ -87,6 +87,15 @@ for *every* installed version. The full active-vs-passive comparison against Gre
 hosts is in [`vulnerability-management-active-vs-passive.md`](vulnerability-management-active-vs-passive.md).
 Query recipe: `curl -sk -u admin:<pw> https://127.0.0.1:9200/wazuh-states-vulnerabilities*/_search`.
 
+**Endpoint DFIR — Velociraptor (a capability, not an ATT&CK rule; 2026-09-04).** Deployed a Velociraptor
+DFIR server on siem-01 + a 3-host fleet (dc-01/fs-01 native arm64, ws-01 Windows amd64 under emulation — no
+windows-arm64 build exists) as an Ansible role. This adds **on-demand, cross-fleet live-response / VQL
+hunting**, the twin of the streaming SIEM detections tabled above. It is deliberately **not** added to the
+ATT&CK coverage map — a VQL hunt across disks/registry is a different instrument from a real-time rule, and
+counting it as coverage would overstate the ruleset. Proven by a fleet hunt that found a planted implant on
+every affected host (Sliver beacon in `/tmp` by hash on both Linux hosts; a Run-key persistence entry on
+ws-01). Full writeup: [`velociraptor/README.md`](velociraptor/README.md).
+
 **Deliberately deferred, not forgotten:**
 - **NSM / Suricata rule-writing** — wired Suricata's `eve.json` into Wazuh (real ingestion, verified
   flowing) as prep, but building actual detections on top of it is explicitly **Phase 6** scope in the

@@ -1,0 +1,10 @@
+---
+galaxy_info:
+  role_name: velociraptor
+  description: >
+    Velociraptor endpoint DFIR + VQL fleet hunting — arm64-native server on siem-01
+    (SOC) and Linux clients on CORP. Offline binary install; self-signed, generated
+    once. The Windows client (ws-01) is deployed by a documented script (no
+    windows-arm64 build exists; runs the amd64 client under Windows 11 emulation).
+  min_ansible_version: "2.14"
+dependencies: []
