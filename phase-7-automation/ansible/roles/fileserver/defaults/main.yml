@@ -12,6 +12,20 @@ fileserver_share_path: /srv/samba/public
 # AD group (winbind-resolved) that owns the share; matches the live box.
 fileserver_share_group: "domain users"
 
+# Ransomware canary (T1486 Impact) — a decoy "finance records" directory under
+# realtime FIM that legitimate users never touch. It's bait: a ransomware run that
+# sweeps the file server encrypts these too, producing a burst of FIM change events
+# that Wazuh rules 100430/100431 turn into an Impact alert. Filled with a few
+# valuable-looking decoy files so there's something to encrypt.
+fileserver_canary_path: /srv/finance-records
+fileserver_canary_files:
+  - Q3-Financials-2026.csv
+  - Payroll-Master.csv
+  - Acquisition-NDA.txt
+  - Bank-Wire-Instructions.txt
+  - Customer-PII-Export.csv
+  - Board-Minutes-Confidential.txt
+
 # Wazuh agent — same pinned version/repo as the other agents.
 wazuh_agent_version: "4.14.7-1"
 wazuh_apt_key_url: "https://packages.wazuh.com/key/GPG-KEY-WAZUH"

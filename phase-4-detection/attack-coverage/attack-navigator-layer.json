@@ -6,7 +6,7 @@
     "layer": "4.5"
   },
   "domain": "enterprise-attack",
-  "description": "Detection coverage generated from the homelab ruleset: 41 techniques with a custom detection, 17 validated end-to-end by the purple-team harness. Dark green = validated, light green = detection exists. Regenerate with generate-coverage.py.",
+  "description": "Detection coverage generated from the homelab ruleset: 42 techniques with a custom detection, 17 validated end-to-end by the purple-team harness. Dark green = validated, light green = detection exists. Regenerate with generate-coverage.py.",
   "techniques": [
     {
       "techniqueID": "T1003.006",
@@ -251,6 +251,13 @@
       "score": 50,
       "color": "#66bb6a",
       "comment": "detection \u2014 100020",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1486",
+      "score": 50,
+      "color": "#66bb6a",
+      "comment": "detection \u2014 100430, 100431",
       "enabled": true
     },
     {

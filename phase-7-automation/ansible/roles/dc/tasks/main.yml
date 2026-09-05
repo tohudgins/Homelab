@@ -32,6 +32,18 @@
     validate: testparm -s %s
   notify: Restart samba-ad-dc
 
+# --- Active-response: the custom Samba-AD account disabler (rules 100040/100041) ---
+# Deploy the AR script as code so it can't drift from the repo (it had been
+# hand-deployed; a stale copy is how a bug reaches production unseen). The script
+# refuses protected + machine ($) accounts — see phase-4-detection/disable-ad-account.py.
+- name: Deploy the disable-ad-account active-response script
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../phase-4-detection/disable-ad-account.py"
+    dest: /var/ossec/active-response/bin/disable-ad-account
+    owner: root
+    group: wazuh
+    mode: "0750"
+
 # --- Telemetry: ship smbd's SMB/NTLM auth log to Wazuh (password-spray detection) ---
 # smbd handles SMB session-setup auth and logs it to log.smbd, NOT log.samba (the AD DC
 # process, which is all the Kerberoast/Kerberos-brute rules ever read). Failed SMB logons

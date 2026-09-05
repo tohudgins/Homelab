@@ -1,11 +1,12 @@
-# Deception — an AD honeytoken tripwire
+# Deception — honeytoken + ransomware canary
 
-**The cheapest, highest-signal detection in the lab.** Every other rule in the catalog reasons about
+**The cheapest, highest-signal detections in the lab.** Every other rule in the catalog reasons about
 *behaviour* and lives with a false-positive tradeoff — a brute-force threshold a real user can trip, a
-discovery command an admin also runs. A **honeytoken** sidesteps that entirely: plant something that looks
+discovery command an admin also runs. A **decoy** sidesteps that entirely: plant something that looks
 valuable but that **no legitimate process ever touches**, and any interaction with it is malicious *by
-definition*. There is no benign explanation, so the rule fires at **level 14** — above everything else in the
-catalog — with essentially zero false positives.
+definition*. There is no benign explanation, so the rule fires at the top of the severity range with
+essentially zero false positives. Two decoys are deployed here: an **AD honeytoken** (§1) and a
+**ransomware canary** (§2).
 
 > [!check] Deployed and verified live on 2026-09-05.
 > A decoy AD service account `svc-sqladmin` (attractive `MSSQLSvc/sql-prod.lab.internal` SPN, strong
@@ -116,6 +117,65 @@ detection is indifferent to which tool sends the request.
 - **Closes the documented 100031 evasion** with a detection that has no threshold to evade.
 - **As code, converges `changed=0`:** the decoy in the `dc` role (`dc_honeytoken_accounts`), the rules in the
   `siem` role.
+
+---
+
+## 2. Ransomware canary (T1486 — Impact)
+
+The same decoy idea, applied to files, and it fills a tactic the catalog was missing: **Impact**. On the file
+server (`fs-01`, a prime ransomware target) a decoy directory `/srv/finance-records/` holds valuable-looking
+bait — `Payroll-Master.csv`, `Q3-Financials-2026.csv`, `Customer-PII-Export.csv`, … — under **realtime FIM**.
+No legitimate user ever opens it, so two signals, both deployed as code (canary + FIM in the `fileserver`
+role, rules in the `siem` role):
+
+```xml
+<!-- 100430: ANY change to a canary file — it's bait, so a single touch is already an incident -->
+<rule id="100430" level="12">
+  <if_sid>550,553,554</if_sid>                                   <!-- FIM modify/delete/add -->
+  <field name="file" type="pcre2">^/srv/finance-records/</field>
+  <description>Ransomware canary tampering — decoy file $(file) was changed ...</description>
+  <mitre><id>T1486</id></mitre>
+</rule>
+
+<!-- 100431: a BURST of canary changes = mass encryption, not a human editing one file -->
+<rule id="100431" level="13" frequency="8" timeframe="20">
+  <if_matched_sid>100430</if_matched_sid>
+  <same_agent />
+  <description>Ransomware behavior — 8+ canary files changed in 20s (mass-encryption burst).</description>
+  <mitre><id>T1486</id></mitre>
+</rule>
+```
+
+The two levels encode two ideas: **100430** treats the canary as a tripwire (one touch = incident, like the
+honeytoken), and **100431** adds the ransomware *fingerprint* — many files rewritten in seconds, the cadence a
+human editing a document never produces.
+
+**Verify by exercising.** A benign simulation on `fs-01` did what ransomware does to a share — overwrote each
+decoy with random bytes, renamed it `.locked`, and dropped a ransom note:
+
+```bash
+for f in *.csv *.txt; do head -c 200 /dev/urandom | base64 > "$f"; mv "$f" "$f.locked"; done
+echo "YOUR FILES ARE ENCRYPTED" > READ_ME_RANSOM.txt
+```
+→ realtime FIM turned that into a burst of change events and Wazuh fired both rules:
+```
+Rule: 100430 (level 12)  ->  'Ransomware canary tampering — decoy file ... was changed'   (x13, per file)
+Rule: 100431 (level 13)  ->  'Ransomware behavior — 8+ canary files changed in 20s (mass-encryption burst).'   agent fs-01
+```
+The decoys were then restored (`ansible-playbook fileserver.yml` re-seeds the originals). Alert-only — no
+active response is attached, so this can't disable an account or take a destructive action (deliberate, given
+the incident below).
+
+**A real active-response finding, surfaced and fixed during this work.** Bringing `fs-01` back from suspend,
+its machine account (`FS-01$`) made a burst of failed Kerberos pre-auths (post-resume), which tripped the
+Kerberos brute-force rule (100041) whose active-response, `disable-ad-account.py`, **disabled the machine
+account** — dropping `fs-01` out of the domain (winbind could no longer resolve `domain users`). Worse, a
+*disabled* machine account's own continued auth keeps failing, which looks like *more* brute force and
+re-triggers the same response: a self-sustaining lockout loop ([[Active Response Collateral Damage]]). Fix:
+the AR now refuses machine accounts (`sAMAccountName` ending in `$`), the same way it already refused
+`administrator`/`krbtgt`/`guest` — a decoy or a threshold rule must never be weaponizable into a DoS of your
+own infrastructure. The script is now deployed **as code** by the `dc` role (it had been hand-deployed, which
+is how the stale copy hid the gap). Impact tactic added (T1486); catalog technique **#37**.
 
 ## Reproduce
 

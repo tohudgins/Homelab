@@ -204,6 +204,35 @@
     <group>deception,honeytoken,attack,credential_access,</group>
   </rule>
 
+  <!--
+    RANSOMWARE CANARY (T1486 Impact) — a decoy "finance records" directory on fs-01 under realtime FIM
+    that no legitimate user ever touches (deployed by the fileserver role). Two signals:
+      100430 (L12) — ANY change to a canary file. It's bait, so a single touch is already an incident
+                     (same tripwire logic as the AD honeytoken above), scoped by the `file` path.
+      100431 (L13) — a BURST of canary changes (8+ in 20s from one agent). That cadence — many files
+                     rewritten in seconds — is the fingerprint of ransomware encrypting a share, as opposed
+                     to a human editing one file. Fills the Impact tactic. See phase-4-detection/deception/.
+  -->
+  <rule id="100430" level="12">
+    <if_sid>550,553,554</if_sid>
+    <field name="file" type="pcre2">^/srv/finance-records/</field>
+    <description>Ransomware canary tampering — decoy file $(file) was changed (nobody should ever touch this).</description>
+    <mitre>
+      <id>T1486</id>
+    </mitre>
+    <group>deception,ransomware_canary,attack,impact,</group>
+  </rule>
+
+  <rule id="100431" level="13" frequency="8" timeframe="20">
+    <if_matched_sid>100430</if_matched_sid>
+    <same_agent />
+    <description>Ransomware behavior — 8+ canary files changed in 20s (mass-encryption burst).</description>
+    <mitre>
+      <id>T1486</id>
+    </mitre>
+    <group>ransomware_canary,attack,impact,</group>
+  </rule>
+
 </group>
 
 <!--

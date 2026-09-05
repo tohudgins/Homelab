@@ -24,6 +24,15 @@ LOG = "/var/ossec/logs/active-responses.log"
 # deliberately failing Kerberos auth as a real admin account to get it locked.
 PROTECTED_ACCOUNTS = {"administrator", "krbtgt", "guest"}
 
+# Machine/computer accounts (sAMAccountName ends in '$') are ALSO never disabled.
+# Disabling one breaks the domain member outright, and worse, creates a
+# self-sustaining loop: a disabled machine account's own continued Kerberos auth
+# (winbind, ticket renewal) keeps failing pre-auth, which looks like MORE brute
+# force (rule 100041) and re-triggers this very response. Observed live 2026-09-05
+# when fs-01's post-resume auth burst disabled FS-01$ and the member fell out of
+# the domain until FS-01$ was re-enabled and this guard added. See
+# [[Active Response Collateral Damage]].
+
 
 def log(msg: str) -> None:
     ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -48,6 +57,10 @@ def main() -> None:
 
     if account.lower() in PROTECTED_ACCOUNTS:
         log(f"refusing to act on protected account: {account} (command={command})")
+        sys.exit(0)
+
+    if account.endswith("$"):
+        log(f"refusing to act on machine account: {account} (command={command})")
         sys.exit(0)
 
     if command == "add":

@@ -83,7 +83,7 @@
     line: "      <address>{{ wazuh_manager_ip }}</address>"
   notify: Restart wazuh-agent
 
-- name: Realtime FIM on the weak share (flag any tampering with the bait)
+- name: Realtime FIM on the weak share + the ransomware canary
   ansible.builtin.blockinfile:
     path: /var/ossec/etc/ossec.conf
     marker: "<!-- {mark} ANSIBLE MANAGED: fs-01 share FIM -->"
@@ -91,9 +91,25 @@
       <ossec_config>
         <syscheck>
           <directories check_all="yes" report_changes="yes" realtime="yes">{{ fileserver_share_path }}</directories>
+          <directories check_all="yes" report_changes="yes" realtime="yes">{{ fileserver_canary_path }}</directories>
         </syscheck>
       </ossec_config>
   notify: Restart wazuh-agent
+
+# --- Ransomware canary (T1486): decoy "finance records" nobody legitimately touches ---
+- name: Create the ransomware canary directory
+  ansible.builtin.file:
+    path: "{{ fileserver_canary_path }}"
+    state: directory
+    mode: "0770"
+
+- name: Seed valuable-looking decoy files into the canary (create-only)
+  ansible.builtin.copy:
+    dest: "{{ fileserver_canary_path }}/{{ item }}"
+    content: "DECOY — homelab ransomware canary. Not real data. Any change here is an incident.\n"
+    mode: "0660"
+    force: false
+  loop: "{{ fileserver_canary_files }}"
 
 # Endpoint detection for a dropped C2 implant / malware executing from a
 # world-writable path (the gap the Phase 8 Sliver hunt exposed: an in-memory
