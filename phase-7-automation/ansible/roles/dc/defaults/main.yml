@@ -29,6 +29,19 @@ dc_service_accounts:
     spn: "HTTP/webapp.lab.internal"
     description: "Web app pool identity (lab-weak, Kerberoastable)"
 
+# DECEPTION — AD honeytoken (tripwire, ~zero FP). A decoy service account with an
+# attractive, production-looking SPN that NO legitimate process ever uses, so any
+# TGS-REQ for it (Kerberoast) or auth as it is malicious by definition. Unlike the
+# accounts above it gets a STRONG, uncrackable password on purpose: the value is the
+# detection that fires when it's touched (Wazuh rules 100420/100421, level 14), not
+# a crackable secret. Same create/SPN tasks as the real accounts; the DCSync /
+# Backup-Operators over-privilege tasks target svc-backup only, never this decoy.
+dc_honeytoken_accounts:
+  - name: svc-sqladmin
+    password: "Zt7$Qk92wLp!Rx4vMn6bH1s"
+    spn: "MSSQLSvc/sql-prod.lab.internal:1433"
+    description: "SQL Server (prod) service account"
+
 # Ordinary unprivileged user — the principal the Phase 4/5 attacks authenticate
 # as, proving Kerberoasting needs no special privilege. (This password only takes
 # effect on a from-scratch rebuild; on the live DC jdoe already exists and is

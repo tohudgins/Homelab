@@ -171,6 +171,39 @@
   patterns, out of scope for a rule this lab can verify against real telemetry).
   -->
 
+  <!--
+    DECEPTION: AD honeytoken (svc-sqladmin) — a decoy service account with an attractive SPN
+    (MSSQLSvc/sql-prod.lab.internal) and a strong, uncrackable password. NO legitimate process ever
+    requests a ticket for it or authenticates as it, so ANY interaction is malicious by definition -- a
+    tripwire with ~zero false positives, which is why these fire at level 14 (above every other rule in
+    this catalog). This is what closes the evasion above: the targeted single-SPN Kerberoast that slips
+    under 100031's volume threshold still trips 100420 on the FIRST request, because the signal here is
+    the SPN's identity, not the request count. Deception-backed Credential Access. Managed as code in the
+    dc role (roles/dc: account + SPN) and here (the detections). See phase-4-detection/deception/.
+  -->
+  <rule id="100420" level="14">
+    <if_sid>100030</if_sid>
+    <field name="KDC Authorization.serviceDescription" type="pcre2">(?i)MSSQLSvc/sql-prod\.lab\.internal</field>
+    <options>no_full_log</options>
+    <description>HONEYTOKEN TRIPWIRE — TGS-REQ for decoy account svc-sqladmin by $(KDC Authorization.account) (Kerberoasting against a canary SPN).</description>
+    <mitre>
+      <id>T1558.003</id>
+    </mitre>
+    <group>deception,honeytoken,attack,credential_access,</group>
+  </rule>
+
+  <rule id="100421" level="14">
+    <decoded_as>json</decoded_as>
+    <field name="type">^Authentication$</field>
+    <field name="Authentication.clientAccount" type="pcre2">(?i)^svc-sqladmin(@|$)</field>
+    <options>no_full_log</options>
+    <description>HONEYTOKEN TRIPWIRE — authentication attempt AS decoy account svc-sqladmin ($(Authentication.status)) — stolen/guessed canary credential in use.</description>
+    <mitre>
+      <id>T1078</id>
+    </mitre>
+    <group>deception,honeytoken,attack,credential_access,</group>
+  </rule>
+
 </group>
 
 <!--

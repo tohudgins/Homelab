@@ -59,11 +59,11 @@
   register: samba_users
   changed_when: false
 
-- name: Create deliberately-weak Kerberoastable service accounts
+- name: Create deliberately-weak Kerberoastable service accounts + the honeytoken decoy
   ansible.builtin.command: >-
     samba-tool user create {{ item.name }} '{{ item.password }}'
     --description={{ item.description | quote }}
-  loop: "{{ dc_service_accounts }}"
+  loop: "{{ dc_service_accounts + dc_honeytoken_accounts }}"
   loop_control:
     label: "{{ item.name }}"
   when: item.name not in samba_users.stdout_lines
@@ -80,7 +80,7 @@
 # --- SPNs (what makes the accounts Kerberoastable) ----------------------------
 - name: Read current SPNs per service account
   ansible.builtin.command: samba-tool spn list {{ item.name }}
-  loop: "{{ dc_service_accounts }}"
+  loop: "{{ dc_service_accounts + dc_honeytoken_accounts }}"
   loop_control:
     label: "{{ item.name }}"
   register: spn_list
