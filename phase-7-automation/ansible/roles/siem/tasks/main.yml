@@ -11,6 +11,18 @@
     state: started
   loop: "{{ wazuh_services }}"
 
+# Full-event archiving: stream EVERY event (not just rule-matched alerts) to
+# /var/ossec/logs/archives/archives.json. This is the telemetry substrate for
+# threat hunting (phase-4-detection/threat-hunting) — you cannot stack-count
+# rare processes in a corpus filtered down to what already alerts. Tradeoff:
+# archives grow fast, so a production deployment pairs this with rotation/retention.
+- name: Enable full-event archiving (logall_json) for threat hunting
+  ansible.builtin.replace:
+    path: /var/ossec/etc/ossec.conf
+    regexp: "<logall_json>no</logall_json>"
+    replace: "<logall_json>yes</logall_json>"
+  notify: Restart wazuh-manager
+
 # Decoders must be deployed before/with the rules that reference their fields
 # (e.g. the samba-full-audit decoder feeding rule 100090). Ownership matches
 # what the Wazuh installer sets: wazuh:wazuh 0660.

@@ -1,0 +1,36 @@
+title: File Download Via Bitsadmin
+id: 7f5f1a1a-4b0e-4d9a-9f2e-2c1b3a4d5e6f
+status: experimental
+description: |
+    Detects the use of bitsadmin.exe to create/queue a BITS transfer job, a
+    living-off-the-land download primitive (T1197). BITS jobs survive reboots and
+    logoff and run under the trusted svchost, so operators use bitsadmin to pull
+    tooling to disk while blending in with legitimate update traffic. Surfaced by
+    the rare-process hunt (phase-4-detection/threat-hunting): a one-off
+    bitsadmin.exe with no existing detection.
+references:
+    - https://attack.mitre.org/techniques/T1197/
+    - https://lolbas-project.github.io/lolbas/Binaries/Bitsadmin/
+    - https://github.com/SigmaHQ/sigma/blob/master/rules/windows/process_creation/proc_creation_win_bitsadmin_download.yml
+author: Tyler Hudgins (homelab); detection logic after SigmaHQ
+date: 2026-09-04
+tags:
+    - attack.defense-evasion
+    - attack.persistence
+    - attack.t1197
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection_img:
+        - Image|endswith: '\bitsadmin.exe'
+        - OriginalFileName: 'bitsadmin.exe'
+    selection_flags:
+        CommandLine|contains:
+            - ' /transfer '
+            - ' /create '
+            - ' /addfile '
+    condition: all of selection_*
+falsepositives:
+    - Legitimate software/update tooling that uses BITS to fetch files
+level: medium

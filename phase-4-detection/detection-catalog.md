@@ -46,6 +46,7 @@ Rules live on siem-01 at `/var/ossec/etc/rules/local_rules.xml` (mirrored in thi
 | 31 | [T1082 – System Information Discovery](https://attack.mitre.org/techniques/T1082/) | 100509, 100510 | ws-01 (Sysmon EID1) | ✅ verified TP live (purple-team; systeminfo) — **Sigma-compiled** (2026-09-04) |
 | 32 | [T1007 – System Service Discovery](https://attack.mitre.org/techniques/T1007/) | 100507, 100508 | ws-01 (Sysmon EID1) | ✅ verified TP live (purple-team; `sc query`) — **Sigma-compiled** (2026-09-04) |
 | 33 | [T1562.001 – Impair Defenses (Windows)](https://attack.mitre.org/techniques/T1562/001/) | 100506 | ws-01 (PowerShell EID 4104) | ✅ verified TP live (manual — `Add-MpPreference -ExclusionPath` → L12) — **first `ps_script` Sigma rule**; complements the Linux 100060 (2026-09-04) |
+| 34 | [T1197 – BITS Jobs](https://attack.mitre.org/techniques/T1197/) | 100511, 100512 | ws-01 (Sysmon EID1) | ✅ verified TP live (purple-team; `bitsadmin /transfer`) — **Sigma-compiled**; **found by the rare-process threat hunt** (`phase-4-detection/threat-hunting/`), no prior coverage → authored to close the gap (2026-09-04) |
 
 (#6 is tagged with both IDs deliberately: the rule can't distinguish creating a new local account from
 modifying an existing one's credentials — same file, same rule, same broad-not-narrow tradeoff as the

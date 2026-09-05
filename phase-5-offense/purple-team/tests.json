@@ -16,7 +16,8 @@
     {"technique": "T1057",     "test": 2, "desc": "Process Discovery (tasklist) [Sigma]",                         "expect_rules": ["100502", "100503"]},
     {"technique": "T1033",     "test": 1, "desc": "System Owner/User Discovery (whoami) [Sigma]",                 "expect_rules": ["100504", "100505"]},
     {"technique": "T1082",     "test": 1, "desc": "System Information Discovery (systeminfo) [Sigma]",            "expect_rules": ["100509", "100510"]},
-    {"technique": "T1007",     "test": 1, "desc": "System Service Discovery (sc query) [Sigma]",                  "expect_rules": ["100507", "100508"]}
+    {"technique": "T1007",     "test": 1, "desc": "System Service Discovery (sc query) [Sigma]",                  "expect_rules": ["100507", "100508"]},
+    {"technique": "T1197",     "test": 1, "desc": "BITS Jobs download (bitsadmin) [Sigma] — surfaced by rare-process hunt", "expect_rules": ["100511", "100512"]}
   ],
   "_comment_not_in_battery": "Two Sigma rules are verified outside this ART battery, both documented in phase-4-detection/sigma/README.md and proven by phase-4-detection/sigma/sigma-selftest.py: (1) T1105 certutil download (rules 100500/1) — Microsoft Defender kills certutil download before it spawns, so there's no telemetry (defense-in-depth, not a gap). (2) T1562.001 Defender exclusion via PowerShell (ps_script rule 100506) — this host's offline Atomic Red Team bundle has no T1562.001 atomic, so it was live-fired manually (Add-MpPreference -ExclusionPath) to prove the ps_script->Wazuh path fires end-to-end, then the exclusion was removed."
 }
