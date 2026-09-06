@@ -133,6 +133,54 @@
       </ossec_config>
   notify: Restart wazuh-agent
 
+# --- YARA-on-FIM: scan files written to the share against malware signatures ---
+# FIM says "a file changed on the share"; YARA says "and it matches known-malicious
+# signatures". Rule 100450 (a share-scoped syscheck child) triggers the `yara`
+# active-response, which runs yara.sh on the changed file; a match writes a
+# `wazuh-yara:` line to active-responses.log → shipped to the manager → decoded →
+# rule 100460 (malware alert). jq parses the AR JSON robustly.
+- name: Install YARA + jq (for the FIM malware-scan active response)
+  ansible.builtin.apt:
+    name:
+      - yara
+      - jq
+    state: present
+    update_cache: true
+
+- name: Create the YARA ruleset directory
+  ansible.builtin.file:
+    path: /var/ossec/ruleset/yara/rules
+    state: directory
+    mode: "0750"
+
+- name: Deploy the YARA ruleset
+  ansible.builtin.copy:
+    src: malware.yar
+    dest: /var/ossec/ruleset/yara/rules/malware.yar
+    mode: "0640"
+  notify: Restart wazuh-agent
+
+- name: Deploy the YARA active-response script
+  ansible.builtin.copy:
+    src: yara.sh
+    dest: /var/ossec/active-response/bin/yara
+    owner: root
+    group: wazuh
+    mode: "0750"
+
+- name: Ship the active-response log to the manager (carries YARA scan results)
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: "<!-- {mark} ANSIBLE MANAGED: fs-01 active-response log -->"
+    block: |
+      <ossec_config>
+        <localfile>
+          <log_format>syslog</log_format>
+          <location>/var/ossec/logs/active-responses.log</location>
+        </localfile>
+      </ossec_config>
+  notify: Restart wazuh-agent
+
 - name: Enable and start the Wazuh agent
   ansible.builtin.systemd:
     name: wazuh-agent

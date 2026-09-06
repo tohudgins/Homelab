@@ -184,6 +184,31 @@
       </ossec_config>
   notify: Restart wazuh-manager
 
+# YARA-on-FIM active response: when rule 100450 fires (a file was written to the
+# fs-01 share), run the `yara` script ON THAT AGENT (location=local) to scan the
+# changed file. The script lives at /var/ossec/active-response/bin/yara on fs-01
+# (deployed by the fileserver role); matches come back as rule 100460 via the
+# active-responses.log the agent ships. timeout_allowed=no — a scan isn't a
+# timed block like firewall-drop.
+- name: Register the YARA active-response command + trigger (FIM malware scan)
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: "<!-- {mark} ANSIBLE MANAGED: yara-on-fim active response -->"
+    block: |
+      <ossec_config>
+        <command>
+          <name>yara</name>
+          <executable>yara</executable>
+          <timeout_allowed>no</timeout_allowed>
+        </command>
+        <active-response>
+          <command>yara</command>
+          <location>local</location>
+          <rules_id>100450</rules_id>
+        </active-response>
+      </ossec_config>
+  notify: Restart wazuh-manager
+
 # Apply the restart now (not at play end) so the verification below runs against
 # the freshly-loaded ruleset — a broken rule file fails here, loudly, instead of
 # silently leaving analysisd down.

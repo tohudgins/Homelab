@@ -1044,3 +1044,48 @@
   </rule>
 
 </group>
+
+<!--
+  ============================================================================
+  YARA-on-FIM — malware detection on the fs-01 share. Two-stage:
+  (1) 100450 fires on any file added/modified under the share path (a syscheck
+      child) and is the trigger the `yara` active-response keys on (see the siem
+      role ossec.conf command/active-response) — it runs yara.sh on that agent
+      against the changed file. Level 3: the write itself is routine, it's just
+      the dispatch point.
+  (2) 100460 fires on a YARA match reported back via active-responses.log
+      (decoded by wazuh-yara / wazuh-yara-result) — malware signature matched a
+      file on the share. 100461 surfaces scanner errors so a broken loop is loud,
+      not silent ([[Silent Fallbacks]]).
+  Field note: verify the syscheck path field with wazuh-logtest on first fire
+  (Wazuh exposes the changed path as `file`); the AR trigger only needs 100450 to
+  fire, which the if_group + path match guarantees.
+  ============================================================================
+-->
+<group name="local,yara,malware,">
+
+  <rule id="100450" level="3">
+    <if_group>syscheck</if_group>
+    <field name="file">^/srv/samba/public</field>
+    <description>File added/modified in the fs-01 share — dispatching YARA scan</description>
+    <group>syscheck,yara,</group>
+  </rule>
+
+  <rule id="100460" level="12">
+    <decoded_as>wazuh-yara</decoded_as>
+    <field name="yara_rule">\.+</field>
+    <description>YARA malware match: $(yara_rule) on the fs-01 share — $(yara_scanned_file)</description>
+    <mitre>
+      <id>T1204.002</id>
+    </mitre>
+    <group>yara,malware,attack,</group>
+  </rule>
+
+  <rule id="100461" level="5">
+    <decoded_as>wazuh-yara</decoded_as>
+    <match>wazuh-yara: ERROR</match>
+    <description>YARA active-response error — malware scan did not run correctly</description>
+    <group>yara,</group>
+  </rule>
+
+</group>
