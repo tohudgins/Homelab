@@ -163,7 +163,7 @@
   </rule>
 
   <!--
-  Evasion: correlation counts TGS-REQ OCCURRENCES from one account, not DISTINCT SPNs -- a targeted
+  Evasion: correlation counts TGS-REQ OCCURRENCES from one account, not DISTINCT SPNs — a targeted
   attacker who already knows the one or two SPNs worth cracking (rather than sweeping every SPN in the
   domain) stays under the 3-in-60s threshold and evades this rule entirely. That's a meaningful real-world
   case: a targeted Kerberoast against one juiciest-looking service account looks identical to a legit
@@ -179,7 +179,7 @@
 
   Same ATT&CK ID, genuinely different detection surface: an attacker guessing AD account passwords via
   Kerberos (kinit, or any AD-aware tool) never touches sshd at all, so 100010/100011 are blind to this
-  vector entirely. Reuses the same auth_json_audit telemetry wired up for Kerberoasting above -- Samba
+  vector entirely. Reuses the same auth_json_audit telemetry wired up for Kerberoasting above — Samba
   emits an eventId 4625 (matches real Windows Event ID 4625) per failed pre-auth attempt.
 -->
 <group name="local,kerberos,">
@@ -210,7 +210,7 @@
 
   <!--
   Active response: disables the targeted AD account via samba-tool rather than blocking a source IP.
-  IP-blocking (used for the sshd rules above) doesn't fit here -- a Kerberos brute force can originate
+  IP-blocking (used for the sshd rules above) doesn't fit here — a Kerberos brute force can originate
   from any domain member, and blocking one source IP does nothing if the attacker just tries from
   another host. Disabling the *account* stops the attack regardless of source. Custom script since the
   stock `disable-account` active response only understands local system accounts, not Samba AD accounts.
@@ -227,7 +227,7 @@
 
   Arguably the single highest-value rule in this catalog: an attacker who disables the monitoring itself
   makes every other rule above moot. Chains off the stock sudo rule (5402, any successful sudo-to-root)
-  rather than needing new telemetry -- this is a pure escalation on top of what's already flowing.
+  rather than needing new telemetry — this is a pure escalation on top of what's already flowing.
 -->
 <group name="local,attack,">
 
@@ -244,7 +244,7 @@
   <!--
   Evasion: only catches the OBVIOUS path (systemctl/service stopping the named unit). A more careful
   attacker sends SIGSTOP/SIGKILL directly to the wazuh-agent process, or blocks 1514/tcp outbound at the
-  host firewall, or corrupts the agent's own config -- none of which touch this rule at all, and the
+  host firewall, or corrupts the agent's own config — none of which touch this rule at all, and the
   irony is real: an agent that's been killed can't alert that it was killed. A production deployment
   would pair this with manager-side "agent went silent unexpectedly" monitoring (Wazuh's own
   disconnection alerting), which doesn't depend on the compromised agent reporting anything at all.
@@ -258,13 +258,13 @@
   Wazuh's stock Sysmon EID 13 rules (92300-92304 in 0860-sysmon_id_13.xml) only escalate to a visible
   alert for specific narrow patterns: reg.exe usage (92302), a suspicious file extension in the value
   (92301), or a known remote-access-tool signature (92303). The base classification rule (92300, any
-  write to a Run/RunOnce key) is level 0 -- matched internally, never alerted.
+  write to a Run/RunOnce key) is level 0 — matched internally, never alerted.
 
   Verified this is a real gap, not a theoretical one: writing the exact same Run key via reg.exe
-  triggered 92302 correctly; writing it via PowerShell's New-ItemProperty -- arguably the more common
+  triggered 92302 correctly; writing it via PowerShell's New-ItemProperty — arguably the more common
   real-world persistence method, and one specifically called out because it's what a
   living-off-the-land/fileless technique would actually use instead of the much-more-signature'd
-  reg.exe -- produced zero alerts, even though 92300 matched it silently. This rule closes that gap by
+  reg.exe — produced zero alerts, even though 92300 matched it silently. This rule closes that gap by
   escalating the base rule generically, regardless of which tool wrote the key.
 -->
 <group name="local,attack,">
@@ -281,7 +281,7 @@
   <!--
   Deliberately a level below the stock rules' specific-pattern escalations (12): this is a broad
   catch-all, so it will fire for legitimate app installers adding real autostart entries too, not just
-  attacks. That tradeoff (real coverage vs. real noise) is the honest cost of closing this gap -- see
+  attacks. That tradeoff (real coverage vs. real noise) is the honest cost of closing this gap — see
   detection-catalog.md.
   -->
 

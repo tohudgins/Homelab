@@ -1,5 +1,8 @@
 ---
 galaxy_info:
   role_name: iris
+  author: Tyler Hudgins
+  license: MIT
+  min_ansible_version: "2.15"
   description: DFIR-IRIS incident-response case-management platform (SOC-ops) on Docker (misp-01, SOC segment)
 dependencies: []

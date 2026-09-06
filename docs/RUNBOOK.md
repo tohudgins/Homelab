@@ -134,3 +134,34 @@ make stop     # clean poweroff (cold boot next time)
 ```
 
 Always suspend before unplugging the external SSD. Cap snapshots at 2 per VM.
+
+## 6. CI — validate the repo before you push
+
+GitHub Actions can't run VMware or the VMs, so [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
+statically validates the committed artifacts instead — the same checks a
+detection/infra team runs on the parts that don't execute in CI. Each job maps to
+a command you can run locally:
+
+```bash
+# one-time: the linters CI uses
+pip install "yamllint==1.38.0" "ansible-lint==26.8.0" "ruff==0.15.14" "sigma-cli==3.1.0"
+ansible-galaxy collection install -r phase-7-automation/ansible/collections/requirements.yml
+
+# the checks (each is one CI job)
+yamllint .                                                      # YAML lint
+( cd phase-7-automation/ansible && ansible-playbook --syntax-check site.yml )
+ansible-lint phase-7-automation/ansible/                        # run from repo root
+sigma check phase-4-detection/sigma/rules/                      # detection schema
+ruff check .                                                    # Python lint
+shellcheck -S warning $(git ls-files '*.sh')                    # shell lint
+gitleaks detect -c .gitleaks.toml --exit-code 1                 # secret scan
+
+# Wazuh rule/decoder files are multi-root XML fragments — wrap before validating:
+for x in $(git ls-files '*.xml'); do
+  printf '<_r>%s</_r>' "$(cat "$x")" | xmllint --noout - || echo "BAD: $x"
+done
+```
+
+Config lives at the repo root: `.yamllint`, `.ansible-lint`, `ruff.toml`,
+`.gitleaks.toml`. `ansible-lint` runs at `profile: basic` and must be invoked
+**from the repo root** so it picks up both `.ansible-lint` and `.yamllint`.

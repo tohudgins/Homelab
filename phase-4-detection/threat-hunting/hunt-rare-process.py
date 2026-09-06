@@ -48,9 +48,11 @@ def parse_args():
     i = 0
     while i < len(args):
         if args[i] == "--agent":
-            agent = args[i + 1]; i += 2
+            agent = args[i + 1]
+            i += 2
         else:
-            source = args[i]; i += 1
+            source = args[i]
+            i += 1
     return agent, source
 
 
@@ -117,7 +119,7 @@ def main():
     total = len(events)
     print(f"\n== Rare-process hunt :: agent={agent} :: {total} process-creation "
           f"events, {len(img_count)} distinct images ==")
-    print(f"   long tail first — the rarest binaries are the most interesting\n")
+    print("   long tail first — the rarest binaries are the most interesting\n")
     print(f"  {'count':>5} {'%':>6}  {'image':<22} {'parent':<16} sample command line")
     print("  " + "-" * 96)
     for b, n in sorted(img_count.items(), key=lambda x: (x[1], x[0]))[:TOP_TAIL]:

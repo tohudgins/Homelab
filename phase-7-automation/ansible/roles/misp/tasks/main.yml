@@ -7,7 +7,8 @@
 # Wazuh (the MISP->Wazuh integratord integration is a separate role/step).
 # ============================================================================
 
-- name: Install Docker Engine + compose plugin (official convenience script)
+- name: Install Docker Engine + compose plugin (official convenience script)  # noqa: command-instead-of-module
+  # The upstream get.docker.com convenience script — a pipe-to-shell installer, not a module target.
   ansible.builtin.shell: curl -fsSL https://get.docker.com | sh
   args:
     creates: /usr/bin/docker

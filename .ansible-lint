@@ -1,0 +1,32 @@
+# ansible-lint config for the homelab IaC (phase-7-automation/ansible).
+#
+# Profile: `basic` — flags genuinely wrong or risky things (parse failures,
+# deprecated syntax, unnamed plays/tasks, bad metadata) without the naming- and
+# style-convention pedantry of the higher profiles. These roles are a working,
+# reproducible lab, not a Galaxy-published collection, so we deliberately opt out
+# of the `var-naming[no-role-prefix]` convention (renaming 45+ working variables
+# to `<role>_*` would be churn with no functional benefit).
+profile: basic
+
+# Run without contacting Galaxy — deterministic in CI, no network dependency.
+offline: true
+
+exclude_paths:
+  - isos/
+  - site/
+  - .git/
+  - phase-7-automation/ansible/collections/
+
+# Convention-only rules we consciously don't adopt for a self-contained lab.
+skip_list:
+  - var-naming[no-role-prefix]
+
+# Report but don't fail on these — a couple of long inline shell commands exceed
+# 160 chars; wrapping them would hurt readability more than it helps. Matches the
+# `line-length: warning` policy in .yamllint.
+warn_list:
+  - yaml[line-length]
+
+# ansible-lint runs yamllint internally; point it at our shared config so the two
+# tools never disagree.
+use_default_rules: true

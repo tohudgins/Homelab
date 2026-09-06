@@ -1,6 +1,7 @@
 ---
 galaxy_info:
   role_name: siem
+  author: Tyler Hudgins
   description: >-
     siem-01 — deploys the homelab's custom Wazuh rules and decoders as code
     (detection-as-code) onto the all-in-one Wazuh manager and verifies the

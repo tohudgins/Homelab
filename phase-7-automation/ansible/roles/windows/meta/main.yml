@@ -1,6 +1,7 @@
 ---
 galaxy_info:
   role_name: windows
+  author: Tyler Hudgins
   description: >-
     ws-01 — codifies the Windows victim endpoint's detection-telemetry sources
     (Wazuh agent → manager, Sysmon, PowerShell Script Block Logging) as

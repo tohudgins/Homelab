@@ -15,7 +15,6 @@
 # ===========================================================================
 import sys
 import json
-import os
 import re
 from socket import socket, AF_UNIX, SOCK_DGRAM
 

@@ -1,0 +1,42 @@
+# yamllint config for the homelab repo.
+# Tuned for hand-written Ansible + Sigma + Wazuh YAML: we enforce the rules that
+# catch real mistakes (syntax, duplicate keys, bad indentation, trailing spaces)
+# and relax the purely cosmetic ones that fight readable inline comments and the
+# long module args Ansible naturally produces.
+extends: default
+
+yaml-files:
+  - "*.yaml"
+  - "*.yml"
+
+ignore: |
+  isos/
+  site/
+  .git/
+  phase-7-automation/ansible/collections/
+
+rules:
+  # Ansible/Sigma lines run long (module args, one-line descriptions); 160 matches
+  # the ansible-lint default so the two tools agree.
+  line-length:
+    max: 160
+    level: warning
+    allow-non-breakable-words: true
+  # Inventories and some Sigma files legitimately omit the leading `---`.
+  document-start: disable
+  # Wazuh/Sigma mappings use aligned colons for readability.
+  colons:
+    max-spaces-before: 0
+    max-spaces-after: -1
+  # Inline flow maps like `{ cidr: "10.10.10.0/24", gw: "10.10.10.1" }` are the
+  # readable single-source-of-truth style used in group_vars — allow the padding.
+  braces:
+    min-spaces-inside: 0
+    max-spaces-inside: 1
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: disable
+  # `on:` in GitHub Actions parses as boolean true — don't flag it.
+  truthy:
+    allowed-values: ["true", "false"]
+    check-keys: false

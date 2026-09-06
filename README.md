@@ -1,8 +1,13 @@
 # Cybersecurity Homelab
 
+[![CI](https://github.com/tohudgins/Homelab/actions/workflows/ci.yml/badge.svg)](https://github.com/tohudgins/Homelab/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![ATT&CK techniques](https://img.shields.io/badge/ATT%26CK-26_techniques-c9302c)](phase-4-detection/detection-catalog.md)
+[![IaC: Ansible](https://img.shields.io/badge/IaC-Ansible-1a1a1a?logo=ansible)](phase-7-automation/ansible/)
+
 A segmented, reproducible security lab built on Apple Silicon (VMware Fusion, ARM64-only) — Active Directory, a hand-built Linux router/firewall, Wazuh SIEM, and a full detection-engineering loop from attack simulation to written detection to evasion attempt.
 
-> **Status: all 8 build phases (0–7) complete.** The detection catalog runs to **26 ATT&CK techniques** verified end-to-end across Credential Access, Persistence, Defense Evasion, Execution, Discovery, Privilege Escalation, and Lateral Movement ([`phase-4-detection/detection-catalog.md`](phase-4-detection/detection-catalog.md)), plus an SCA before/after remediation pass. Phase 5 maps AD attack paths in BloodHound and executes one from a Kali box back into detection — with an honest writeup of where Linux offensive tooling does and doesn't work against a Samba DC ([`phase-5-offense/attack-detect-writeups/`](phase-5-offense/attack-detect-writeups/)). Phase 6 pairs Suricata + Zeek NSM; Phase 7 is full Ansible IaC (`site.yml` converges all seven hosts at `changed=0`). Remaining work is portfolio packaging (docs site, ATT&CK Navigator layer, walkthrough). Full build plan and design rationale: [`docs/`](docs/).
+> **Status: all 8 build phases (0–7) complete.** The detection catalog runs to **26 ATT&CK techniques** verified end-to-end across Credential Access, Persistence, Defense Evasion, Execution, Discovery, Privilege Escalation, and Lateral Movement ([`phase-4-detection/detection-catalog.md`](phase-4-detection/detection-catalog.md)), plus an SCA before/after remediation pass. Phase 5 maps AD attack paths in BloodHound and executes one from a Kali box back into detection — with an honest writeup of where Linux offensive tooling does and doesn't work against a Samba DC ([`phase-5-offense/attack-detect-writeups/`](phase-5-offense/attack-detect-writeups/)). Phase 6 pairs Suricata + Zeek NSM; Phase 7 is full Ansible IaC (`site.yml` converges all seven hosts at `changed=0`). A [CI pipeline](.github/workflows/ci.yml) statically validates every committed artifact on each push — Ansible (syntax-check + `ansible-lint`), the Sigma detections, the Wazuh rules/decoders, Python and shell tooling, and a `gitleaks` secret scan. Remaining work is portfolio packaging (docs site, ATT&CK Navigator layer, walkthrough). Full build plan and design rationale: [`docs/`](docs/).
 
 ## Architecture
 
@@ -22,7 +27,7 @@ dnsmasq (DHCP/DNS) + FRR + chrony (NTP)"]
         DC["dc-01 — AD DS, DNS, GPO"]
         WS["ws-01 — Win11 workstation
 Sysmon + Wazuh agent"]
-        FS["fs-01 — Samba file server (planned)
+        FS["fs-01 — Samba file server
 domain member, deliberate share/ACL misconfig"]
     end
     subgraph SOC["SOC / MGMT"]

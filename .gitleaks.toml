@@ -1,0 +1,27 @@
+title = "Homelab secret-scanning config"
+
+# We keep the full default gitleaks ruleset and only carve out the handful of
+# credentials that are DELIBERATELY committed: lab-only defaults for an isolated,
+# non-internet-exposed RFC1918 homelab (see SECURITY.md). They are documented in
+# the role defaults as regenerable, hold no production value, and exist so the lab
+# is reproducible from the repo alone.
+#
+# The allowlist matches these specific values ONLY — by secret value, not by file
+# path — so any NEW or different secret accidentally committed to the same files
+# still fails the scan. That is the whole point of keeping gitleaks in CI.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documented lab-only credentials (isolated RFC1918 homelab; see SECURITY.md)"
+regexes = [
+  # roles/iris/defaults/main.yml — DFIR-IRIS lab bootstrap secrets
+  '''QxeOJN\+llFqMlfF2tWPw''',
+  '''a49f572ff4822b1f354f630977af536d451333791e6bd6cc''',
+  '''0f7723885d421289605e1ee5653f9b99482fe643452cef7b''',
+  '''9b7ee3e86ca79a037db67b48ca6b3784ec4351aa9ca868fc11e07eb6f383dbf0''',
+  '''9ed1f655810218c83f77a12105d43acacb4a74e83920ac868403f4cb2341391c''',
+  # roles/siem/defaults/main.yml — MISP + IRIS integration API keys
+  '''XUFMa9Bs4xf0r8rDUHtq6eWfhF08aqlLfusVaxNz''',
+  '''7fvj6kV3Bmwf0fTtrA9D7P1u77eZwYPFrbgWVJmyENRVbzGyMWLdlZuPf8-lzUB_s1eFvrXuZTmslJc0ySMCcA''',
+]

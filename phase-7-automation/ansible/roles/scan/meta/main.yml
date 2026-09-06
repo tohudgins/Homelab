@@ -1,6 +1,7 @@
 ---
 galaxy_info:
   role_name: scan
+  author: Tyler Hudgins
   description: >-
     scan-01 — REDTEAM active vulnerability scanner: Docker + Greenbone Community
     Edition (GVM/OpenVAS), arm64-native. Authenticated + unauthenticated scans of

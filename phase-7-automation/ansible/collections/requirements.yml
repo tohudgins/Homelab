@@ -1,0 +1,9 @@
+---
+# Ansible collection dependencies for the homelab playbooks.
+# Install with: ansible-galaxy collection install -r collections/requirements.yml
+#
+# ansible.builtin ships with ansible-core and is intentionally not listed here.
+collections:
+  - name: ansible.posix        # sysctl (router IP-forwarding / kernel hardening)
+  - name: ansible.windows      # win_copy / win_regedit / win_service / win_shell (ws-01)
+  - name: community.windows    # win_lineinfile / win_timezone (ws-01)

@@ -61,7 +61,7 @@ def parse(text):
 
 
 def base_domain(q):
-    labels = [l for l in q.strip(".").split(".") if l]
+    labels = [lbl for lbl in q.strip(".").split(".") if lbl]
     return ".".join(labels[-2:]) if len(labels) >= 2 else q
 
 
@@ -108,7 +108,7 @@ def main():
     results.sort(key=lambda x: -x["score"])
     print(f"\n== DNS-tunnel hunt :: {len(rows)} queries, {len(groups)} base domains, "
           f"{len(results)} with >={MIN_QUERIES} queries ==")
-    print(f"   ranking by composite tunnel score (name length + uniqueness + entropy)\n")
+    print("   ranking by composite tunnel score (name length + uniqueness + entropy)\n")
     hdr = (f"  {'':1} {'score':>5} {'queries':>7} {'uniq%':>6} {'mean_len':>8} "
            f"{'max_len':>7} {'entropy':>7} {'nx%':>5}  domain")
     print(hdr)

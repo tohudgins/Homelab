@@ -1,6 +1,7 @@
 ---
 galaxy_info:
   role_name: fileserver
+  author: Tyler Hudgins
   description: >-
     fs-01 — Samba domain member with the deliberately weak [public] share that
     leaks svc-backup's cleartext credential (the lateral-movement path), plus the

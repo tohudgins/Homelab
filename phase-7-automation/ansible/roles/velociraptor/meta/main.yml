@@ -1,6 +1,8 @@
 ---
 galaxy_info:
   role_name: velociraptor
+  author: Tyler Hudgins
+  license: MIT
   description: >
     Velociraptor endpoint DFIR + VQL fleet hunting — arm64-native server on siem-01
     (SOC) and Linux clients on CORP. Offline binary install; self-signed, generated

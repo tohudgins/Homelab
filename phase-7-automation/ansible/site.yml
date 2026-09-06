@@ -1,10 +1,17 @@
 ---
 # Full-lab convergence. Import per-host plays in dependency order.
 # Each is also runnable on its own (e.g. ansible-playbook router.yml).
-- import_playbook: router.yml
-- import_playbook: dc.yml             # dc-01    (Samba AD DC config + deliberate weaknesses)
-- import_playbook: siem.yml           # siem-01  (Wazuh manager + custom detection content)
-- import_playbook: dmz.yml            # dmz-01   (Docker + OWASP Juice Shop + Wazuh agent)
-- import_playbook: fileserver.yml     # fs-01    (Samba member + weak share + Wazuh agent)
-- import_playbook: scan.yml           # scan-01  (Greenbone CE active vuln scanner, REDTEAM)
-- import_playbook: windows.yml        # ws-01    (Windows victim — Sysmon + PS logging + Wazuh agent, over SSH)
+- name: Converge rtr-01 — router / firewall / DHCP-DNS-NTP / inline NSM sensor
+  import_playbook: router.yml
+- name: Converge dc-01 — Samba AD DC config + deliberate weaknesses
+  import_playbook: dc.yml
+- name: Converge siem-01 — Wazuh manager + custom detection content
+  import_playbook: siem.yml
+- name: Converge dmz-01 — Docker + OWASP Juice Shop + Wazuh agent
+  import_playbook: dmz.yml
+- name: Converge fs-01 — Samba member + weak share + Wazuh agent
+  import_playbook: fileserver.yml
+- name: Converge scan-01 — Greenbone CE active vuln scanner (REDTEAM)
+  import_playbook: scan.yml
+- name: Converge ws-01 — Windows victim (Sysmon + PS logging + Wazuh agent, over SSH)
+  import_playbook: windows.yml

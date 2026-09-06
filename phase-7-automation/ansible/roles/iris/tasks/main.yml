@@ -8,7 +8,8 @@
 # to the manual 2026-09-02 build; base VM is the same misp-01 that runs MISP.
 # ============================================================================
 
-- name: Install Docker Engine + compose plugin (official convenience script)
+- name: Install Docker Engine + compose plugin (official convenience script)  # noqa: command-instead-of-module
+  # The upstream get.docker.com convenience script — a pipe-to-shell installer, not a module target.
   ansible.builtin.shell: curl -fsSL https://get.docker.com | sh
   args:
     creates: /usr/bin/docker
@@ -73,7 +74,8 @@
   register: iris_up
   changed_when: "'Started' in iris_up.stderr or 'Created' in iris_up.stderr"
 
-- name: Wait for the IRIS web UI to answer on {{ iris_https_port }}
+- name: Wait for the IRIS web UI to answer on {{ iris_https_port }}  # noqa: command-instead-of-module
+  # curl (not uri) on purpose: a self-signed-TLS health probe retried with until:
   ansible.builtin.shell: >
     curl -sk -o /dev/null -w '%{http_code}'
     https://127.0.0.1:{{ iris_https_port }}/login

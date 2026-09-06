@@ -1,0 +1,126 @@
+name: CI
+
+# Static validation of everything the repo commits. GitHub Actions can't run
+# VMware Fusion or the lab VMs, so CI does what the running lab can't be asked to
+# do here: lint and schema-check the Ansible IaC, the Sigma detections, the Wazuh
+# rules/decoders, the helper scripts, and scan for leaked secrets — the same
+# checks a detection/infra team runs on the parts that don't execute in CI.
+#
+# Every job mirrors a command that passes locally (see docs/RUNBOOK.md → CI).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  yaml:
+    name: YAML lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "yamllint==1.38.0"
+      - name: yamllint (errors fail; long-line warnings inform)
+        run: yamllint .
+
+  ansible:
+    name: Ansible (syntax-check + lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "ansible-lint==26.8.0"
+      - name: Install collection dependencies
+        run: ansible-galaxy collection install -r phase-7-automation/ansible/collections/requirements.yml
+      - name: Provide a throwaway vault password (ansible.cfg references one)
+        run: echo "ci-dummy" > phase-7-automation/ansible/.vault_pass
+      - name: ansible-playbook --syntax-check site.yml
+        working-directory: phase-7-automation/ansible
+        run: ansible-playbook --syntax-check site.yml
+      - name: ansible-lint (run from repo root so it reads .ansible-lint + .yamllint)
+        run: ansible-lint phase-7-automation/ansible/
+
+  sigma:
+    name: Sigma rule validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "sigma-cli==3.1.0"
+      - name: sigma check (schema-validate the detection rules)
+        run: sigma check phase-4-detection/sigma/rules/
+
+  python:
+    name: Python lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "ruff==0.15.14"
+      - run: ruff check .
+
+  shell:
+    name: Shell lint (shellcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ShellCheck (warning severity and above)
+        run: shellcheck -S warning $(git ls-files '*.sh')
+
+  xml:
+    name: Wazuh / Sysmon XML well-formedness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install xmllint
+        run: sudo apt-get update && sudo apt-get install -y libxml2-utils
+      - name: Validate XML
+        # Wazuh rule/decoder files are multi-root XML *fragments* (several <group>/
+        # <decoder> blocks, no single root) — legal for Wazuh, not for a strict XML
+        # parser. Wrap each file in a synthetic root, then check well-formedness.
+        run: |
+          fail=0
+          for x in $(git ls-files '*.xml'); do
+            if printf '<_ci_root>%s</_ci_root>' "$(cat "$x")" | xmllint --noout - 2>/dev/null; then
+              echo "ok:   $x"
+            else
+              echo "FAIL: $x"
+              printf '<_ci_root>%s</_ci_root>' "$(cat "$x")" | xmllint --noout - 2>&1 | head -5
+              fail=1
+            fi
+          done
+          exit $fail
+
+  secrets:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so gitleaks scans every commit
+      - name: Install gitleaks
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            | sudo tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+      - name: gitleaks detect
+        # .gitleaks.toml allowlists the documented lab-only credentials by value,
+        # so any NEW secret still fails this check. See SECURITY.md.
+        run: gitleaks detect --no-banner --redact -c .gitleaks.toml --exit-code 1

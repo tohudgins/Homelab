@@ -1,6 +1,7 @@
 ---
 galaxy_info:
   role_name: router
+  author: Tyler Hudgins
   description: >-
     rtr-01 — nftables firewall + NAT, dnsmasq DHCP/DNS, chrony NTP source, and
     the inline Suricata + Zeek network-security-monitoring sensor for the

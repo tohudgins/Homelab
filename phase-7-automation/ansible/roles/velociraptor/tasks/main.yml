@@ -1,4 +1,4 @@
 ---
 # Dispatch by mode set in the play: 'server' (siem-01) or 'client' (Linux endpoints).
-- name: Include {{ velociraptor_mode }} tasks
+- name: Include tasks for mode {{ velociraptor_mode }}
   ansible.builtin.include_tasks: "{{ velociraptor_mode }}.yml"

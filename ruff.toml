@@ -1,0 +1,14 @@
+# Ruff config for the repo's helper/detection scripts (threat-hunting, Wazuh
+# integrations, coverage generation). These are operational tooling, not a
+# packaged library, so we lint for real defects (pyflakes F + pycodestyle E/W)
+# and skip the opinionated import-sorting/one-true-style rules.
+target-version = "py39"
+line-length = 120
+
+exclude = ["isos", "site"]
+
+[lint]
+select = ["E", "F", "W"]
+# E501 (line length) is handled loosely — these scripts favour readable, aligned
+# print() banners over hard wrapping.
+ignore = ["E501"]
