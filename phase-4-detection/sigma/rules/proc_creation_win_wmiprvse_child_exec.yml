@@ -1,0 +1,32 @@
+title: Remote Command Execution via WMI (WmiPrvSE Child Process)
+id: 867b6209-55a4-4b70-8a22-fa00e1542218
+status: experimental
+description: |
+    Detects a shell/scripting host spawned by WmiPrvSE.exe — the tell of remote
+    command execution over WMI (impacket wmiexec.py, NetExec --exec-method wmiexec).
+    WmiPrvSE is the WMI provider host; a cmd/powershell child of it is remote code
+    execution / lateral movement, not local activity.
+references:
+    - https://attack.mitre.org/techniques/T1047/
+author: Tyler Hudgins (homelab)
+date: 2026-09-06
+tags:
+    - attack.execution
+    - attack.t1047
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection_parent:
+        ParentImage|endswith: '\WmiPrvSE.exe'
+    selection_child:
+        Image|endswith:
+            - '\cmd.exe'
+            - '\powershell.exe'
+            - '\pwsh.exe'
+            - '\wscript.exe'
+            - '\cscript.exe'
+    condition: selection_parent and selection_child
+falsepositives:
+    - Some WMI-based management/monitoring software legitimately spawns shells
+level: high

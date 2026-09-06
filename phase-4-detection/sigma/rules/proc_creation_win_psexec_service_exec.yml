@@ -1,0 +1,27 @@
+title: Service Execution via PsExec (PSEXESVC)
+id: ee74c7e1-1629-40fd-81d9-5730d4961333
+status: experimental
+description: |
+    Detects the PsExec service binary running or spawning a child. PsExec-style
+    lateral movement (Sysinternals psexec, impacket psexec.py, NetExec
+    --exec-method psexec) uploads a service binary — PSEXESVC.exe by default — to
+    ADMIN$ and starts it as a Windows service to run commands as SYSTEM on the
+    remote host.
+references:
+    - https://attack.mitre.org/techniques/T1569/002/
+author: Tyler Hudgins (homelab)
+date: 2026-09-06
+tags:
+    - attack.execution
+    - attack.t1569.002
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        - Image|endswith: '\PSEXESVC.exe'
+        - ParentImage|endswith: '\PSEXESVC.exe'
+    condition: selection
+falsepositives:
+    - Sanctioned administrative use of Sysinternals PsExec
+level: high

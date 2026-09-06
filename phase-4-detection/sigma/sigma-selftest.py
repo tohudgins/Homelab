@@ -105,6 +105,33 @@ CASES = [
      {"win.eventdata.scriptBlockText": "Set-MpPreference -DisableRealtimeMonitoring $true"}, False),
     ("Get-MpPreference (read only, no exclusion) — precision", "100506",
      {"win.eventdata.scriptBlockText": "Get-MpPreference | Select ExclusionPath"}, False),
+    # T1569.002 — PsExec service execution (PSEXESVC.exe = the psexec service binary)
+    ("PsExec service binary runs (image variant)", "100513",
+     {"win.eventdata.image": r"C:\Windows\PSEXESVC.exe",
+      "win.eventdata.parentImage": r"C:\Windows\System32\services.exe"}, True),
+    ("PsExec service spawns cmd (parentImage variant)", "100514",
+     {"win.eventdata.image": r"C:\Windows\System32\cmd.exe",
+      "win.eventdata.parentImage": r"C:\Windows\PSEXESVC.exe"}, True),
+    ("services.exe starts a normal service (svchost, not PsExec) — precision", "100513",
+     {"win.eventdata.image": r"C:\Windows\System32\svchost.exe",
+      "win.eventdata.parentImage": r"C:\Windows\System32\services.exe"}, False),
+    # T1047 — WMI remote exec: WmiPrvSE.exe spawns a shell (impacket wmiexec / nxc)
+    ("wmiexec: WmiPrvSE spawns cmd (parent + child)", "100515",
+     {"win.eventdata.parentImage": r"C:\Windows\System32\wbem\WmiPrvSE.exe",
+      "win.eventdata.image": r"C:\Windows\System32\cmd.exe"}, True),
+    ("WmiPrvSE spawns a non-shell provider child — precision", "100515",
+     {"win.eventdata.parentImage": r"C:\Windows\System32\wbem\WmiPrvSE.exe",
+      "win.eventdata.image": r"C:\Windows\System32\wbem\WmiApSrv.exe"}, False),
+    ("cmd spawned by explorer (local shell, not WMI) — precision", "100515",
+     {"win.eventdata.parentImage": r"C:\Windows\explorer.exe",
+      "win.eventdata.image": r"C:\Windows\System32\cmd.exe"}, False),
+    # T1021.006 — WinRM remote exec: any child of wsmprovhost.exe (evil-winrm / nxc winrm)
+    ("winrm: wsmprovhost spawns powershell (any child fires)", "100516",
+     {"win.eventdata.parentImage": r"C:\Windows\System32\wsmprovhost.exe",
+      "win.eventdata.image": r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"}, True),
+    ("powershell spawned by explorer (local, not WinRM) — precision", "100516",
+     {"win.eventdata.parentImage": r"C:\Windows\explorer.exe",
+      "win.eventdata.image": r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"}, False),
 ]
 
 
