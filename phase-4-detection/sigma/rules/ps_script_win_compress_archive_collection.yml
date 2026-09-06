@@ -1,0 +1,25 @@
+title: Data Staged via PowerShell Compress-Archive
+id: 4b9974df-148b-479c-8e42-db8119bbf982
+status: experimental
+description: |
+    Detects PowerShell's native Compress-Archive cmdlet — a fileless way to stage
+    collected data into a .zip with no third-party archiver on disk (living off the
+    land). The Collection counterpart to the rar/7-Zip rule, caught in Script Block
+    Logging (EID 4104).
+references:
+    - https://attack.mitre.org/techniques/T1560/001/
+author: Tyler Hudgins (homelab)
+date: 2026-09-06
+tags:
+    - attack.collection
+    - attack.t1560.001
+logsource:
+    category: ps_script
+    product: windows
+detection:
+    selection:
+        ScriptBlockText|contains: 'Compress-Archive'
+    condition: selection
+falsepositives:
+    - Legitimate admin/user zipping files with PowerShell
+level: medium

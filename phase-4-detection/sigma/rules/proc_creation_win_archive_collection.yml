@@ -1,0 +1,36 @@
+title: Data Staged via Archive Utility (rar/7-Zip/WinZip)
+id: 8f360d3e-4122-44fc-867d-90de40d9fcf9
+status: experimental
+description: |
+    Detects a command-line archive utility (rar, 7-Zip, WinZip) running on the
+    workstation — the "stage before exfil" step. Bundling files into an archive is
+    how an operator collects data for a single-blob exfiltration; these tools are
+    not part of a default Windows workstation, so their execution here is a strong
+    Collection signal that sits right before the DNS-exfil detection downstream.
+references:
+    - https://attack.mitre.org/techniques/T1560/001/
+author: Tyler Hudgins (homelab)
+date: 2026-09-06
+tags:
+    - attack.collection
+    - attack.t1560.001
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection:
+        - OriginalFileName:
+              - 'Rar.exe'
+              - '7z.exe'
+              - '7za.exe'
+              - 'WinRAR.exe'
+        - Image|endswith:
+              - '\rar.exe'
+              - '\7z.exe'
+              - '\7za.exe'
+              - '\winrar.exe'
+              - '\wzzip.exe'
+    condition: selection
+falsepositives:
+    - A user who genuinely installed 7-Zip/WinRAR for legitimate archiving
+level: medium

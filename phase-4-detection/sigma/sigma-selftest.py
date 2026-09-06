@@ -132,6 +132,20 @@ CASES = [
     ("powershell spawned by explorer (local, not WinRM) — precision", "100516",
      {"win.eventdata.parentImage": r"C:\Windows\explorer.exe",
       "win.eventdata.image": r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"}, False),
+    # T1560.001 — data staged via archive utility (rar/7-Zip) + Compress-Archive
+    ("7-Zip archiving (originalFileName variant)", "100517",
+     {"win.eventdata.originalFileName": "7z.exe", "win.eventdata.image": r"C:\Program Files\7-Zip\7z.exe",
+      "win.eventdata.commandLine": r"7z a -tzip C:\Users\a\stage.zip C:\Users\a\Documents"}, True),
+    ("rar.exe archiving (image variant)", "100518",
+     {"win.eventdata.originalFileName": "", "win.eventdata.image": r"C:\Users\a\AppData\rar.exe",
+      "win.eventdata.commandLine": r"rar a -r stage.rar C:\data"}, True),
+    ("cmd.exe (not an archiver) — precision", "100518",
+     {"win.eventdata.originalFileName": "Cmd.Exe", "win.eventdata.image": r"C:\Windows\System32\cmd.exe",
+      "win.eventdata.commandLine": "cmd /c dir"}, False),
+    ("Compress-Archive staging (ps_script)", "100519",
+     {"win.eventdata.scriptBlockText": r"Compress-Archive -Path C:\data\* -DestinationPath C:\Users\Public\out.zip"}, True),
+    ("Expand-Archive (unzip, not staging) — precision", "100519",
+     {"win.eventdata.scriptBlockText": r"Expand-Archive -Path C:\out.zip -DestinationPath C:\tmp"}, False),
 ]
 
 
