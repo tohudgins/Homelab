@@ -1,0 +1,51 @@
+title: Inhibit System Recovery (Shadow Copy / Backup Deletion)
+id: 336cc4aa-ed02-4384-8f40-9b66d3130eb2
+status: experimental
+description: |
+    Detects the classic ransomware pre-encryption step: deleting Volume Shadow
+    Copies and backups, or disabling Windows recovery, so victims can't restore.
+    vssadmin/wmic shadow deletion, wbadmin backup deletion, and bcdedit recovery
+    disabling are all high-fidelity Impact signals — this pairs with the fs-01
+    ransomware canary (100430/100431) to cover Impact from both the file-change and
+    the recovery-destruction angle.
+references:
+    - https://attack.mitre.org/techniques/T1490/
+author: Tyler Hudgins (homelab)
+date: 2026-09-06
+tags:
+    - attack.impact
+    - attack.t1490
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection_vss_delete:
+        Image|endswith: '\vssadmin.exe'
+        CommandLine|contains|all:
+            - ' delete '
+            - ' shadows'
+    selection_vss_resize:
+        Image|endswith: '\vssadmin.exe'
+        CommandLine|contains|all:
+            - ' resize '
+            - ' shadowstorage'
+    selection_wmic:
+        Image|endswith: '\wmic.exe'
+        CommandLine|contains|all:
+            - 'shadowcopy'
+            - 'delete'
+    selection_wbadmin:
+        Image|endswith: '\wbadmin.exe'
+        CommandLine|contains:
+            - ' delete catalog'
+            - ' delete systemstatebackup'
+            - ' delete backup'
+    selection_bcdedit:
+        Image|endswith: '\bcdedit.exe'
+        CommandLine|contains:
+            - 'recoveryenabled no'
+            - 'bootstatuspolicy ignoreallfailures'
+    condition: 1 of selection_*
+falsepositives:
+    - Rare legitimate backup maintenance by an administrator
+level: high

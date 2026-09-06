@@ -1,0 +1,32 @@
+title: LSASS Memory Dump via comsvcs.dll MiniDump (LOLBin)
+id: 3e33c0da-2c57-47fb-b6fb-0d394c387071
+status: experimental
+description: |
+    Detects LSASS credential dumping via the built-in comsvcs.dll MiniDump export
+    (rundll32 comsvcs.dll, MiniDump <pid> out.bin full) and rundll32 referencing
+    lsass directly. This is the *command-line* angle on T1003.001, complementing
+    the stock Sysmon EID10 memory-access rule (92900): the command process spawns
+    and is logged even when LSASS PPL blocks the actual read, so this rule is
+    live-fireable on the lab host where the memory-access path was not.
+references:
+    - https://attack.mitre.org/techniques/T1003/001/
+author: Tyler Hudgins (homelab)
+date: 2026-09-06
+tags:
+    - attack.credential_access
+    - attack.t1003.001
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection_comsvcs:
+        CommandLine|contains|all:
+            - 'comsvcs'
+            - 'inidump'          # MiniDump / minidump — case-insensitive at compile
+    selection_rundll_lsass:
+        Image|endswith: '\rundll32.exe'
+        CommandLine|contains: 'lsass'
+    condition: 1 of selection_*
+falsepositives:
+    - Very rare; comsvcs MiniDump has essentially no legitimate interactive use
+level: high

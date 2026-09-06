@@ -146,6 +146,29 @@ CASES = [
      {"win.eventdata.scriptBlockText": r"Compress-Archive -Path C:\data\* -DestinationPath C:\Users\Public\out.zip"}, True),
     ("Expand-Archive (unzip, not staging) — precision", "100519",
      {"win.eventdata.scriptBlockText": r"Expand-Archive -Path C:\out.zip -DestinationPath C:\tmp"}, False),
+    # T1490 — inhibit system recovery (shadow-copy / backup deletion)
+    ("vssadmin delete shadows (TP)", "100520",
+     {"win.eventdata.image": r"C:\Windows\System32\vssadmin.exe",
+      "win.eventdata.commandLine": "vssadmin delete shadows /all /quiet"}, True),
+    ("vssadmin list shadows (read-only) — precision", "100520",
+     {"win.eventdata.image": r"C:\Windows\System32\vssadmin.exe",
+      "win.eventdata.commandLine": "vssadmin list shadows"}, False),
+    ("wmic shadowcopy delete (TP)", "100522",
+     {"win.eventdata.image": r"C:\Windows\System32\wbem\wmic.exe",
+      "win.eventdata.commandLine": "wmic shadowcopy delete"}, True),
+    ("bcdedit disable recovery (TP)", "100524",
+     {"win.eventdata.image": r"C:\Windows\System32\bcdedit.exe",
+      "win.eventdata.commandLine": "bcdedit /set {default} recoveryenabled no"}, True),
+    # T1003.001 — LSASS dump via comsvcs.dll MiniDump LOLBin (live-fireable command line)
+    ("comsvcs MiniDump lsass (TP)", "100525",
+     {"win.eventdata.image": r"C:\Windows\System32\rundll32.exe",
+      "win.eventdata.commandLine": r"rundll32.exe C:\Windows\System32\comsvcs.dll, MiniDump 640 C:\Temp\l.bin full"}, True),
+    ("comsvcs called but not MiniDump (other export) — precision", "100525",
+     {"win.eventdata.image": r"C:\Windows\System32\rundll32.exe",
+      "win.eventdata.commandLine": r"rundll32.exe comsvcs.dll, DllGetClassObject"}, False),
+    ("rundll32 referencing lsass (TP)", "100526",
+     {"win.eventdata.image": r"C:\Windows\System32\rundll32.exe",
+      "win.eventdata.commandLine": r"rundll32.exe C:\evil.dll, Dump lsass.exe"}, True),
 ]
 
 
