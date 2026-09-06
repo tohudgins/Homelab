@@ -992,3 +992,55 @@
   </rule>
 
 </group>
+
+<!--
+  ============================================================================
+  DMZ web-attack detection — T1190 Exploit Public-Facing Application. The DMZ
+  runs OWASP Juice Shop (dmz-01:3000). rtr-01's inline Suricata detects the
+  attack on the wire (custom sigs 9100020-9100024 — ET web rules key on
+  $HTTP_PORTS and miss 3000) and its eve.json feeds Wazuh, surfacing as the stock
+  Suricata alert (rule 86601, groups ids/suricata). These children turn that into
+  a labeled, MITRE-mapped SIEM detection scoped to the DMZ app — the piece the lab
+  was missing: Juice Shop had attack surface + container-log ingestion but no
+  detection firing on either.
+  Field note: `alert.signature` is Wazuh's decoded Suricata signature text; on the
+  first live fire confirm the exact decoded key with `wazuh-logtest` (Suricata
+  decoder field names occasionally differ by Wazuh version) — a one-line change if so.
+  See phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md.
+  ============================================================================
+-->
+<group name="local,ids,suricata,web,attack,">
+
+  <rule id="100440" level="10">
+    <if_sid>86601</if_sid>
+    <field name="alert.signature" type="pcre2">LAB WEB ATTACK (SQLi|XSS|path traversal)</field>
+    <description>DMZ web attack against Juice Shop — $(alert.signature)</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+    <group>web_attack,attack,</group>
+  </rule>
+
+  <rule id="100441" level="8">
+    <if_sid>86601</if_sid>
+    <field name="alert.signature" type="pcre2">automated scanner User-Agent</field>
+    <description>DMZ web app being scanned by automated tooling — $(alert.signature)</description>
+    <mitre>
+      <id>T1595.002</id>
+    </mitre>
+    <group>recon,attack,</group>
+  </rule>
+
+  <!-- Correlation: a burst of web-attack signatures from one source = an active
+       exploitation run (sqlmap/nikto), not a stray probe. Escalates to level 12. -->
+  <rule id="100442" level="12" frequency="8" timeframe="60">
+    <if_matched_sid>100440</if_matched_sid>
+    <same_field>src_ip</same_field>
+    <description>DMZ web application under active attack — burst of web-attack signatures from $(src_ip) (T1190)</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+    <group>web_attack,attack,</group>
+  </rule>
+
+</group>

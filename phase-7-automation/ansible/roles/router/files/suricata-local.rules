@@ -48,3 +48,42 @@ alert tcp $HOME_NET any -> 10.10.40.0/24 443 (msg:"LAB C2 beaconing - repeated c
 # specific codec). Scoped to REDTEAM:53 — a CORP host streaming long DNS names to
 # the attacker segment is the anomaly.
 alert dns $HOME_NET any -> 10.10.40.0/24 53 (msg:"LAB DNS tunneling - long encoded query names to REDTEAM (T1071.004 / T1048.003)"; dns.query; pcre:"/^.{100}/"; detection_filter:track by_src, count 20, seconds 60; classtype:data-theft; sid:9100010; rev:2; metadata:mitre_tactic TA0010, mitre_technique T1071_004, mitre_technique T1048_003;)
+
+# ============================================================================
+# DMZ web-attack detection — T1190 Exploit Public-Facing Application. The DMZ
+# runs OWASP Juice Shop on 10.10.20.10:3000. Two reasons these lab rules exist
+# rather than leaning on ET Open alone:
+#   (1) ET Open's web-attack signatures match on $HTTP_PORTS, which by default is
+#       80 (+443/8080) and does NOT include 3000 — so out of the box the entire
+#       ET web ruleset is BLIND to Juice Shop. The router role adds 3000 to
+#       HTTP_PORTS to fix that at the source; these rules are the lab-labeled,
+#       MITRE-mapped complement scoped to the DMZ app.
+#   (2) They stamp the attack as T1190 with a lab-local sid, so the SIEM shows a
+#       labeled web-attack alert (Wazuh child rule 100440 on 86601), not an
+#       anonymous ET hit. Suricata parses HTTP on 3000 via protocol detection
+#       (the intra-segment traffic is plain HTTP), so http.* sticky buffers work.
+# Scoped by DESTINATION (dmz-01:3000) since atk-01's REDTEAM address is DHCP.
+# Exercised with sqlmap / nikto / curl probes from atk-01 — see
+# phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md.
+# ============================================================================
+
+# (20) SQL injection in the request URI — tautology / UNION / stacked-query /
+# time-based patterns. Hits Juice Shop's product-search sink (/rest/products/search?q=).
+alert http $HOME_NET any -> 10.10.20.10 3000 (msg:"LAB WEB ATTACK SQLi in URI to DMZ Juice Shop (T1190)"; flow:established,to_server; http.uri; pcre:"/(union\s+select|information_schema|\bor\b\s+1\s*=\s*1|'\s*or\s*'?1|sleep\s*\(|benchmark\s*\(|waitfor\s+delay|;\s*drop\s+table)/i"; classtype:web-application-attack; sid:9100020; rev:1; metadata:mitre_tactic TA0001, mitre_technique T1190;)
+
+# (21) SQL injection in the POST body — Juice Shop's classic login bypass posts
+# {"email":"' OR 1=1--","password":"x"} to /rest/user/login.
+alert http $HOME_NET any -> 10.10.20.10 3000 (msg:"LAB WEB ATTACK SQLi in POST body to DMZ Juice Shop (T1190)"; flow:established,to_server; http.request_body; pcre:"/(union\s+select|\bor\b\s+1\s*=\s*1|'\s*or\s*'1'\s*=\s*'1|'\s*--|sleep\s*\()/i"; classtype:web-application-attack; sid:9100021; rev:1; metadata:mitre_tactic TA0001, mitre_technique T1190;)
+
+# (22) Cross-site scripting — reflected script/handler payloads in the URI (Juice
+# Shop's search field reflects into the DOM).
+alert http $HOME_NET any -> 10.10.20.10 3000 (msg:"LAB WEB ATTACK XSS in URI to DMZ Juice Shop (T1190)"; flow:established,to_server; http.uri; pcre:"/(<script|%3cscript|onerror\s*=|onload\s*=|javascript:|<img[^>]+src\s*=)/i"; classtype:web-application-attack; sid:9100022; rev:1; metadata:mitre_tactic TA0001, mitre_technique T1190;)
+
+# (23) Path traversal / local file inclusion — ../ sequences and canonical
+# sensitive-file targets (Juice Shop exposes an /ftp directory-traversal sink).
+alert http $HOME_NET any -> 10.10.20.10 3000 (msg:"LAB WEB ATTACK path traversal / LFI to DMZ Juice Shop (T1190)"; flow:established,to_server; http.uri; pcre:"/(\.\.\/|\.\.%2f|%2e%2e%2f|%2e%2e\/|\/etc\/passwd|\/proc\/self\/)/i"; classtype:web-application-attack; sid:9100023; rev:1; metadata:mitre_tactic TA0001, mitre_technique T1190;)
+
+# (24) Web scanner / automated tooling by User-Agent — sqlmap, nikto, gobuster,
+# ffuf, nuclei etc. Tagged Reconnaissance (T1595.002 Active Scanning) — the tell
+# that an automated web attack is under way, not manual browsing.
+alert http $HOME_NET any -> 10.10.20.10 3000 (msg:"LAB WEB ATTACK automated scanner User-Agent against DMZ Juice Shop (T1595.002)"; flow:established,to_server; http.user_agent; pcre:"/(sqlmap|nikto|gobuster|ffuf|dirbuster|nuclei|wpscan|masscan|acunetix|nmap\s+scripting)/i"; classtype:web-application-attack; sid:9100024; rev:1; metadata:mitre_tactic TA0043, mitre_technique T1595_002;)

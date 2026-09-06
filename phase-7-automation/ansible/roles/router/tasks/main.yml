@@ -103,8 +103,22 @@
     replace: '\1ja3-fingerprints: yes'
   notify: Restart suricata
 
-# Custom detection-as-code rules (C2/adversary emulation — Sliver). Loaded
-# alongside the ET Open ruleset. Companion to the Wazuh local_rules.xml.
+# Teach Suricata that the DMZ web app on :3000 is HTTP. ET Open's web-attack
+# signatures match on $HTTP_PORTS (default 80), so out of the box the whole ET
+# web ruleset is blind to Juice Shop on 3000. Adding the port fixes that for the
+# stock ruleset; the lab's own T1190 rules (local.rules 9100020-24) are scoped
+# to 10.10.20.10:3000 directly and don't depend on it, but the ET breadth is
+# worth having. Idempotent — after the edit the "[80,3000]" form no longer matches.
+- name: Add the DMZ Juice Shop port (3000) to Suricata HTTP_PORTS
+  ansible.builtin.replace:
+    path: /etc/suricata/suricata.yaml
+    regexp: '^(\s*HTTP_PORTS:\s*)"?80"?\s*$'
+    replace: '\1"[80,3000]"'
+  notify: Restart suricata
+
+# Custom detection-as-code rules (C2/adversary emulation — Sliver; DMZ web
+# attacks — T1190). Loaded alongside the ET Open ruleset. Companion to the
+# Wazuh local_rules.xml.
 - name: Deploy custom Suricata rules (local.rules)
   ansible.builtin.copy:
     src: suricata-local.rules
