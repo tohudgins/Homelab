@@ -61,9 +61,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install "sigma-cli==3.1.0"
+      - run: pip install "sigma-cli==3.1.0" "pyyaml==6.0.2"
       - name: sigma check (schema-validate the detection rules)
         run: sigma check phase-4-detection/sigma/rules/
+      - name: sigma-to-wazuh --check (fail on any unsupported/skipped rule)
+        working-directory: phase-4-detection/sigma
+        run: ./sigma-to-wazuh.py --check
+      - name: sigma-to-wazuh (recompile, then fail on drift from the committed artifact)
+        # sigma_local_rules.xml + id-map.json are generated, committed build
+        # artifacts (see sigma/README.md). --check above only catches skipped
+        # rules; it doesn't confirm the checked-in XML still matches what the
+        # source Sigma actually compiles to. Recompile for real and diff.
+        run: |
+          phase-4-detection/sigma/sigma-to-wazuh.py
+          git diff --exit-code -- \
+            phase-7-automation/ansible/roles/siem/files/sigma_local_rules.xml \
+            phase-4-detection/sigma/id-map.json
+      - name: sigma-selftest (offline TP/precision unit test of the compiled rules)
+        run: phase-4-detection/sigma/sigma-selftest.py
 
   python:
     name: Python lint (ruff)
