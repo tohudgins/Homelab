@@ -153,16 +153,20 @@ the rule is still correct for any host old enough to have wmic — but pulled fr
 (`tests.json`'s `_comment_not_in_battery`) since it can never pass here, and a permanently-red test is worse
 than no test.
 
-### Finding: Defender blocks the comsvcs LSASS technique earlier than the rule was designed for
+### Finding: comsvcs LSASS *is* live-fireable — Sysmon gets the telemetry before Defender acts
 Rule 100525/100526 (`comsvcs.dll`+`MiniDump`) was written specifically to survive **LSASS PPL** blocking the
-memory *read* — catalog gap #12's original problem. Attempted live 2026-09-07 and `rundll32.exe` never even
-spawns: Microsoft Defender detects and removes the exact command line as **`Trojan:Win32/RundllLolBin.AF`**
-(ThreatID 2147793100, confirmed via `Get-WinEvent` on the Windows Defender/Operational log — action Remove,
-before process creation). No process means no Sysmon EID1, so PPL is never even reached — a *stricter* block
-than the one the rule was built for. Same class of finding as certutil below: the endpoint control is the
-outer layer, and this rule is the layer that catches the technique wherever that control is weakened,
-disabled, or bypassed. Pulled from the automated battery for the same reason as wmic — it will never pass in
-this lab's default (Defender on) configuration; `sigma-selftest.py`'s 38/38 remains the proof of its logic.
+memory *read* — catalog gap #12's original problem. Live-fires: `rundll32.exe comsvcs.dll, MiniDump …` spawns
+and Sysmon captures the full command line, and rule 100525 fires on it — 9 real hits across the session,
+confirmed both historically and with a fresh test. **Correction:** an earlier pass tonight concluded the
+opposite — that Defender kills the process pre-spawn (matching the certutil pattern below) and pulled this
+from the active battery on that basis. Wrong: Defender *does* detect the pattern
+(`Trojan:Win32/RundllLolBin.AF`, ThreatID 2147793100) and denies the actual dump — `Test-Path` on the output
+file returns `Access is denied` — but that happens *after* process creation, not before, so PPL and Defender
+both get bypassed for detection purposes even though neither lets the attacker walk away with a real dump.
+Re-added to `tests.json`'s active battery. Separately: rule 100526 (the companion `rundll32`+`lsass` rule)
+never independently registers as "the" fired alert for this event — it's a same-level sibling of 100525
+matching the identical telemetry, and Wazuh's one-rule-per-event model only records one of two co-matching
+same-level rules. Not itself evidence 100526's logic is wrong; `sigma-selftest.py`'s 38/38 still proves both.
 
 ### Finding: Defender blocks T1105, so a control *is* a detection layer
 The certutil rule is **not** in the live purple-team battery on purpose. Microsoft Defender (real-time

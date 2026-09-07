@@ -8,15 +8,27 @@
 # proving the lab detects a *chained* intrusion end to end, the way a real SOC
 # sees a campaign, not a pile of isolated alerts.
 #
-# Run from atk-01 (REDTEAM) with the lab up (networking+ad+soc+services+attack).
-# Attacks that need a credential read it from the environment; missing prereqs
-# are skipped loudly rather than aborting the narrative.
+# Run the ATTACK phase from atk-01 (REDTEAM) with the lab up
+# (networking+ad+soc+services+attack). Attacks that need a credential read it
+# from the environment; missing prereqs are skipped loudly rather than
+# aborting the narrative.
 #
-#   SPRAY_PW=Summer2026 ADMIN_USER=... ADMIN_PW=... ./run-scenario.sh
-#   ./run-scenario.sh --verify        # only run the detection scorecard
+#   ssh atk-01 'SPRAY_PW=Summer2026 ADMIN_USER=... ADMIN_PW=... ./run-scenario.sh'
+#   ./run-scenario.sh --verify        # scorecard ONLY — run this part from the
+#                                      # OPERATOR HOST, not atk-01 (see below)
 #
-# The scorecard SSHes to siem-01 and greps alerts.log for every expected rule id,
-# printing a DETECTED/MISSED matrix — the "did the lab catch the whole chain?" view.
+# IMPORTANT (found on first live run, 2026-09-06): the scorecard needs to reach
+# siem-01, and REDTEAM never reaches SOC (by design — see docs/00-ip-plan.md).
+# atk-01 can't even resolve the hostname. Running the whole script in one shot
+# on atk-01 (as this header used to imply) makes every scorecard check silently
+# fail with an SSH error, which reads as a wall of MISSED with no explanation.
+# The correct two-step invocation: run the attack phase on atk-01 (above), then
+# run `./run-scenario.sh --verify` from the operator host (this Mac), which
+# already has real SSH access to siem-01 via ~/.ssh/config.
+#
+# The scorecard SSHes to siem-01 and greps alerts.json for every expected rule
+# id, printing a DETECTED/MISSED matrix — the "did the lab catch the whole
+# chain?" view.
 # ===========================================================================
 set -u
 
@@ -78,7 +90,7 @@ run_attacks() {
 
   phase "Phase 5 — Collection: stage data into an archive (T1560.001)"
   step "run '7z a stage.zip <data>' or Compress-Archive on ws-01"
-  note "100517" "archive staging (Sigma 100517-100519)"
+  note "100519" "archive staging (Sigma 100517-100519; only 100519/Compress-Archive is exercisable here - 100517/518 need rar.exe/7z.exe, not present)"
 
   phase "Phase 6 — Exfiltration: DNS tunnel out to REDTEAM (T1048.003)"
   step "run an iodine tunnel fs-01 -> atk-01 (see phase-6-nsm/dns-tunneling.md)"
@@ -93,10 +105,20 @@ run_attacks() {
 }
 
 scorecard() {
-  phase "Detection scorecard — grepping $SIEM_HOST alerts.log"
+  phase "Detection scorecard — grepping $SIEM_HOST alerts.json"
+  # NOTE (2026-09-07, first live run): the original pattern here
+  # (`grep "rule.*id.*$rid\|($rid)"`) was self-referential — run over `ssh ...
+  # sudo grep ...`, the sudo *invocation itself* gets logged (PAM/sudo ->
+  # journald -> Wazuh) and its own command line contains the literal rule id
+  # as plain digits, so it can match its own audit trail on a later check in
+  # the same run (caught: rule 100525 scored a false DETECTED with zero real
+  # comsvcs telemetry behind it — see detection-catalog.md row #44). Fixed by
+  # anchoring on the exact JSON `"id":"<rid>"` shape a real alert carries,
+  # against alerts.json (structured) rather than alerts.log (free text) — a
+  # shell command line essentially never contains that exact quoted substring.
   local hits misses=0
   for rid in "${EXPECT_RULES[@]}"; do
-    if ssh "$SIEM_HOST" "sudo grep -q \"rule.*id.*$rid\\|($rid)\" /var/ossec/logs/alerts/alerts.log" 2>/dev/null; then
+    if ssh "$SIEM_HOST" "sudo grep -aq '\"id\":\"$rid\"' /var/ossec/logs/alerts/alerts.json" 2>/dev/null; then
       printf '  \033[32m[DETECTED]\033[0m rule %s\n' "$rid"; hits=$((${hits:-0}+1))
     else
       printf '  \033[31m[ MISSED ]\033[0m rule %s\n' "$rid"; misses=$((misses+1))
@@ -110,7 +132,7 @@ if [ "${1:-}" = "--verify" ]; then
   # rebuild the expected list without launching attacks
   run_attacks() { :; }  # no-op guard (kept for symmetry)
   # populate EXPECT_RULES by tagging only
-  EXPECT_RULES=(100440 100100 100401 100031 100525 100513 100517 9100010 100520 100430 100460)
+  EXPECT_RULES=(100440 100100 100401 100031 100525 100513 100519 9100010 100520 100430 100460)
   scorecard
   exit 0
 fi
