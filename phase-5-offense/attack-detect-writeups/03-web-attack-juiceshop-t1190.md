@@ -99,28 +99,38 @@ lab's most important gap.
 
 ---
 
-## 5. Verification (run when the lab is up)
+## 5. Verification — run live 2026-09-07, two real bugs found and fixed
 
 ```bash
-# bring up the segments this needs: networking (rtr-01) + services (dmz-01) + soc (siem-01) + attack (atk-01)
-make up PROFILE=services      # + networking + soc + attack per your profiles
-
-# fire the attacks from the attacker box
-ssh atk-01 'bash /path/to/web-attack-scan.sh'
-
-# (1) Suricata saw it on the wire (rtr-01):
-ssh rtr-01 "sudo grep 'LAB WEB ATTACK' /var/log/suricata/fast.log | tail"
-
-# (2) Wazuh labeled it T1190 (siem-01):
-ssh siem-01 "sudo grep -E '100440|100441|100442' /var/ossec/logs/alerts/alerts.log | tail"
-
-# (2b) confirm the decoded Suricata signature field name matches the rule:
-ssh siem-01 "echo '<paste an eve.json alert line>' | sudo /var/ossec/bin/wazuh-logtest"
+make up PROFILE=soc; make up PROFILE=attack; make up PROFILE=services   # 7 of 8 VMs
+ssh atk-01 'curl -sk "http://10.10.20.10:3000/rest/products/search?q=test%27%20OR%201=1--"'
+ssh rtr-01-root "grep 'LAB WEB ATTACK' /var/log/suricata/fast.log | tail"   # note: sudo isn't installed on
+                                                                            # rtr-01, use the root SSH alias
+ssh siem-01 "sudo grep -E '100440|100441' /var/ossec/logs/alerts/alerts.json | tail"
 ```
 
-**One thing to confirm on first fire:** the Wazuh rules key on `alert.signature` (Wazuh's decoded Suricata
-signature text). If `wazuh-logtest` shows a different decoded key for the signature in this Wazuh version,
-it's a one-line change in the three rules — flagged here rather than assumed.
+`alert.signature` was never the problem — confirmed correct via the interpolated `$(alert.signature)` text in
+live 86601 alerts. Two *other* bugs were:
+
+1. **Suricata matched the raw, URL-encoded request.** The PCREs assumed a decoded buffer (`' OR 1=1`), but
+   `%27%20OR%201=1--` never satisfies `\bor\b\s+1` — no literal space/quote, and no word boundary between the
+   "0" of `%20` and "OR". Confirmed by pulling the exact eve.json `http.url` field and testing the regex
+   against it directly. Fixed with a `url_decode` transform on every URI/body-based rule (20/21/22/23) — took
+   two iterations to get right: the keyword is `url_decode` (underscore), not `urldecode` (confirmed via
+   `suricata --list-keywords=all`, since a guessed keyword just silently drops the rule with "unknown rule
+   keyword" — caught in `suricata.log`, not in any alert output, so *check the engine's own startup log after
+   any rule change*, not just whether traffic produces alerts); and rule 20's embedded literal `;` inside the
+   PCRE broke Suricata's option parser once combined with the transform keyword — worked around with the
+   PCRE hex-escape `\x3b` instead of a literal semicolon.
+2. **Wazuh silently lost the alert to a different rule.** Even with Suricata firing correctly, no SIEM alert
+   appeared. `wazuh-logtest` fed the exact eve.json line and returned rule **100211** ("known-malicious source
+   IP", L12) instead of **100440** (T1190, was L10) — atk-01's own IP is in the threat-intel CDB from unrelated
+   exercises, so both rules matched the same event and Wazuh's one-rule-per-event precedence (highest level
+   among matching `if_sid=86601` siblings) picked the wrong one every time. Fixed by raising 100440/100441 to
+   L13. Same shape as Sigma rules needing to clear the stock discovery band — just a different competing rule.
+
+**Result: 100440 fires clean and correctly labeled T1190**, confirmed via `ad-validate.py`'s DMZ Web Attack
+scenario (added the same night) and by hand, twice.
 
 ---
 
@@ -130,9 +140,9 @@ it's a one-line change in the three rules — flagged here rather than assumed.
   Juice Shop is confirmed to log request lines to stdout, a Wazuh decoder + rules on `data.log` would add a
   host-side detection independent of the network path. Left as a documented next step rather than shipping a
   decoder against an unverified log format.
-- **Coverage:** adds T1190 (Initial Access) and T1595.002 (Reconnaissance) to the map → **44 techniques**
-  (`generate-coverage.py`, regenerated). Both score "detection exists"; they move to "validated" once the
-  exercise is run and (optionally) wired into the purple-team battery.
+- **Coverage:** T1190 is verified TP live (2026-09-07) and wired into `ad-validate.py`'s SCENARIOS as the
+  "DMZ Web Attack" entry, so it counts toward "validated" once `generate-coverage.py` is next regenerated
+  (deliberately not done mid-session — see the honesty note in `purple-team/README.md`'s Extending section).
 - **The `HTTP_PORTS` fix is the reusable lesson:** any app on a non-standard port silently falls outside a
   signature IDS's HTTP inspection unless you tell the sensor the port is HTTP. Worth auditing for every
   service the lab adds.

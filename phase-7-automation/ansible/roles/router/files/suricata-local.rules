@@ -65,23 +65,41 @@ alert dns $HOME_NET any -> 10.10.40.0/24 53 (msg:"LAB DNS tunneling - long encod
 # Scoped by DESTINATION (dmz-01:3000) since atk-01's REDTEAM address is DHCP.
 # Exercised with sqlmap / nikto / curl probes from atk-01 — see
 # phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md.
+#
+# Finding (2026-09-07, first live-fire): the SQLi rule (20) never fired against
+# a real request. eve.json's http.url logs the RAW request line, and it turns
+# out the PCRE was being matched against that same *un-decoded* buffer —
+# `q=test%27%20OR%201=1--` never satisfies `\bor\b\s+1` (no word boundary
+# between the "0" of "%20" and "OR", and no literal space/quote characters to
+# match at all), even though the payload is textbook SQLi once decoded. Fixed
+# by inserting a `url_decode;` transform before the PCRE on every URI/body-based
+# rule below (19-23), so matching happens against the decoded value regardless
+# of how the client encoded it — the correct fix, not a rewritten pattern that
+# would just move the same gap to the next untested encoding. (20)/(22)/(23)
+# already had literal encoded alternatives hand-added for exactly this reason
+# (`%3cscript`, `%2e%2e%2f`) — url_decode makes that per-pattern workaround
+# unnecessary going forward, kept here only as redundant belt-and-braces.
+# (First attempt at this fix used the keyword `urldecode` — doesn't exist in
+# Suricata 7.0.10, which silently dropped all 4 rules with "unknown rule
+# keyword" and 0 detection until caught via suricata.log, not eve.json. The
+# real keyword, confirmed via `suricata --list-keywords=all`, is `url_decode`.)
 # ============================================================================
 
 # (20) SQL injection in the request URI — tautology / UNION / stacked-query /
 # time-based patterns. Hits Juice Shop's product-search sink (/rest/products/search?q=).
-alert http $HOME_NET any -> 10.10.20.10 3000 (msg:"LAB WEB ATTACK SQLi in URI to DMZ Juice Shop (T1190)"; flow:established,to_server; http.uri; pcre:"/(union\s+select|information_schema|\bor\b\s+1\s*=\s*1|'\s*or\s*'?1|sleep\s*\(|benchmark\s*\(|waitfor\s+delay|;\s*drop\s+table)/i"; classtype:web-application-attack; sid:9100020; rev:1; metadata:mitre_tactic TA0001, mitre_technique T1190;)
+alert http $HOME_NET any -> 10.10.20.10 3000 (msg:"LAB WEB ATTACK SQLi in URI to DMZ Juice Shop (T1190)"; flow:established,to_server; http.uri; url_decode; pcre:"/(union\s+select|information_schema|\bor\b\s+1\s*=\s*1|'\s*or\s*'?1|sleep\s*\(|benchmark\s*\(|waitfor\s+delay|\x3b\s*drop\s+table)/i"; classtype:web-application-attack; sid:9100020; rev:2; metadata:mitre_tactic TA0001, mitre_technique T1190;)
 
 # (21) SQL injection in the POST body — Juice Shop's classic login bypass posts
 # {"email":"' OR 1=1--","password":"x"} to /rest/user/login.
-alert http $HOME_NET any -> 10.10.20.10 3000 (msg:"LAB WEB ATTACK SQLi in POST body to DMZ Juice Shop (T1190)"; flow:established,to_server; http.request_body; pcre:"/(union\s+select|\bor\b\s+1\s*=\s*1|'\s*or\s*'1'\s*=\s*'1|'\s*--|sleep\s*\()/i"; classtype:web-application-attack; sid:9100021; rev:1; metadata:mitre_tactic TA0001, mitre_technique T1190;)
+alert http $HOME_NET any -> 10.10.20.10 3000 (msg:"LAB WEB ATTACK SQLi in POST body to DMZ Juice Shop (T1190)"; flow:established,to_server; http.request_body; url_decode; pcre:"/(union\s+select|\bor\b\s+1\s*=\s*1|'\s*or\s*'1'\s*=\s*'1|'\s*--|sleep\s*\()/i"; classtype:web-application-attack; sid:9100021; rev:2; metadata:mitre_tactic TA0001, mitre_technique T1190;)
 
 # (22) Cross-site scripting — reflected script/handler payloads in the URI (Juice
 # Shop's search field reflects into the DOM).
-alert http $HOME_NET any -> 10.10.20.10 3000 (msg:"LAB WEB ATTACK XSS in URI to DMZ Juice Shop (T1190)"; flow:established,to_server; http.uri; pcre:"/(<script|%3cscript|onerror\s*=|onload\s*=|javascript:|<img[^>]+src\s*=)/i"; classtype:web-application-attack; sid:9100022; rev:1; metadata:mitre_tactic TA0001, mitre_technique T1190;)
+alert http $HOME_NET any -> 10.10.20.10 3000 (msg:"LAB WEB ATTACK XSS in URI to DMZ Juice Shop (T1190)"; flow:established,to_server; http.uri; url_decode; pcre:"/(<script|%3cscript|onerror\s*=|onload\s*=|javascript:|<img[^>]+src\s*=)/i"; classtype:web-application-attack; sid:9100022; rev:2; metadata:mitre_tactic TA0001, mitre_technique T1190;)
 
 # (23) Path traversal / local file inclusion — ../ sequences and canonical
 # sensitive-file targets (Juice Shop exposes an /ftp directory-traversal sink).
-alert http $HOME_NET any -> 10.10.20.10 3000 (msg:"LAB WEB ATTACK path traversal / LFI to DMZ Juice Shop (T1190)"; flow:established,to_server; http.uri; pcre:"/(\.\.\/|\.\.%2f|%2e%2e%2f|%2e%2e\/|\/etc\/passwd|\/proc\/self\/)/i"; classtype:web-application-attack; sid:9100023; rev:1; metadata:mitre_tactic TA0001, mitre_technique T1190;)
+alert http $HOME_NET any -> 10.10.20.10 3000 (msg:"LAB WEB ATTACK path traversal / LFI to DMZ Juice Shop (T1190)"; flow:established,to_server; http.uri; url_decode; pcre:"/(\.\.\/|\.\.%2f|%2e%2e%2f|%2e%2e\/|\/etc\/passwd|\/proc\/self\/)/i"; classtype:web-application-attack; sid:9100023; rev:2; metadata:mitre_tactic TA0001, mitre_technique T1190;)
 
 # (24) Web scanner / automated tooling by User-Agent — sqlmap, nikto, gobuster,
 # ffuf, nuclei etc. Tagged Reconnaissance (T1595.002 Active Scanning) — the tell

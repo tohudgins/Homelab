@@ -1003,15 +1003,27 @@
   a labeled, MITRE-mapped SIEM detection scoped to the DMZ app — the piece the lab
   was missing: Juice Shop had attack surface + container-log ingestion but no
   detection firing on either.
-  Field note: `alert.signature` is Wazuh's decoded Suricata signature text; on the
-  first live fire confirm the exact decoded key with `wazuh-logtest` (Suricata
-  decoder field names occasionally differ by Wazuh version) — a one-line change if so.
+  Field note: `alert.signature` is Wazuh's decoded Suricata signature text — confirmed correct via
+  wazuh-logtest and the interpolated $(alert.signature) text in live 86601 alerts (2026-09-07), so that part
+  was never the problem.
+  Field note 2 (2026-09-07, first live fire): 100440/100441 sat at level 10/8, BELOW rule 100211 (level 12,
+  "NSM alert from a known-malicious source IP" — the threat-intel CDB blocklist rule, also `if_sid=86601`).
+  atk-01 (10.10.40.119) is itself in that CDB list from unrelated exercises, so EVERY attack launched from
+  atk-01 against the DMZ made both 100211 and 100440 independently true on the same decoded event — and
+  Wazuh's one-rule-per-event precedence (highest level among matching siblings wins) picked 100211 every
+  time, so the T1190-specific alert never surfaced even though the Suricata signature and the Wazuh field
+  match were both firing correctly underneath it. Confirmed via wazuh-logtest: fed the exact eve.json alert
+  line through it and got rule 100211 back, never 100440. Same class of gotcha as the Sigma detections
+  needing to sit above the stock L3 discovery band to win precedence — just against a different competing
+  rule this time. Fixed by raising both above 100211's level, so a labeled T1190 alert always wins over a
+  generic "known-bad source IP" hit when both are true; 100442 (the burst correlation) already sat at L12
+  and is unaffected, since `if_matched_sid` correlation isn't subject to this same-event precedence rule.
   See phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md.
   ============================================================================
 -->
 <group name="local,ids,suricata,web,attack,">
 
-  <rule id="100440" level="10">
+  <rule id="100440" level="13">
     <if_sid>86601</if_sid>
     <field name="alert.signature" type="pcre2">LAB WEB ATTACK (SQLi|XSS|path traversal)</field>
     <description>DMZ web attack against Juice Shop — $(alert.signature)</description>
@@ -1021,7 +1033,7 @@
     <group>web_attack,attack,</group>
   </rule>
 
-  <rule id="100441" level="8">
+  <rule id="100441" level="13">
     <if_sid>86601</if_sid>
     <field name="alert.signature" type="pcre2">automated scanner User-Agent</field>
     <description>DMZ web app being scanned by automated tooling — $(alert.signature)</description>
