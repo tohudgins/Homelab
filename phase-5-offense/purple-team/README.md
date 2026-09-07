@@ -22,7 +22,12 @@ for each technique in tests.json:
 ```
 Exit code is non-zero if any technique is undetected (usable as a CI gate on the detection ruleset).
 
-## Latest result — 9/9 (100% coverage of the battery)
+**Current: 18/18 (100%), last run 2026-09-07** — the battery has grown well past the original Discovery set
+(now includes the Sigma-compiled rules and all 4 exercisable T1490 sub-rules); see `tests.json` for the live
+list. The "9/9" result immediately below is kept as-is — it's the *first* run, and the findings under "What
+building this exposed" are still exactly how they happened.
+
+## First result (Discovery battery, 2026-08-27) — 9/9
 ```
 [PASS] T1016      rules 100100,100101   Network Configuration Discovery
 [PASS] T1049      rules 100102,100103   Network Connections Discovery

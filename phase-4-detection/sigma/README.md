@@ -79,6 +79,13 @@ emitted as a broken or over-broad rule.
 | `proc_creation_win_service_discovery_sc.yml` | process_creation | T1007 | 100507, 100508 | `sc query`/`queryex` (bin **and** verb). |
 | `posh_ps_defender_exclusion_added.yml` | **ps_script** | T1562.001 | 100506 | First PowerShell (EID 4104) rule — `Add-`/`Set-MpPreference` **and** an `-Exclusion*` arg. |
 | `proc_creation_win_bitsadmin_download.yml` | process_creation | T1197 | 100511, 100512 | `bitsadmin.exe` **and** a transfer verb. **Found by the rare-process threat hunt** ([`../threat-hunting/`](../threat-hunting/README.md)) — a one-off LOLBin with no prior coverage. |
+| `proc_creation_win_wmiprvse_child_exec.yml` | process_creation | T1047 | 100515 | `WmiPrvSE.exe` spawns a shell child — inbound WMI remote exec ([[Parent-Process Lineage Detection]]). |
+| `proc_creation_win_wsmprovhost_child_exec.yml` | process_creation | T1021.006 | 100516 | Any child of `wsmprovhost.exe` — inbound WinRM/PS-Remoting exec. |
+| `proc_creation_win_psexec_service_exec.yml` | process_creation | T1569.002 | 100513, 100514 | `PSEXESVC.exe` runs **or** spawns a child — Sysinternals/impacket PsExec. |
+| `proc_creation_win_archive_collection.yml` | process_creation | T1560.001 | 100517, 100518 | rar.exe / 7-Zip (image **and** originalFileName variants) archiving data. |
+| `ps_script_win_compress_archive_collection.yml` | **ps_script** | T1560.001 | 100519 | Fileless `Compress-Archive` staging — the same technique with no external binary. |
+| `proc_creation_win_inhibit_system_recovery.yml` | process_creation | T1490 | 100520–100524 | `vssadmin` delete/resize, `wmic` shadowcopy delete, `wbadmin` delete, `bcdedit` recovery-disable — 5 rules from one `1 of selection_*` condition. |
+| `proc_creation_win_lsass_comsvcs_minidump.yml` | process_creation | T1003.001 | 100525, 100526 | `comsvcs.dll`+`MiniDump` on the command line — catches the LOLBin even when the memory *read* is blocked (see the Defender finding below). |
 
 > Note on upstream ps_script rules: several maintained SigmaHQ PowerShell rules tag `attack.t1685` (and the
 > non-standard tactic `attack.defense-impairment`), an ATT&CK id I couldn't verify — so rather than pass an
@@ -99,6 +106,38 @@ emitted as a broken or over-broad rule.
   events; asserts each rule fires on a true positive and stays quiet on look-alikes (benign `certutil -hashfile`,
   `sc create`, `bitsadmin /list`, and read-only `Get-MpPreference` / realtime-monitoring toggles all correctly
   do **not** fire — precision, no false positive).
+
+- **Live fire (`purple-team.py`, ART on ws-01), 2026-09-07: 18/18 (100%).** Extended the battery to T1490 —
+  4 of its 5 rules are ART-exercisable and all 4 fire clean: 100520 (`vssadmin delete shadows`), 100521
+  (`vssadmin resize shadowstorage`), 100523 (`wbadmin delete catalog`), 100524 (`bcdedit` recovery-disable).
+
+### Finding: the offline ART bundle's test numbers don't always match the technique's public numbering
+Mapped T1490's vssadmin-resize rule (100521) to what a fetched summary of the technique's test list called
+"test 9" — wrong. `Invoke-AtomicTest T1490 -ShowDetailsBrief` run directly on ws-01 shows test 9 is actually
+"Disable System Restore Through Registry"; vssadmin-resize is test 10. The rule itself was correct throughout
+(confirmed by manually running the real command and watching it fire); the bug was purely in which ART test
+number `tests.json` pointed at. Fixed by listing tests on the actual host rather than trusting a remembered
+or fetched number — the same "verify by exercising" discipline the rest of this catalog already follows,
+just applied to the test harness's own inputs instead of the detection logic.
+
+### Finding: T1490's wmic rule is correct but unexercisable on this Windows 11 build
+Rule 100522 (`wmic shadowcopy delete`) maps to the right ART test (test 2), but `wmic.exe` doesn't exist on
+this ws-01 image — Windows 11 25H2 dropped it (`Test-Path` on both `System32\wmic.exe` and
+`System32\wbem\WMIC.exe` returns `False`; `Get-Command wmic` finds nothing). Not removed from the ruleset —
+the rule is still correct for any host old enough to have wmic — but pulled from the automated battery
+(`tests.json`'s `_comment_not_in_battery`) since it can never pass here, and a permanently-red test is worse
+than no test.
+
+### Finding: Defender blocks the comsvcs LSASS technique earlier than the rule was designed for
+Rule 100525/100526 (`comsvcs.dll`+`MiniDump`) was written specifically to survive **LSASS PPL** blocking the
+memory *read* — catalog gap #12's original problem. Attempted live 2026-09-07 and `rundll32.exe` never even
+spawns: Microsoft Defender detects and removes the exact command line as **`Trojan:Win32/RundllLolBin.AF`**
+(ThreatID 2147793100, confirmed via `Get-WinEvent` on the Windows Defender/Operational log — action Remove,
+before process creation). No process means no Sysmon EID1, so PPL is never even reached — a *stricter* block
+than the one the rule was built for. Same class of finding as certutil below: the endpoint control is the
+outer layer, and this rule is the layer that catches the technique wherever that control is weakened,
+disabled, or bypassed. Pulled from the automated battery for the same reason as wmic — it will never pass in
+this lab's default (Defender on) configuration; `sigma-selftest.py`'s 38/38 remains the proof of its logic.
 
 ### Finding: Defender blocks T1105, so a control *is* a detection layer
 The certutil rule is **not** in the live purple-team battery on purpose. Microsoft Defender (real-time
