@@ -6,16 +6,40 @@ access to impact, showing the lab detects a *chained* campaign the way a SOC see
 it — a sequence of correlated alerts across every host and sensor, not a pile of
 disconnected hits.
 
-`run-scenario.sh` drives it from atk-01 and ends with a **detection scorecard** —
-it greps siem-01 for each stage's rule and prints a DETECTED/MISSED matrix.
+`run-scenario.sh` drives phases 1–4 from atk-01; phases 5–7 (LSASS, collection,
+impact) are driven directly on ws-01/fs-01, the operator's own reach, not
+atk-01's (REDTEAM can't touch CORP file/collection paths that aren't already
+part of an attack). It ends with a **detection scorecard** — greps siem-01 for
+each stage's rule and prints a DETECTED/MISSED matrix.
 
-> [!warning] Built 2026-09-06 — runs against the live lab.
-> This orchestrates real attacks across five hosts and needs the lab powered on
-> (`networking+ad+soc+services+attack`) plus credentials. Several stages (LSASS,
-> collection, impact) are driven on ws-01/fs-01 directly. It has **not been run
-> end-to-end yet** (lab off); the scorecard is the tool that flips every stage to
-> verified. Six of the stages use detections added this session that are
-> themselves pending first live fire.
+> [!check] Run for real, end to end, 2026-09-07 — **11 of 11 kill-chain stages detected.**
+> Every phase was live-fired against the running lab and the scorecard confirms
+> all eleven: `./run-scenario.sh --verify` → `11 of 11 kill-chain stages
+> detected` → `Full-chain detection: PASS`. Getting there found and fixed three
+> real bugs, not zero:
+> 1. **A genuine SIEM-integration gap.** Phase 6's DNS tunnel fired its Suricata
+>    signature (sid 9100010) correctly, but nothing had ever turned that into a
+>    labeled Wazuh alert — it only reached the SOC as a generic threat-intel
+>    CDB hit, coincidentally, because atk-01's IP happens to be blocklisted from
+>    an unrelated exercise. Fixed with a new rule, **100443**, built the same
+>    way the T1190 detection was. See [`dns-tunneling.md`](../../phase-6-nsm/dns-tunneling.md).
+> 2. **The script's own phase-4 loop never actually attempted PsExec** — this
+>    nxc version's `--exec-method` doesn't offer "psexec" as a choice, so that
+>    iteration silently no-opped every prior run. Fixed to call
+>    `impacket-psexec` directly (which *does* attempt it, and gets Defender-
+>    blocked, as expected).
+> 3. **The scorecard's own phase-4 expectation was checking the wrong rule.**
+>    It gated on 100513 (PsExec) — confirmed Defender-blocked by design — when
+>    the technique that's actually verified working end-to-end is WinRM
+>    (100516). Re-pointed the gate there; WMI (100515, open bug) and PsExec
+>    (100513/514, confirmed block) are both deliberately excluded from the
+>    pass/fail gate rather than forced green.
+>
+> A fourth fix, cosmetic but worth naming: running the plain (non-`--verify`)
+> form on atk-01 used to also run the scorecard locally, which can never
+> succeed (REDTEAM can't reach SOC) and printed a scary "0 of 11 MISSED" that
+> had nothing to do with whether the attacks worked. It now just tells you to
+> run `--verify` from the operator host instead.
 
 ## The kill chain
 
@@ -35,9 +59,9 @@ flowchart TD
 | 1 | Initial Access | web attack on Juice Shop (`web-attack-scan.sh`) | Suricata 9100020–24 → Wazuh **100440/100442** (T1190) |
 | 2 | Discovery | enumerate host/domain on ws-01 | **100100–100113**, Sigma **100502–100510** |
 | 3 | Credential Access | spray → `svc-sql`; kerberoast; `lsass-dump.ps1` | **100401** (spray), **100031**/**100420** (roast/honeytoken), **100525** (LSASS) |
-| 4 | Lateral Movement | `nxc --exec-method wmiexec/winrm/psexec` → ws-01 | Sigma **100513–100516** (T1047/T1021.006/T1569.002) |
-| 5 | Collection | `7z a` / `Compress-Archive` on ws-01 | Sigma **100517–100519** (T1560.001) |
-| 6 | Exfiltration | iodine DNS tunnel fs-01 → atk-01 | Suricata **9100010** (T1048.003); beacon **9100002** |
+| 4 | Lateral Movement | `nxc` wmiexec/winrm + `impacket-psexec` → ws-01 | Sigma **100516** (WinRM, verified) — WMI 100515 open bug, PsExec 100513/514 confirmed Defender-block, both excluded from the gate |
+| 5 | Collection | `Compress-Archive` on ws-01 (rar/7z not present on this image) | Sigma **100519** (T1560.001), verified TP live |
+| 6 | Exfiltration | iodine DNS tunnel fs-01 → atk-01 | Suricata **9100010** → Wazuh **100443** (T1048.003); beacon **9100002** |
 | 7 | Impact | `vssadmin delete shadows`; encrypt canary; drop EICAR | **100520** (T1490), **100430/100431** (T1486), **100460** (YARA) |
 
 Every sensor in the lab contributes: **Suricata/Zeek** (network) catch phases 1 and
@@ -47,10 +71,15 @@ drop, and the **honeytoken** catches the targeted roast the volume rule misses.
 ## Run it
 
 ```bash
-# from atk-01, lab up:
-SPRAY_PW=Summer2026 ADMIN_USER=<ws01-admin> ADMIN_PW=<pw> ./run-scenario.sh
+# 1) attack phase (phases 1-4), from atk-01, lab up:
+ssh atk-01 "cd ~/capstone/apt-scenario && SPRAY_PW=Summer2026 ADMIN_USER=<ws01-admin> ADMIN_PW=<pw> ./run-scenario.sh"
 
-# or just re-score a run already executed:
+# 2) phases 5-7 need direct ws-01/fs-01 reach the attack host doesn't have — run
+#    from the operator host: Compress-Archive on ws-01, the iodine tunnel
+#    fs-01<->atk-01, vssadmin on ws-01, the ransomware canary + EICAR on fs-01
+#    (see the per-technique docs linked in the table above for exact commands)
+
+# 3) score it — from the operator host, NOT atk-01 (REDTEAM can't reach SOC):
 ./run-scenario.sh --verify
 ```
 
@@ -62,5 +91,5 @@ lighting up at every step, across three sensor types — says "I understand how 
 intrusion actually unfolds and how a defense is supposed to see it." That's the
 story this runner tells in one command.
 
-Next: once run live, capture the scorecard output and the correlated alert timeline
-(Wazuh dashboard / IRIS case) as the screenshots for the detection-engineering page.
+Next: capture the scorecard output and the correlated alert timeline (Wazuh
+dashboard / IRIS case) as the screenshots for the detection-engineering page.

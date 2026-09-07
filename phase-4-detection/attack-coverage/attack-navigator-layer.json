@@ -6,13 +6,13 @@
     "layer": "4.5"
   },
   "domain": "enterprise-attack",
-  "description": "Detection coverage generated from the homelab ruleset: 50 techniques with a custom detection, 17 validated end-to-end by the purple-team harness. Dark green = validated, light green = detection exists. Regenerate with generate-coverage.py.",
+  "description": "Detection coverage generated from the homelab ruleset: 50 techniques with a custom detection, 23 validated end-to-end by the purple-team harness. Dark green = validated, light green = detection exists. Regenerate with generate-coverage.py.",
   "techniques": [
     {
       "techniqueID": "T1003.001",
-      "score": 50,
-      "color": "#66bb6a",
-      "comment": "detection \u2014 100525, 100526",
+      "score": 100,
+      "color": "#2e7d32",
+      "comment": "VALIDATED (purple-team) \u2014 100525, 100526",
       "enabled": true
     },
     {
@@ -52,9 +52,9 @@
     },
     {
       "techniqueID": "T1021.006",
-      "score": 50,
-      "color": "#66bb6a",
-      "comment": "detection \u2014 100516",
+      "score": 100,
+      "color": "#2e7d32",
+      "comment": "VALIDATED (purple-team) \u2014 100516",
       "enabled": true
     },
     {
@@ -73,16 +73,16 @@
     },
     {
       "techniqueID": "T1047",
-      "score": 50,
-      "color": "#66bb6a",
-      "comment": "detection \u2014 100515",
+      "score": 100,
+      "color": "#2e7d32",
+      "comment": "VALIDATED (purple-team) \u2014 100515",
       "enabled": true
     },
     {
       "techniqueID": "T1048.003",
       "score": 50,
       "color": "#66bb6a",
-      "comment": "detection \u2014 suricata:9100010",
+      "comment": "detection \u2014 100443, suricata:9100010",
       "enabled": true
     },
     {
@@ -145,7 +145,7 @@
       "techniqueID": "T1071.004",
       "score": 50,
       "color": "#66bb6a",
-      "comment": "detection \u2014 100310, suricata:9100010",
+      "comment": "detection \u2014 100310, 100443, suricata:9100010",
       "enabled": true
     },
     {
@@ -220,9 +220,9 @@
     },
     {
       "techniqueID": "T1190",
-      "score": 50,
-      "color": "#66bb6a",
-      "comment": "detection \u2014 100440, 100442, suricata:9100020, suricata:9100021, suricata:9100022, suricata:9100023",
+      "score": 100,
+      "color": "#2e7d32",
+      "comment": "VALIDATED (purple-team) \u2014 100440, 100442, suricata:9100020, suricata:9100021, suricata:9100022, suricata:9100023",
       "enabled": true
     },
     {
@@ -290,9 +290,9 @@
     },
     {
       "techniqueID": "T1490",
-      "score": 50,
-      "color": "#66bb6a",
-      "comment": "detection \u2014 100520, 100521, 100522, 100523, 100524",
+      "score": 100,
+      "color": "#2e7d32",
+      "comment": "VALIDATED (purple-team) \u2014 100520, 100521, 100522, 100523, 100524",
       "enabled": true
     },
     {
@@ -332,9 +332,9 @@
     },
     {
       "techniqueID": "T1560.001",
-      "score": 50,
-      "color": "#66bb6a",
-      "comment": "detection \u2014 100517, 100518, 100519",
+      "score": 100,
+      "color": "#2e7d32",
+      "comment": "VALIDATED (purple-team) \u2014 100517, 100518, 100519",
       "enabled": true
     },
     {

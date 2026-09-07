@@ -1055,6 +1055,34 @@
     <group>web_attack,attack,</group>
   </rule>
 
+  <!-- DNS tunneling — same pattern as 100440 (T1190): rtr-01's inline Suricata
+       already alerts on this at the wire (router role, sid 9100010, "LAB DNS
+       tunneling..." signature) and reaches Wazuh as a stock 86601 Suricata
+       alert, but until now nothing gave it a labeled, MITRE-mapped rule the
+       way the web attack got. GAP FOUND running the capstone for real
+       (2026-09-07): a live iodine tunnel fs-01->atk-01 (60 pings, 0% loss,
+       Suricata sid 9100010 fired 126x in eve.json on rtr-01) never once
+       produced a "DNS tunneling" alert in Wazuh — it only showed up as the
+       generic threat-intel CDB hit (rule 100210, dest_ip match), and only
+       because atk-01's IP happens to be blocklisted from unrelated exercises.
+       Remove that coincidence and this technique would have been fully
+       invisible to the SIEM, caught only in Suricata's own eve.json on the
+       sensor host — a real SIEM-integration gap, not a documentation one.
+       Fixed the same way 100440 was fixed: a child of 86601 keyed on the
+       Suricata signature text, at level 13 so it always wins the same-event
+       precedence tie against 100210/100211 (both level 12) — see the T1190
+       field note above for why an equal-or-lower level loses that race. -->
+  <rule id="100443" level="13">
+    <if_sid>86601</if_sid>
+    <field name="alert.signature" type="pcre2">LAB DNS tunneling</field>
+    <description>DNS tunneling to REDTEAM — long encoded query names ($(alert.signature))</description>
+    <mitre>
+      <id>T1048.003</id>
+      <id>T1071.004</id>
+    </mitre>
+    <group>exfiltration,attack,</group>
+  </rule>
+
 </group>
 
 <!--

