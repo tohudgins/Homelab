@@ -109,11 +109,18 @@ SCENARIOS = [
         "desc": "wsmprovhost spawns a shell on ws-01 (T1021.006)",
     },
     {
+        # NOT nxc: `nxc smb --exec-method` only accepts {smbexec,atexec,mmcexec,
+        # wmiexec} in this nxc version (1.5.1) - "psexec" errors at the argparse
+        # level, so this scenario never actually attacked anything until fixed
+        # 2026-09-07. impacket-psexec is the genuine PsExec-style tool (already
+        # used elsewhere in this file) and, unlike nxc, supports -service-name to
+        # match the real Sysinternals/rule-expected "PSEXESVC" naming rather than
+        # a random one.
         "name": "PsExec Lateral Movement",
         "host": "atk-01",
         "requires_env": ["ADMIN_USER", "ADMIN_PW"],
-        "cmd": (f"nxc smb {WS_IP} -u '{ADMIN_USER}' -p '{ADMIN_PW}' "
-                "--exec-method psexec -x whoami"),
+        "cmd": (f"impacket-psexec -service-name PSEXESVC "
+                f"'{ADMIN_USER}:{ADMIN_PW}@{WS_IP}' whoami"),
         "rules": ["100513", "100514"],
         "technique": "T1569.002",
         "desc": "PSEXESVC runs/spawns a shell on ws-01 (T1569.002)",

@@ -80,3 +80,53 @@ Adds T1047, T1021.006, T1569.002 → coverage map **47 techniques** (`generate-c
 Lateral Movement goes from 1 covered technique (T1021.002) to **2** (adds WinRM), and Execution gains WMI +
 Service Execution. All three score "detection exists (logic-verified)"; they move to "validated" when the §3
 exercise is run and wired into the purple-team battery.
+
+## 5. Live-fire attempt (2026-09-07) — one confirmed, two real blockers, one design boundary
+
+Wired all three into `ad-validate.py` and ran them from atk-01 against ws-01, with `ADMIN_USER=localadmin`.
+First attempt: all three failed outright — not the rules, the *network path*. ws-01 was completely
+unreachable on 445/135 from anywhere, even same-segment (`dc-01`). Root cause, found and fixed live:
+
+1. ws-01's Windows Firewall had the entire **"File and Printer Sharing" and "Windows Management
+   Instrumentation (WMI)" rule groups disabled**, for every profile — a side effect of the "debloated" base
+   image; nothing had ever tried live inbound lateral movement against this host before tonight.
+2. Its network was misclassified `Public` instead of `DomainAuthenticated` (stale NLA detection from boot;
+   restarting the NLA service didn't fix it — set the profile to `Private` directly instead).
+3. Even with the rules enabled, the SMB-In rule's remote scope was `LocalSubnet` — invisible to REDTEAM
+   traffic routed in from a different segment, which is exactly why `dc-01` (same subnet as ws-01) could
+   reach it while `atk-01` couldn't. Widened to `Any`.
+
+With the path open, `impacket-psexec` additionally failed to write to `ADMIN$`/`C$` ("share is not
+writable") until `LocalAccountTokenFilterPolicy=1` was set — the standard Microsoft fix for UAC's remote
+token-filtering of local (non-`Administrator`) accounts; `localadmin` is exactly that. **None of this is
+codified into the `windows` Ansible role** — applied live over SSH, not idempotent, doesn't survive a
+rebuild. Flagged as a follow-up, not silently left.
+
+With the path and privilege both fixed:
+
+- **T1569.002 (PsExec) — blocked by Defender, not by tooling.** `nxc`'s `--exec-method` doesn't even offer a
+  `psexec` choice in this nxc version (`ad-validate.py`'s original scenario used an invalid argument and had
+  never actually attacked anything — fixed to call `impacket-psexec -service-name PSEXESVC` directly, the
+  real tool, matching the exact binary name the Sigma rule expects). It writes the service binary and starts
+  the service — then Defender detects and quarantines it as **`Trojan:Win32/RemoteExec!pz`** before the
+  service can run, confirmed via `Get-MpThreatDetection`/`Get-WinEvent` on the Defender operational log. Same
+  class of finding as T1105 certutil and T1003.001 comsvcs: the endpoint control is the outer layer, and this
+  rule is the layer that catches the technique wherever that control is weakened, disabled, or bypassed.
+  Separately worth noting: impacket-psexec randomizes the binary/service name *unless* `-service-name` is
+  passed, so a tool run the default way would evade this rule's literal `PSEXESVC` match even with Defender
+  off — a real coverage gap independent of tonight's finding.
+- **T1047 (WMI) — genuinely unresolved.** The call reaches ws-01 (a fresh `WmiPrvSE.exe` provider host spawns
+  — confirmed via syscollector inventory) but never produces a child process, and `nxc` reports "NETBIOS
+  connection... timed out." Not a Defender block (nothing logged for this attempt) and not the firewall
+  (fixed above). Best working theory: the DCOM callback for the `Win32_Process.Create` result needs an
+  ephemeral RPC port Windows negotiates per-call, and something in that specific path isn't getting through.
+  Not root-caused tonight — an open item, not glossed over as "pending" when it was actually tried and failed.
+- **T1021.006 (WinRM) — not exercisable as the lab is currently built.** Port 5985 doesn't accept a
+  connection at all. This isn't a bug: Phase 7's `windows` role deliberately manages ws-01 over **SSH, not
+  WinRM** (see `group_vars/windows.yml` — avoids standing up a listener + certificate). Standing one up just
+  to exercise this technique is a real option, but it changes the host's documented management posture; left
+  as a decision for Tyler rather than made unilaterally.
+
+**Net: 1 of 3 live-fire attempted and explained (Defender-blocked, a real finding); 1 open technical question
+(WMI); 1 architectural non-goal (WinRM) rather than a gap.** All three rules' *logic* remains proven by
+`sigma-selftest.py`, unaffected by any of this.
