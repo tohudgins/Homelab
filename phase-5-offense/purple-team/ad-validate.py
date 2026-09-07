@@ -90,41 +90,46 @@ SCENARIOS = [
     # All three need ADMIN_USER/ADMIN_PW (ws-01 local-admin Windows creds, not
     # committed) and SKIP cleanly without them.
     {
+        # NOT nxc: `nxc smb --exec-method wmiexec` connects but its second SMB
+        # connection reliably times out against this host ("NETBIOS connection...
+        # timed out") - never root-caused (checked 2026-09-07: not the firewall,
+        # not Defender). impacket-wmiexec (the same tool nxc wraps) works fine
+        # directly and produces the exact WmiPrvSE->cmd.exe telemetry expected -
+        # rule 100515 still doesn't fire on it, a genuinely open finding (see
+        # detection-catalog.md row #39), so this scenario is expected to FAIL
+        # until that's resolved. Kept in the battery rather than removed, since
+        # unlike the wmic/Defender non-gaps this one has no confirmed permanent
+        # blocker - it may just start passing once the real cause is found.
         "name": "WMI Lateral Movement",
         "host": "atk-01",
         "requires_env": ["ADMIN_USER", "ADMIN_PW"],
-        "cmd": (f"nxc smb {WS_IP} -u '{ADMIN_USER}' -p '{ADMIN_PW}' "
-                "--exec-method wmiexec -x whoami"),
+        "cmd": f"impacket-wmiexec '{ADMIN_USER}:{ADMIN_PW}@{WS_IP}' whoami",
         "rules": ["100515"],
         "technique": "T1047",
         "desc": "WmiPrvSE spawns a shell on ws-01 (T1047)",
     },
     {
+        # --local-auth is required: localadmin is a LOCAL account, and nxc's
+        # winrm module defaults to domain auth (lab.internal\localadmin) without
+        # it, which fails outright - found 2026-09-07 fixing this scenario.
         "name": "WinRM Lateral Movement",
         "host": "atk-01",
         "requires_env": ["ADMIN_USER", "ADMIN_PW"],
-        "cmd": f"nxc winrm {WS_IP} -u '{ADMIN_USER}' -p '{ADMIN_PW}' -x whoami",
+        "cmd": f"nxc winrm {WS_IP} -u '{ADMIN_USER}' -p '{ADMIN_PW}' --local-auth -x whoami",
         "rules": ["100516"],
         "technique": "T1021.006",
-        "desc": "wsmprovhost spawns a shell on ws-01 (T1021.006)",
+        "desc": "wsmprovhost/winrshost spawns a shell on ws-01 (T1021.006)",
     },
-    {
-        # NOT nxc: `nxc smb --exec-method` only accepts {smbexec,atexec,mmcexec,
-        # wmiexec} in this nxc version (1.5.1) - "psexec" errors at the argparse
-        # level, so this scenario never actually attacked anything until fixed
-        # 2026-09-07. impacket-psexec is the genuine PsExec-style tool (already
-        # used elsewhere in this file) and, unlike nxc, supports -service-name to
-        # match the real Sysinternals/rule-expected "PSEXESVC" naming rather than
-        # a random one.
-        "name": "PsExec Lateral Movement",
-        "host": "atk-01",
-        "requires_env": ["ADMIN_USER", "ADMIN_PW"],
-        "cmd": (f"impacket-psexec -service-name PSEXESVC "
-                f"'{ADMIN_USER}:{ADMIN_PW}@{WS_IP}' whoami"),
-        "rules": ["100513", "100514"],
-        "technique": "T1569.002",
-        "desc": "PSEXESVC runs/spawns a shell on ws-01 (T1569.002)",
-    },
+    # PsExec Lateral Movement (T1569.002, rules 100513/100514) is NOT in the active
+    # battery, same reasoning as tests.json's wmic/comsvcs exclusions: confirmed
+    # 2026-09-07 via `impacket-psexec -service-name PSEXESVC 'user:pw@host' whoami`
+    # (nxc's --exec-method doesn't even offer "psexec" as a choice in this nxc
+    # version) that Defender detects and quarantines the dropped service binary as
+    # Trojan:Win32/RemoteExec!pz before the service can run - confirmed via
+    # Get-MpThreatDetection/Get-WinEvent, same defense-in-depth class as T1105
+    # certutil and T1003.001 comsvcs. A permanently-red test is worse than none;
+    # sigma-selftest.py remains the proof of the rule's logic. Re-add if Defender
+    # is ever disabled/weakened for a specific test pass.
     {
         # No credential needed — the web app has no auth on the attacked endpoints.
         "name": "DMZ Web Attack",

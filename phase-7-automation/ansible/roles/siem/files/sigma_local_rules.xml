@@ -328,12 +328,12 @@
     <group>execution,sigma,</group>
   </rule>
 
-  <!-- Sigma: Remote Command Execution via WinRM (wsmprovhost Child Process) | id=a17eeee6-30aa-4bca-9090-01a1b192fab2 | src=proc_creation_win_wsmprovhost_child_exec.yml -->
+  <!-- Sigma: Remote Command Execution via WinRM (wsmprovhost / WinRShost Child Process) | id=a17eeee6-30aa-4bca-9090-01a1b192fab2 | src=proc_creation_win_wsmprovhost_child_exec.yml -->
   <rule id="100516" level="12">
     <if_group>sysmon_event1</if_group>
-    <field name="win.eventdata.parentImage" type="pcre2">(?i)\\wsmprovhost\.exe$</field>
+    <field name="win.eventdata.parentImage" type="pcre2">(?i)(\\wsmprovhost\.exe$|\\winrshost\.exe$)</field>
     <options>no_full_log</options>
-    <description>[Sigma] Remote Command Execution via WinRM (wsmprovhost Child Process)</description>
+    <description>[Sigma] Remote Command Execution via WinRM (wsmprovhost / WinRShost Child Process)</description>
     <mitre>
       <id>T1021.006</id>
     </mitre>

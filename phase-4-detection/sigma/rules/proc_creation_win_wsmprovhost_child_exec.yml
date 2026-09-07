@@ -1,11 +1,15 @@
-title: Remote Command Execution via WinRM (wsmprovhost Child Process)
+title: Remote Command Execution via WinRM (wsmprovhost / WinRShost Child Process)
 id: a17eeee6-30aa-4bca-9090-01a1b192fab2
 status: experimental
 description: |
-    Detects any process spawned by wsmprovhost.exe — the WinRM/PowerShell-Remoting
-    host process. It only runs to service an inbound remote session, so a child of
-    it is remote command execution (evil-winrm, NetExec --exec-method winrm,
-    Enter-PSSession), i.e. lateral movement onto this host.
+    Detects any process spawned by wsmprovhost.exe (the WS-Management/PowerShell-
+    Remoting host, used for Enter-PSSession-style sessions) or WinRShost.exe (the
+    Windows Remote Shell host, used for raw single-command execution over WinRM —
+    confirmed 2026-09-07 via live-fire: `nxc winrm -x <cmd>` uses this path, not
+    wsmprovhost.exe, and the rule missed it entirely until this alternative was
+    added). Either only runs to service an inbound remote session, so a child of
+    either is remote command execution (evil-winrm, NetExec --exec-method winrm,
+    Enter-PSSession, winrs.exe), i.e. lateral movement onto this host.
 references:
     - https://attack.mitre.org/techniques/T1021/006/
 author: Tyler Hudgins (homelab)
@@ -18,7 +22,9 @@ logsource:
     product: windows
 detection:
     selection:
-        ParentImage|endswith: '\wsmprovhost.exe'
+        ParentImage|endswith:
+            - '\wsmprovhost.exe'
+            - '\winrshost.exe'
     condition: selection
 falsepositives:
     - Legitimate remote administration over WinRM (not used in this lab)

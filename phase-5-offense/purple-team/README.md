@@ -84,21 +84,25 @@ technique whose detection keys on being the *target* of an inbound connection, w
 fake: WMI/WinRM/PsExec lateral movement into ws-01, and a web attack against dmz-01. Same before/after
 alert-log diff, same PASS/FAIL/exit-code contract, same repeatable practice range and CI gate.
 
+**Live result, 2026-09-07 (`ADMIN_USER=localadmin ADMIN_PW=... ./ad-validate.py`): 7/8 (PsExec deliberately
+excluded — see below).**
 ```
 [PASS] Password Spray         rules 100401       one password x many accounts (T1110.003)
 [PASS] Kerberoasting          rules 100031       request 3+ service tickets in 60s (T1558.003)
 [PASS] DCSync                 rules 100080       DsGetNCChanges from a non-DC (T1003.006)
-[SKIP] Credential Theft       needs fs-01 (unreachable)         read planted cred on the weak share (T1552.001)
-[SKIP] WMI Lateral Movement   needs ADMIN_USER/ADMIN_PW env var(s)   WmiPrvSE spawns a shell on ws-01 (T1047)
-[SKIP] WinRM Lateral Movement needs ADMIN_USER/ADMIN_PW env var(s)   wsmprovhost spawns a shell on ws-01 (T1021.006)
-[SKIP] PsExec Lateral Movement needs ADMIN_USER/ADMIN_PW env var(s)  PSEXESVC runs/spawns a shell on ws-01 (T1569.002)
+[PASS] Credential Theft       rules 100090       read planted cred on the weak share (T1552.001)
+[FAIL] WMI Lateral Movement   rules 100515       WmiPrvSE spawns a shell on ws-01 (T1047)
+[PASS] WinRM Lateral Movement rules 100516       wsmprovhost/winrshost spawns a shell on ws-01 (T1021.006)
 [PASS] DMZ Web Attack         rules 100440       SQLi against Juice Shop (T1190)
 [PASS] Archive Collection     rules 100519       Compress-Archive stages a fileless archive on ws-01 (T1560.001)
 ```
-(illustrative — the three lateral-movement scenarios need `ADMIN_USER`/`ADMIN_PW` set to ws-01's local-admin
-Windows credential, deliberately not committed like the AD service-account creds below are; see the script's
-header. Every scenario here is logic-added and **not yet run against a live lab** — see the honesty note
-under "Extending".)
+Getting here needed real infrastructure fixes, not just credentials — ws-01's Windows Firewall had SMB/WMI
+inbound rule groups entirely disabled, its network was misclassified `Public`, and even fixed, the SMB-In
+rule was scoped `LocalSubnet` (invisible to routed REDTEAM traffic). See `detection-catalog.md`'s note below
+row #41 for the full fix, and rows #39-41 for the per-technique findings (WMI is a genuinely open question;
+PsExec is confirmed Defender-blocked, same class as T1105/T1003.001-comsvcs, and deliberately not in this
+battery for that reason — a permanently-red test is worse than none, same reasoning as `tests.json`'s
+wmic/comsvcs exclusions).
 
 These attacks **complete on Samba** — SMB/NTLM password spraying returns a real credential, and the
 TGS-REQ / DsGetNCChanges reach the DC (which logs them) even where impacket's later parse fails against Samba;

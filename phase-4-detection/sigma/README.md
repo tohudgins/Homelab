@@ -80,7 +80,7 @@ emitted as a broken or over-broad rule.
 | `posh_ps_defender_exclusion_added.yml` | **ps_script** | T1562.001 | 100506 | First PowerShell (EID 4104) rule — `Add-`/`Set-MpPreference` **and** an `-Exclusion*` arg. |
 | `proc_creation_win_bitsadmin_download.yml` | process_creation | T1197 | 100511, 100512 | `bitsadmin.exe` **and** a transfer verb. **Found by the rare-process threat hunt** ([`../threat-hunting/`](../threat-hunting/README.md)) — a one-off LOLBin with no prior coverage. |
 | `proc_creation_win_wmiprvse_child_exec.yml` | process_creation | T1047 | 100515 | `WmiPrvSE.exe` spawns a shell child — inbound WMI remote exec ([[Parent-Process Lineage Detection]]). |
-| `proc_creation_win_wsmprovhost_child_exec.yml` | process_creation | T1021.006 | 100516 | Any child of `wsmprovhost.exe` — inbound WinRM/PS-Remoting exec. |
+| `proc_creation_win_wsmprovhost_child_exec.yml` | process_creation | T1021.006 | 100516 | Any child of `wsmprovhost.exe` **or `winrshost.exe`** — inbound WinRM/PS-Remoting exec (the second alternative added 2026-09-07 after live-fire showed raw `-x <cmd>` execution uses `WinRShost.exe`, not `wsmprovhost.exe` — see Verification below). |
 | `proc_creation_win_psexec_service_exec.yml` | process_creation | T1569.002 | 100513, 100514 | `PSEXESVC.exe` runs **or** spawns a child — Sysinternals/impacket PsExec. |
 | `proc_creation_win_archive_collection.yml` | process_creation | T1560.001 | 100517, 100518 | rar.exe / 7-Zip (image **and** originalFileName variants) archiving data. |
 | `ps_script_win_compress_archive_collection.yml` | **ps_script** | T1560.001 | 100519 | Fileless `Compress-Archive` staging — the same technique with no external binary. |
@@ -110,6 +110,31 @@ emitted as a broken or over-broad rule.
 - **Live fire (`purple-team.py`, ART on ws-01), 2026-09-07: 18/18 (100%).** Extended the battery to T1490 —
   4 of its 5 rules are ART-exercisable and all 4 fire clean: 100520 (`vssadmin delete shadows`), 100521
   (`vssadmin resize shadowstorage`), 100523 (`wbadmin delete catalog`), 100524 (`bcdedit` recovery-disable).
+- **Live fire (`ad-validate.py`, attacks launched from atk-01), 2026-09-07.** T1190 (DMZ web attack), T1560.001
+  (archive collection), and **T1021.006 WinRM** all confirmed firing on real telemetry — see the two findings
+  immediately below for what it took. **T1047 WMI remains genuinely unresolved** (see the catalog's row #39):
+  the attack succeeds and produces exactly the expected `ParentImage=WmiPrvSE.exe` telemetry, but rule 100515
+  never fires — ruled out Defender, the firewall, a load error, and precedence (tested at Wazuh's actual
+  maximum level, 16), so this is a real, open question, not a "pending" label covering for one.
+
+### Finding: nxc's `wmiexec`/`psexec` exec-methods don't work against this lab; the real tools do
+`nxc smb --exec-method wmiexec` reliably fails its second SMB connection with "NETBIOS connection... timed
+out" against ws-01 — not root-caused, but switching to `impacket-wmiexec` directly (the tool nxc itself
+wraps) works cleanly. Separately, `--exec-method psexec` **isn't a valid choice at all** in this nxc version
+(1.5.1 only offers `smbexec`/`atexec`/`mmcexec`/`wmiexec`) — `ad-validate.py`'s PsExec scenario had an
+invalid argument and had never actually attacked anything until switched to `impacket-psexec` directly.
+Lesson: verify a wrapper tool's actual behavior against *this* lab before trusting it in a harness, the same
+"verify by exercising" discipline as everywhere else here — a plausible-looking CLI flag is not evidence it
+does what its name suggests.
+
+### Finding: WinRM's raw command execution uses a different parent process than PS-Remoting sessions
+Rule 100516 was written assuming `wsmprovhost.exe` (the WS-Management/PowerShell-Remoting host) is *the*
+tell of inbound WinRM — true for `Enter-PSSession`-style sessions, but `nxc winrm -x <cmd>` (and anything
+else doing raw single-command execution over WinRM, i.e. the classic `winrs.exe` path) spawns **`WinRShost.exe`**
+instead, which the rule never matched. Confirmed live 2026-09-07 by checking what Sysmon actually recorded as
+the parent, not by assuming the Sigma rule's original research was complete. Fixed by widening `ParentImage`
+to a value-list OR (`\wsmprovhost.exe`, `\winrshost.exe`) — both processes only exist to service an inbound
+remote session, so either is a legitimate lateral-movement tell. Re-verified firing clean afterward.
 
 ### Finding: the offline ART bundle's test numbers don't always match the technique's public numbering
 Mapped T1490's vssadmin-resize rule (100521) to what a fetched summary of the technique's test list called
