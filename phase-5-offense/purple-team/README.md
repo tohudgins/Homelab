@@ -71,19 +71,29 @@ Getting to 9/9 took three iterations, and each failure was a real finding a dete
    detection level; its rule structure is identical to the harness-confirmed `nltest` path.) Broadening the
    `net view` / `wmic group` / PowerView variants the same way is the ongoing increment.
 
-## AD attack validation — `ad-validate.py` (the atk-01 counterpart)
-`purple-team.py` validates *endpoint* detections by running Atomic Red Team on ws-01. `ad-validate.py` applies
-the identical "attack → prove the detection fired" discipline to *domain* attacks launched from **atk-01**
-(Kali) against the Samba AD DC — same before/after alert-log diff, same PASS/FAIL/exit-code contract. It's the
-repeatable practice range and CI gate for the AD detection surface.
+## Attack validation from atk-01 — `ad-validate.py`
+`purple-team.py` validates *endpoint* detections by running Atomic Red Team locally on ws-01. `ad-validate.py`
+applies the identical "attack → prove the detection fired" discipline to attacks that must be launched **from
+another host** — originally just domain attacks against the Samba AD DC, extended (2026-09-06) to every
+technique whose detection keys on being the *target* of an inbound connection, which no local ART atomic can
+fake: WMI/WinRM/PsExec lateral movement into ws-01, and a web attack against dmz-01. Same before/after
+alert-log diff, same PASS/FAIL/exit-code contract, same repeatable practice range and CI gate.
 
 ```
-[PASS] Password Spray    rules 100401   one password x many accounts (T1110.003)
-[PASS] Kerberoasting     rules 100031   request 3+ service tickets in 60s (T1558.003)
-[PASS] DCSync            rules 100080   DsGetNCChanges from a non-DC (T1003.006)
-[SKIP] Credential Theft  needs fs-01 (unreachable)  read planted cred on the weak share (T1552.001)
-== 3/3 AD detections validated (1 skipped) ==
+[PASS] Password Spray         rules 100401       one password x many accounts (T1110.003)
+[PASS] Kerberoasting          rules 100031       request 3+ service tickets in 60s (T1558.003)
+[PASS] DCSync                 rules 100080       DsGetNCChanges from a non-DC (T1003.006)
+[SKIP] Credential Theft       needs fs-01 (unreachable)         read planted cred on the weak share (T1552.001)
+[SKIP] WMI Lateral Movement   needs ADMIN_USER/ADMIN_PW env var(s)   WmiPrvSE spawns a shell on ws-01 (T1047)
+[SKIP] WinRM Lateral Movement needs ADMIN_USER/ADMIN_PW env var(s)   wsmprovhost spawns a shell on ws-01 (T1021.006)
+[SKIP] PsExec Lateral Movement needs ADMIN_USER/ADMIN_PW env var(s)  PSEXESVC runs/spawns a shell on ws-01 (T1569.002)
+[PASS] DMZ Web Attack         rules 100440       SQLi against Juice Shop (T1190)
+[PASS] Archive Collection     rules 100519       Compress-Archive stages a fileless archive on ws-01 (T1560.001)
 ```
+(illustrative — the three lateral-movement scenarios need `ADMIN_USER`/`ADMIN_PW` set to ws-01's local-admin
+Windows credential, deliberately not committed like the AD service-account creds below are; see the script's
+header. Every scenario here is logic-added and **not yet run against a live lab** — see the honesty note
+under "Extending".)
 
 These attacks **complete on Samba** — SMB/NTLM password spraying returns a real credential, and the
 TGS-REQ / DsGetNCChanges reach the DC (which logs them) even where impacket's later parse fails against Samba;
@@ -97,6 +107,20 @@ Run: `./ad-validate.py` (needs SSH to atk-01 + siem-01; weak lab creds are baked
 `phase-2-identity/known-weaknesses.md`).
 
 ## Extending
-Add a `{technique, test, desc, expect_rules}` object to `tests.json`. Point it at any ATT&CK technique with an
-Atomic Red Team test and the Wazuh rule(s) that should catch it; the harness handles the rest. This scales the
-detection catalog into a **continuously-verifiable** coverage map.
+Two paths, depending on where the telemetry is actually produced:
+- **A local ART atomic exists on ws-01** → add a `{technique, test, desc, expect_rules}` object to `tests.json`.
+  Point it at any ATT&CK technique with an offline-viable Atomic Red Team test (no internet-fetched payload —
+  see `phase-5-offense/atomic-red-team/README.md`) and the Wazuh rule(s) that should catch it.
+- **The detection only fires when the host is the *target* of an inbound attack** (lateral movement, a web
+  attack against a service) → add a `{name, host, cmd, rules, technique, desc}` scenario to `ad-validate.py`'s
+  `SCENARIOS`, with `requires`/`requires_env` for any host or credential the attack needs. `purple-team.py`
+  can only run *local* ART atomics on ws-01, so it structurally can't express these.
+
+Either way this scales the detection catalog into a **continuously-verifiable** coverage map — with one sharp
+edge to know about: `generate-coverage.py` promotes a technique to "validated" the moment it's *declared* in
+either file (a `"technique"` key present), not the moment it's actually confirmed passing. That's normally
+fine because the existing convention is to add the entry only after a real PASS — but it means **adding an
+entry and regenerating the coverage map are two separate steps**, never done in the same breath: run the
+harness first, confirm PASS, *then* regenerate. Declaring first and regenerating before ever running it would
+report a technique as validated that has never actually fired — the exact "hand-typed number describing the
+data, not the data" trap this repo's `attack-coverage/README.md` had to fix once already.
