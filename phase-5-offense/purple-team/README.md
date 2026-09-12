@@ -51,7 +51,9 @@ Getting to 9/9 took three iterations, and each failure was a real finding a dete
 1. **Verification bug (the harness itself).** v1 counted detections via an indexer `_count` query and reported
    0/9 — while the alerts plainly existed. Rewrote it to diff the manager's **alert log** (the source of
    truth) before/after each atomic. Lesson: validate the validator, and prefer the authoritative log over a
-   secondary index. ([[Silent Fallbacks]] again — a green harness that measures nothing.)
+   secondary index. (A green harness that measures nothing is worse than no harness at all — the same
+   silent-fallback trap as everything else in this catalog that checks "did anything log," not "did the
+   specific thing I expected log.")
 2. **A hung atomic stalled the run.** T1018's `net view` atomic hung 774s waiting on the powered-off DC. Added
    a hard per-atomic timeout so one hang can't wedge the battery.
 3. **Test-selection + a genuine coverage gap.** Two mappings used atomic *test 1*, which for T1069.001 and

@@ -20,7 +20,8 @@ sca: INFO: Security Configuration Assessment scan finished. Duration: 0 seconds.
 **Zero checks ran.** Every CIS policy starts with a `requirements:` gate; the Ubuntu one is
 `f:/etc/os-release -> r:Ubuntu 22.04` (condition `all`). The lab hosts run **Ubuntu 26.04**, for which Wazuh
 ships **no** CIS policy, so the closest one (22.04) self-skips on the version mismatch. A "0 seconds / scan
-finished" that looks healthy but measured nothing — a [[Silent Fallbacks]]-class trap: the green status hides
+finished" that looks healthy but measured nothing — the same silent-fallback trap as everywhere else in this
+catalog that reports "ran successfully" without checking it actually did anything: the green status hides
 that nothing happened.
 
 ## The fix (`sca-ubuntu2604-fix.yml`)
@@ -38,7 +39,8 @@ Ubuntu agents (fileservers/domain_controllers/dmz); re-running is `changed=0`.
 
 ## What it found — and the tie to the attack work
 fs-01 fails **103** CIS controls (47% compliant — a realistic unhardened-box score). The top failures are
-filesystem/partition hardening, and the very first one closes a loop with the [[Sliver]] C2 exercise:
+filesystem/partition hardening, and the very first one closes a loop with the Sliver C2 exercise
+(`phase-5-offense/sliver-c2/`):
 
 ```
 FAIL: Ensure noexec option set on /tmp partition        <-- would have blocked the beacon run from /tmp

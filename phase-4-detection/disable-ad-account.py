@@ -30,8 +30,8 @@ PROTECTED_ACCOUNTS = {"administrator", "krbtgt", "guest"}
 # (winbind, ticket renewal) keeps failing pre-auth, which looks like MORE brute
 # force (rule 100041) and re-triggers this very response. Observed live 2026-09-05
 # when fs-01's post-resume auth burst disabled FS-01$ and the member fell out of
-# the domain until FS-01$ was re-enabled and this guard added. See
-# [[Active Response Collateral Damage]].
+# the domain until FS-01$ was re-enabled and this guard added — the classic
+# active-response-becomes-its-own-attack-vector risk.
 
 
 def log(msg: str) -> None:

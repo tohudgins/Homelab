@@ -79,7 +79,7 @@ emitted as a broken or over-broad rule.
 | `proc_creation_win_service_discovery_sc.yml` | process_creation | T1007 | 100507, 100508 | `sc query`/`queryex` (bin **and** verb). |
 | `posh_ps_defender_exclusion_added.yml` | **ps_script** | T1562.001 | 100506 | First PowerShell (EID 4104) rule — `Add-`/`Set-MpPreference` **and** an `-Exclusion*` arg. |
 | `proc_creation_win_bitsadmin_download.yml` | process_creation | T1197 | 100511, 100512 | `bitsadmin.exe` **and** a transfer verb. **Found by the rare-process threat hunt** ([`../threat-hunting/`](../threat-hunting/README.md)) — a one-off LOLBin with no prior coverage. |
-| `proc_creation_win_wmiprvse_child_exec.yml` | process_creation | T1047 | 100515 | `WmiPrvSE.exe` spawns a shell child — inbound WMI remote exec ([[Parent-Process Lineage Detection]]). |
+| `proc_creation_win_wmiprvse_child_exec.yml` | process_creation | T1047 | 100515 | `WmiPrvSE.exe` spawns a shell child — inbound WMI remote exec (parent-process lineage as the detection signal, not the command line). |
 | `proc_creation_win_wsmprovhost_child_exec.yml` | process_creation | T1021.006 | 100516 | Any child of `wsmprovhost.exe` **or `winrshost.exe`** — inbound WinRM/PS-Remoting exec (the second alternative added 2026-09-07 after live-fire showed raw `-x <cmd>` execution uses `WinRShost.exe`, not `wsmprovhost.exe` — see Verification below). |
 | `proc_creation_win_psexec_service_exec.yml` | process_creation | T1569.002 | 100513, 100514 | `PSEXESVC.exe` runs **or** spawns a child — Sysinternals/impacket PsExec. |
 | `proc_creation_win_archive_collection.yml` | process_creation | T1560.001 | 100517, 100518 | rar.exe / 7-Zip (image **and** originalFileName variants) archiving data. |

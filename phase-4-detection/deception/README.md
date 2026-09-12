@@ -171,7 +171,7 @@ its machine account (`FS-01$`) made a burst of failed Kerberos pre-auths (post-r
 Kerberos brute-force rule (100041) whose active-response, `disable-ad-account.py`, **disabled the machine
 account** — dropping `fs-01` out of the domain (winbind could no longer resolve `domain users`). Worse, a
 *disabled* machine account's own continued auth keeps failing, which looks like *more* brute force and
-re-triggers the same response: a self-sustaining lockout loop ([[Active Response Collateral Damage]]). Fix:
+re-triggers the same response: a self-sustaining lockout loop. Fix:
 the AR now refuses machine accounts (`sAMAccountName` ending in `$`), the same way it already refused
 `administrator`/`krbtgt`/`guest` — a decoy or a threshold rule must never be weaponizable into a DoS of your
 own infrastructure. The script is now deployed **as code** by the `dc` role (it had been hand-deployed, which

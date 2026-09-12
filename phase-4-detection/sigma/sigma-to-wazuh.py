@@ -94,7 +94,8 @@ LOGSOURCE = {
 
 # Sigma severity -> Wazuh level. L12 = "confirmed attack technique" in this lab's
 # convention (and clears stock discovery rules at L3, so a Sigma detection wins
-# precedence and actually surfaces — see [[Wazuh Rule Precedence]]).
+# the one-rule-per-event precedence and actually surfaces, instead of losing a
+# tie to a lower-specificity stock rule).
 LEVEL_MAP = {"critical": 13, "high": 12, "medium": 8, "low": 5, "informational": 3}
 
 SUPPORTED_MODIFIERS = {"contains", "startswith", "endswith", "re", "all"}

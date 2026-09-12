@@ -2,7 +2,8 @@
 # ===========================================================================
 # generate-coverage.py — build an ATT&CK Navigator layer from the detection
 # rules, so the coverage map is DATA-DRIVEN, never hand-maintained (it can't
-# drift from the ruleset — [[Single Source of Truth]]).
+# drift from the ruleset, the way a hand-typed count of "N techniques covered"
+# always eventually does).
 #
 # Sources (repo-relative):
 #   - the Wazuh custom rules (each <mitre><id> tag = a covered technique)

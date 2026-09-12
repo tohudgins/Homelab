@@ -2,8 +2,7 @@
 
 A single glance at *what this lab can detect*, mapped onto the MITRE ATT&CK matrix — the artifact a detection
 team uses to see coverage, spot blind tactics, and prioritise the next rule. Crucially it is **generated from
-the ruleset**, not hand-drawn, so it can never quietly drift from what's actually deployed
-([[Single Source of Truth]]).
+the ruleset**, not hand-drawn, so it can never quietly drift from what's actually deployed.
 
 ## What it shows
 `generate-coverage.py` parses the custom **Wazuh** rules (`<mitre>` tags) and **Suricata** rules
