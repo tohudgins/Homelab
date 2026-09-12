@@ -88,30 +88,37 @@ run_attacks() {
   # itself (caught by `|| true`) before touching the wire. Same bug class as
   # ad-validate.py's PsExec scenario had (see purple-team/README.md) — a test
   # that looks like it ran because nothing crashed, but never fired a packet.
-  # Fixed: wmiexec/winrm go through nxc (winrm needs --local-auth for a local
-  # account, else it silently tries domain auth); PsExec goes through the real
-  # tool, impacket-psexec, since that's what actually attempts the technique.
-  if have nxc && [ -n "$ADMIN_PW" ]; then
-    step "nxc --exec-method wmiexec -> ws-01"
-    nxc smb "$WS" -u "$ADMIN_USER" -p "$ADMIN_PW" --exec-method wmiexec -x whoami >/dev/null 2>&1 || true
+  # Fixed: winrm goes through nxc (needs --local-auth for a local account,
+  # else it silently tries domain auth); PsExec goes through the real tool,
+  # impacket-psexec, since that's what actually attempts the technique.
+  #
+  # NOTE (2026-09-12, found closing out the WMI detection bug): wmiexec ALSO
+  # needs the real tool now — nxc's own wmiexec support reliably times out on
+  # its second SMB connection against this host ("NETBIOS connection... timed
+  # out"), a real but separate nxc-vs-lab incompatibility (not a rule
+  # problem), the same one ad-validate.py's WMI scenario already worked around
+  # by calling impacket-wmiexec directly instead. Swapped here to match, and
+  # to actually exercise the newly-fixed rule 100527 (see detection-catalog.md
+  # #39) — no domain prefix on the login string: `localadmin` is a *local*
+  # account, and `lab.internal/localadmin@...` fails with
+  # STATUS_NO_LOGON_SERVERS whenever dc-01 isn't reachable.
+  if [ -n "$ADMIN_PW" ]; then
+    step "impacket-wmiexec -> ws-01"
+    have impacket-wmiexec && impacket-wmiexec "$ADMIN_USER:$ADMIN_PW@$WS" whoami >/dev/null 2>&1 || true
     step "nxc winrm --local-auth -> ws-01"
-    nxc winrm "$WS" -u "$ADMIN_USER" -p "$ADMIN_PW" --local-auth -x whoami >/dev/null 2>&1 || true
+    have nxc && nxc winrm "$WS" -u "$ADMIN_USER" -p "$ADMIN_PW" --local-auth -x whoami >/dev/null 2>&1 || true
     step "impacket-psexec -> ws-01 (expect: Defender quarantines the dropped service before it runs)"
     have impacket-psexec && impacket-psexec -service-name PSEXESVC "$ADMIN_USER:$ADMIN_PW@$WS" whoami >/dev/null 2>&1 || true
   else skip "needs an admin cred on ws-01 (ADMIN_USER/ADMIN_PW)"; fi
-  # Scorecard expects 100516 (WinRM), not 100513 (PsExec) — WinRM is the one
-  # of the three that's actually verified working end to end (2026-09-07);
-  # PsExec (100513/514) is confirmed Defender-blocked by design, same class as
-  # T1105/T1003.001 comsvcs (detection-catalog.md #41) — doesn't belong in a
-  # pass/fail gate. WMI's detection bug (100515 never fired) was root-caused
-  # and fixed 2026-09-12 (see detection-catalog.md #39) with a new rule,
-  # 100527 — but WMI stays out of THIS gate for now because the attack call
-  # two lines up still goes through `nxc --exec-method wmiexec`, which has its
-  # own separately-documented timeout against this host (ad-validate.py's WMI
-  # scenario already worked around this by calling impacket-wmiexec directly
-  # instead — this script's WMI step needs the same swap before 100527 can
-  # honestly join this gate).
-  note "100516" "WinRM lateral movement (T1021.006) — the verified-working path. WMI's rule is fixed (100527, detection-catalog.md #39) but stays out of this gate until this script's nxc-based WMI attack call is swapped for impacket-wmiexec; PsExec (100513/514) is a confirmed-by-design Defender block"
+  # WMI's detection bug (100515 never fired) was root-caused and fixed
+  # 2026-09-12 (detection-catalog.md #39) with a new rule, 100527 — now gated
+  # here too, since both the rule and the attack invocation (impacket-wmiexec,
+  # above) are known-working. PsExec (100513/514) stays out of the gate:
+  # confirmed Defender-blocked by design, same class as T1105/T1003.001
+  # comsvcs (detection-catalog.md #41) — a permanently-red test belongs in a
+  # writeup, not a pass/fail gate.
+  note "100527" "WMI lateral movement (T1047) — WmiPrvSE spawns cmd.exe"
+  note "100516" "WinRM lateral movement (T1021.006)"
 
   phase "Phase 5 — Collection: stage data into an archive (T1560.001)"
   step "run '7z a stage.zip <data>' or Compress-Archive on ws-01"
@@ -166,7 +173,7 @@ if [ "${1:-}" = "--verify" ]; then
   # rebuild the expected list without launching attacks
   run_attacks() { :; }  # no-op guard (kept for symmetry)
   # populate EXPECT_RULES by tagging only
-  EXPECT_RULES=(100440 100100 100401 100031 100525 100516 100519 100443 100520 100430 100460)
+  EXPECT_RULES=(100440 100100 100401 100031 100525 100527 100516 100519 100443 100520 100430 100460)
   scorecard
   exit 0
 fi
