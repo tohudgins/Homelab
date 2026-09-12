@@ -112,10 +112,14 @@ emitted as a broken or over-broad rule.
   (`vssadmin resize shadowstorage`), 100523 (`wbadmin delete catalog`), 100524 (`bcdedit` recovery-disable).
 - **Live fire (`ad-validate.py`, attacks launched from atk-01), 2026-09-07.** T1190 (DMZ web attack), T1560.001
   (archive collection), and **T1021.006 WinRM** all confirmed firing on real telemetry — see the two findings
-  immediately below for what it took. **T1047 WMI remains genuinely unresolved** (see the catalog's row #39):
-  the attack succeeds and produces exactly the expected `ParentImage=WmiPrvSE.exe` telemetry, but rule 100515
-  never fires — ruled out Defender, the firewall, a load error, and precedence (tested at Wazuh's actual
-  maximum level, 16), so this is a real, open question, not a "pending" label covering for one.
+  immediately below for what it took. **T1047 WMI** did not fire that session (rule 100515) despite the attack
+  producing exactly the expected `ParentImage=WmiPrvSE.exe` telemetry — Defender, the firewall, a load error,
+  and rule precedence (tested at Wazuh's actual maximum level, 16) were all ruled out, leaving it a real, open
+  question rather than a "pending" label covering for one. **Root-caused and fixed 2026-09-12** (see the
+  catalog's row #39): a stock rule (92069) was silently winning Wazuh's one-rule-per-event resolution against
+  100515 because 100515 sat as an unrelated top-level sibling instead of a child of 92069. Sigma can't express
+  an `if_sid` chain to a specific stock rule, so the real fix is a new hand-written rule, 100527 — 100515
+  stays as-is (still correct, Sigma-verified logic; it's just structurally pre-empted in this ruleset).
 
 ### Finding: nxc's `wmiexec`/`psexec` exec-methods don't work against this lab; the real tools do
 `nxc smb --exec-method wmiexec` reliably fails its second SMB connection with "NETBIOS connection... timed

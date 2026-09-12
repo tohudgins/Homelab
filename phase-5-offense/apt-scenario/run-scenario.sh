@@ -101,11 +101,17 @@ run_attacks() {
   else skip "needs an admin cred on ws-01 (ADMIN_USER/ADMIN_PW)"; fi
   # Scorecard expects 100516 (WinRM), not 100513 (PsExec) — WinRM is the one
   # of the three that's actually verified working end to end (2026-09-07);
-  # WMI (100515) is a genuinely open detection bug (attack succeeds, rule
-  # never fires — detection-catalog.md #39) and PsExec (100513/514) is
-  # confirmed Defender-blocked by design, same class as T1105/T1003.001
-  # comsvcs (detection-catalog.md #41) — neither belongs in a pass/fail gate.
-  note "100516" "WinRM lateral movement (T1021.006) — the verified-working path. WMI (100515) stays an open bug, PsExec (100513/514) is a confirmed-by-design Defender block; both deliberately excluded from this gate"
+  # PsExec (100513/514) is confirmed Defender-blocked by design, same class as
+  # T1105/T1003.001 comsvcs (detection-catalog.md #41) — doesn't belong in a
+  # pass/fail gate. WMI's detection bug (100515 never fired) was root-caused
+  # and fixed 2026-09-12 (see detection-catalog.md #39) with a new rule,
+  # 100527 — but WMI stays out of THIS gate for now because the attack call
+  # two lines up still goes through `nxc --exec-method wmiexec`, which has its
+  # own separately-documented timeout against this host (ad-validate.py's WMI
+  # scenario already worked around this by calling impacket-wmiexec directly
+  # instead — this script's WMI step needs the same swap before 100527 can
+  # honestly join this gate).
+  note "100516" "WinRM lateral movement (T1021.006) — the verified-working path. WMI's rule is fixed (100527, detection-catalog.md #39) but stays out of this gate until this script's nxc-based WMI attack call is swapped for impacket-wmiexec; PsExec (100513/514) is a confirmed-by-design Defender block"
 
   phase "Phase 5 — Collection: stage data into an archive (T1560.001)"
   step "run '7z a stage.zip <data>' or Compress-Archive on ws-01"

@@ -1128,4 +1128,27 @@
     <group>yara,</group>
   </rule>
 
+<!-- T1047 WMI — real fix (2026-09-12). See phase-4-detection/detection-catalog.md row #39 and
+     phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md.
+     Root cause found live: stock rule 92069 ("Windows management instrumentation started a
+     process", level 0, unanchored parentImage match on WmiPrvSE.exe) silently wins the
+     one-rule-per-event resolution against the Sigma-compiled 100515 — 100515 is anchored on the
+     same if_group=sysmon_event1 as an unrelated top-level sibling rather than as a CHILD of
+     92069, so it is never even considered once 92069 matches first. Confirmed empirically:
+     temporarily neutralizing 92069 made 100515 fire immediately on the identical live event.
+     sigma-to-wazuh.py cannot express this (it anchors every process_creation rule uniformly on
+     if_group=sysmon_event1 — see its ANCHOR map), so this is a hand-written escalation child of
+     92069 instead, the same idiom as 100020/100050/100070 elsewhere in this catalog. 100515
+     stays in place (Sigma-verified by sigma-selftest.py, documents the intended logic); this is
+     the rule that actually fires live. -->
+<rule id="100527" level="12">
+  <if_sid>92069</if_sid>
+  <field name="win.eventdata.image" type="pcre2">(?i)(\\cmd\.exe$|\\powershell\.exe$|\\pwsh\.exe$|\\wscript\.exe$|\\cscript\.exe$)</field>
+  <options>no_full_log</options>
+  <description>Remote Command Execution via WMI (WmiPrvSE Child Process) — $(win.eventdata.image)</description>
+  <mitre>
+    <id>T1047</id>
+  </mitre>
+  <group>execution,attack,</group>
+</rule>
 </group>

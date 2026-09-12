@@ -41,6 +41,16 @@ each stage's rule and prints a DETECTED/MISSED matrix.
 > had nothing to do with whether the attacks worked. It now just tells you to
 > run `--verify` from the operator host instead.
 
+> [!check] T1047 WMI fixed 2026-09-12 — root-caused and closed, see detection-catalog.md #39.
+> Stock rule 92069 was silently winning the one-rule-per-event resolution against the Sigma-compiled
+> 100515 (both anchored on `if_group=sysmon_event1` as unrelated siblings, so 92069 — matched first,
+> level 0 — was the only one ever considered). Fixed with a hand-written escalation child of 92069
+> (rule 100527); confirmed live with `impacket-wmiexec`. **Not yet re-included in this script's own
+> gate** — `run-scenario.sh`'s WMI step still calls `nxc --exec-method wmiexec`, which has its own,
+> separately-documented timeout against this host (see the note below the table); that needs fixing
+> to `impacket-wmiexec` (as `ad-validate.py`'s WMI scenario already does) before this phase's gate can
+> honestly include 100527.
+
 ## The kill chain
 
 ```mermaid
@@ -59,7 +69,7 @@ flowchart TD
 | 1 | Initial Access | web attack on Juice Shop (`web-attack-scan.sh`) | Suricata 9100020–24 → Wazuh **100440/100442** (T1190) |
 | 2 | Discovery | enumerate host/domain on ws-01 | **100100–100113**, Sigma **100502–100510** |
 | 3 | Credential Access | spray → `svc-sql`; kerberoast; `lsass-dump.ps1` | **100401** (spray), **100031**/**100420** (roast/honeytoken), **100525** (LSASS) |
-| 4 | Lateral Movement | `nxc` wmiexec/winrm + `impacket-psexec` → ws-01 | Sigma **100516** (WinRM, verified) — WMI 100515 open bug, PsExec 100513/514 confirmed Defender-block, both excluded from the gate |
+| 4 | Lateral Movement | `nxc` wmiexec/winrm + `impacket-psexec` → ws-01 | Sigma **100516** (WinRM, verified) — WMI fixed via **100527** (see note above; this script's own WMI step still needs the `impacket-wmiexec` swap to exercise it), PsExec 100513/514 confirmed Defender-block; both still excluded from this script's gate |
 | 5 | Collection | `Compress-Archive` on ws-01 (rar/7z not present on this image) | Sigma **100519** (T1560.001), verified TP live |
 | 6 | Exfiltration | iodine DNS tunnel fs-01 → atk-01 | Suricata **9100010** → Wazuh **100443** (T1048.003); beacon **9100002** |
 | 7 | Impact | `vssadmin delete shadows`; encrypt canary; drop EICAR | **100520** (T1490), **100430/100431** (T1486), **100460** (YARA) |

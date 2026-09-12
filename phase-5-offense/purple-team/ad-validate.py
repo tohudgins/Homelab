@@ -94,17 +94,23 @@ SCENARIOS = [
         # connection reliably times out against this host ("NETBIOS connection...
         # timed out") - never root-caused (checked 2026-09-07: not the firewall,
         # not Defender). impacket-wmiexec (the same tool nxc wraps) works fine
-        # directly and produces the exact WmiPrvSE->cmd.exe telemetry expected -
-        # rule 100515 still doesn't fire on it, a genuinely open finding (see
-        # detection-catalog.md row #39), so this scenario is expected to FAIL
-        # until that's resolved. Kept in the battery rather than removed, since
-        # unlike the wmic/Defender non-gaps this one has no confirmed permanent
-        # blocker - it may just start passing once the real cause is found.
+        # directly and produces the exact WmiPrvSE->cmd.exe telemetry expected.
+        # 100515 (the Sigma-compiled rule) never fires on it - root-caused live
+        # 2026-09-12: stock rule 92069 ("WMI started a process", level 0,
+        # unanchored parentImage match) silently wins the one-rule-per-event
+        # resolution, because 100515 is anchored on the same top-level
+        # if_group=sysmon_event1 as 92069 rather than chained as its child, so
+        # it's never even considered once 92069 matches first. Confirmed by
+        # temporarily neutralizing 92069 live: 100515 fired immediately. Fixed
+        # with a hand-written escalation child of 92069 (100527, since the
+        # Sigma compiler can't express an if_sid chain - see
+        # sigma_local_rules.xml's comment on 100515 and local_rules.xml's on
+        # 100527). See detection-catalog.md row #39.
         "name": "WMI Lateral Movement",
         "host": "atk-01",
         "requires_env": ["ADMIN_USER", "ADMIN_PW"],
         "cmd": f"impacket-wmiexec '{ADMIN_USER}:{ADMIN_PW}@{WS_IP}' whoami",
-        "rules": ["100515"],
+        "rules": ["100515", "100527"],
         "technique": "T1047",
         "desc": "WmiPrvSE spawns a shell on ws-01 (T1047)",
     },

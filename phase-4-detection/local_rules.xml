@@ -171,6 +171,68 @@
   patterns, out of scope for a rule this lab can verify against real telemetry).
   -->
 
+  <!--
+    DECEPTION: AD honeytoken (svc-sqladmin) — a decoy service account with an attractive SPN
+    (MSSQLSvc/sql-prod.lab.internal) and a strong, uncrackable password. NO legitimate process ever
+    requests a ticket for it or authenticates as it, so ANY interaction is malicious by definition — a
+    tripwire with ~zero false positives, which is why these fire at level 14 (above every other rule in
+    this catalog). This is what closes the evasion above: the targeted single-SPN Kerberoast that slips
+    under 100031's volume threshold still trips 100420 on the FIRST request, because the signal here is
+    the SPN's identity, not the request count. Deception-backed Credential Access. Managed as code in the
+    dc role (roles/dc: account + SPN) and here (the detections). See phase-4-detection/deception/.
+  -->
+  <rule id="100420" level="14">
+    <if_sid>100030</if_sid>
+    <field name="KDC Authorization.serviceDescription" type="pcre2">(?i)MSSQLSvc/sql-prod\.lab\.internal</field>
+    <options>no_full_log</options>
+    <description>HONEYTOKEN TRIPWIRE — TGS-REQ for decoy account svc-sqladmin by $(KDC Authorization.account) (Kerberoasting against a canary SPN).</description>
+    <mitre>
+      <id>T1558.003</id>
+    </mitre>
+    <group>deception,honeytoken,attack,credential_access,</group>
+  </rule>
+
+  <rule id="100421" level="14">
+    <decoded_as>json</decoded_as>
+    <field name="type">^Authentication$</field>
+    <field name="Authentication.clientAccount" type="pcre2">(?i)^svc-sqladmin(@|$)</field>
+    <options>no_full_log</options>
+    <description>HONEYTOKEN TRIPWIRE — authentication attempt AS decoy account svc-sqladmin ($(Authentication.status)) — stolen/guessed canary credential in use.</description>
+    <mitre>
+      <id>T1078</id>
+    </mitre>
+    <group>deception,honeytoken,attack,credential_access,</group>
+  </rule>
+
+  <!--
+    RANSOMWARE CANARY (T1486 Impact) — a decoy "finance records" directory on fs-01 under realtime FIM
+    that no legitimate user ever touches (deployed by the fileserver role). Two signals:
+      100430 (L12) — ANY change to a canary file. It's bait, so a single touch is already an incident
+                     (same tripwire logic as the AD honeytoken above), scoped by the `file` path.
+      100431 (L13) — a BURST of canary changes (8+ in 20s from one agent). That cadence — many files
+                     rewritten in seconds — is the fingerprint of ransomware encrypting a share, as opposed
+                     to a human editing one file. Fills the Impact tactic. See phase-4-detection/deception/.
+  -->
+  <rule id="100430" level="12">
+    <if_sid>550,553,554</if_sid>
+    <field name="file" type="pcre2">^/srv/finance-records/</field>
+    <description>Ransomware canary tampering — decoy file $(file) was changed (nobody should ever touch this).</description>
+    <mitre>
+      <id>T1486</id>
+    </mitre>
+    <group>deception,ransomware_canary,attack,impact,</group>
+  </rule>
+
+  <rule id="100431" level="13" frequency="8" timeframe="20">
+    <if_matched_sid>100430</if_matched_sid>
+    <same_agent />
+    <description>Ransomware behavior — 8+ canary files changed in 20s (mass-encryption burst).</description>
+    <mitre>
+      <id>T1486</id>
+    </mitre>
+    <group>ransomware_canary,attack,impact,</group>
+  </rule>
+
 </group>
 
 <!--
@@ -219,6 +281,63 @@
   attacker who knows this rule exists can weaponize it into a DoS by deliberately failing Kerberos auth
   as a real, legitimate, high-value account (helpdesk lead, an admin) to get it locked out.
   -->
+
+</group>
+
+<!--
+  T1110.003 — Brute Force: Password Spraying (SMB/NTLM, the horizontal counterpart to 100040/100041)
+
+  100041 above keys on same_field Authentication.clientAccount — it fires only when ONE account fails
+  4+ times (a vertical brute force). A password SPRAY is the opposite shape: ONE password tried once
+  against MANY accounts, so no single account crosses the threshold and 100041 never fires. Confirmed
+  live: `nxc smb 10.10.10.10 -u <all-users> -p Summer2026` produced eight distinct-account SMB results
+  (seven failures + the one weak-password reuse it found, svc-sql) and 100041 stayed silent — a real,
+  reproducible detection gap.
+
+  Two things had to be added to close it:
+  1. Telemetry. SMB session-setup auth on a Samba AD DC is handled by *smbd*, which logs to
+     /var/log/samba/log.smbd — NOT log.samba (the AD DC process, all the Kerberoast/brute rules ever
+     saw). SMB failures were therefore invisible to Wazuh. Added log.smbd as a second json localfile on
+     dc-01. Samba emits the same eventId 4625 for a failed SMB NTLM logon, serviceDescription "SMB2".
+  2. Correlation on the burst, NOT on the account. 100401 deliberately omits same_field, so it counts
+     failed SMB logons across the whole domain in the window — which is exactly the spray signature.
+
+  Source-IP attribution would be conceptually cleaner (a spray is "one host sweeping accounts"), but
+  Authentication.remoteAddress carries a per-connection source PORT ("ipv4:10.10.40.119:44274") so it
+  can't group, and extracting a bare srcip needs a child decoder that strips the parent json fields —
+  the same documented dead-end noted on the Kerberoast rule. Frequency-of-SMB-failures is the robust
+  signal in a single-DC lab; a production tuning would baseline normal failure volume and add srcip.
+-->
+<group name="local,authentication_failures,">
+
+  <rule id="100400" level="5">
+    <decoded_as>json</decoded_as>
+    <field name="type">^Authentication$</field>
+    <field name="Authentication.eventId">^4625$</field>
+    <field name="Authentication.serviceDescription">^SMB2$</field>
+    <options>no_full_log</options>
+    <description>Samba SMB: failed NTLM logon for $(Authentication.clientAccount) from $(Authentication.remoteAddress).</description>
+    <mitre>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failed,</group>
+  </rule>
+
+  <!--
+    frequency="4" fires on the 5th match (Wazuh's N+1 quirk, as documented on 100031). A spray sweeps
+    many accounts, so 5+ failed SMB logons in the window is the threshold. No same_field: that is the
+    whole point — the failures are across DIFFERENT accounts, which is why the per-account brute rule
+    (100041) can never see it.
+  -->
+  <rule id="100401" level="12" frequency="4" timeframe="120" ignore="120">
+    <if_matched_sid>100400</if_matched_sid>
+    <description>Password spray suspected — 5+ failed SMB logons across the domain in 120s (single-source credential attack; 100041's per-account brute rule would miss this horizontal pattern).</description>
+    <mitre>
+      <id>T1110</id>
+      <id>T1110.003</id>
+    </mitre>
+    <group>authentication_failures,attack,</group>
+  </rule>
 
 </group>
 
@@ -546,9 +665,14 @@
   </rule>
 
   <!-- T1482 — Domain Trust Discovery (nltest domain_trusts / trusted_domains) -->
+  <!-- Broadened 2026-08-31 after the purple-team run: the nltest-only regex missed
+       the dsquery/adfind variant (T1482 atomic test 1), which enumerates trusts via
+       an LDAP filter on objectClass=trustedDomain. Added `trustedDomain` to cover
+       dsquery `-filter "(objectClass=trustedDomain)"` and adfind. (PowerView
+       Get-DomainTrust is PowerShell — a scriptBlockText rule, tracked separately.) -->
   <rule id="100111" level="4">
     <if_group>sysmon_event1</if_group>
-    <field name="win.eventdata.commandLine" type="pcre2">(?i)(domain_trusts|trusted_domains)</field>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)(domain_trusts|trusted_domains|trustedDomain)</field>
     <options>no_full_log</options>
     <description>Domain trust discovery — $(win.eventdata.commandLine)</description>
     <mitre>
@@ -729,4 +853,302 @@
     <group>lateral_movement,attack,</group>
   </rule>
 
+</group>
+
+<!--
+  ============================================================================
+  Linux endpoint — C2 implant / malware execution from a world-writable path.
+  Closes the endpoint blind spot the Phase 8 Sliver C2 hunt exposed: an
+  in-memory beacon executed from /tmp was invisible to the host agent while the
+  network sensor caught it. The fs-01 `susp-exec-path` command monitor (fileserver
+  role) walks /proc/*/exe every 30s and emits `susp-exec path=<p> pid=<n>` for any
+  process backed by a binary in /tmp, /dev/shm, /var/tmp, or deleted-while-running.
+  A process executing from a world-writable directory is a strong T1204/T1059
+  signal — legitimate services run from /usr, /bin, /opt, not /tmp.
+  ============================================================================
+-->
+<group name="local,linux,c2,">
+
+  <!-- Child of rule 530 (Wazuh process/command monitoring): a full_command
+       localfile's output arrives as `ossec: output: '<alias>': <line>`, decoded
+       by the ossec decoder and parented to 530 at level 0. Match its content. -->
+  <rule id="100200" level="12">
+    <if_sid>530</if_sid>
+    <match>susp-exec path=</match>
+    <description>Process executing from a world-writable path — possible dropped C2 implant or malware</description>
+    <mitre>
+      <id>T1204.002</id>
+      <id>T1059.004</id>
+      <id>T1071.001</id>
+    </mitre>
+    <group>c2,attack,</group>
+  </rule>
+
+</group>
+
+<!--
+  ============================================================================
+  Threat-intelligence enrichment — CDB blocklist lookup on NSM alerts.
+  Every Suricata alert (Wazuh rule 86601, groups ids/suricata) carries decoded
+  `src_ip`/`dest_ip` fields. These children look them up against the
+  `threat-intel-ips` CDB list (etc/lists/threat-intel-ips, registered in
+  ossec.conf <ruleset>; ~735 high-confidence malicious IPs from the ipsum feed
+  + the lab Sliver C2 IP) with lookup="address_match_key" (CIDR-aware), and
+  escalate any hit to level 12. This turns "an alert fired" into "an alert fired
+  AND the peer IP is on a known-malicious blocklist" — context, not just a match.
+  The lab C2 IP (10.10.40.119) is in the list so the Phase 8 beacon traffic
+  produces a threat-intel hit end-to-end.
+  ============================================================================
+-->
+<group name="local,threat_intel,">
+
+  <rule id="100210" level="12">
+    <if_sid>86601</if_sid>
+    <list field="dest_ip" lookup="address_match_key">etc/lists/threat-intel-ips</list>
+    <description>Threat intel: NSM alert to a known-malicious destination IP (blocklist match) — $(dest_ip)</description>
+    <mitre>
+      <id>T1071</id>
+    </mitre>
+    <group>threat_intel,attack,</group>
+  </rule>
+
+  <rule id="100211" level="12">
+    <if_sid>86601</if_sid>
+    <list field="src_ip" lookup="address_match_key">etc/lists/threat-intel-ips</list>
+    <description>Threat intel: NSM alert from a known-malicious source IP (blocklist match) — $(src_ip)</description>
+    <mitre>
+      <id>T1071</id>
+    </mitre>
+    <group>threat_intel,attack,</group>
+  </rule>
+
+</group>
+
+<!--
+  ============================================================================
+  MISP integration — the professional TIP as the live IOC engine behind Wazuh.
+  integratord runs custom-misp.py on matching alerts; it queries the MISP API for
+  the alert's IOCs (IPs/hashes) and, on a hit, injects `1:misp:{...}` back into
+  analysisd (decoded by the `misp` decoder). These rules fire on that injected
+  event: 100301 = a known IOC matched (level 12), 100302 = integration error.
+  This supersedes the static CDB list (rules 100210/100211) with a real platform
+  that correlates + shares intel. See phase-7-automation/provisioning/misp-01/.
+  ============================================================================
+-->
+<group name="misp,threat_intel,">
+
+  <!-- The injected `1:misp:{...}` event is valid JSON, so Wazuh's built-in json
+       decoder flattens it (integration, misp.value, misp.source.*). Key on that,
+       not a custom decoded_as. -->
+  <rule id="100300" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="integration">^misp$</field>
+    <description>MISP integration event</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <rule id="100301" level="12">
+    <if_sid>100300</if_sid>
+    <field name="misp.value">\.+</field>
+    <description>MISP: known IoC $(misp.value) ($(misp.category)) matched in the threat-intel platform — triggered by rule $(misp.source.rule)</description>
+    <mitre>
+      <id>T1071</id>
+    </mitre>
+    <group>threat_intel,attack,</group>
+  </rule>
+
+  <rule id="100302" level="5">
+    <if_sid>100300</if_sid>
+    <field name="misp.error">\.+</field>
+    <description>MISP: integration error — $(misp.error)</description>
+    <group>threat_intel,</group>
+  </rule>
+
+</group>
+
+<!--
+  ============================================================================
+  DNS threat-intel — actionable use of the Sysmon DNS telemetry (EID22) that the
+  SwiftOnSecurity config added (2026-08-31). Wazuh decodes EID22 into
+  win.eventdata.queryName (group sysmon_event_22, base rule level 0 = not
+  alerted). This child does a fast CDB lookup of the queried name against the
+  malicious-domains list (~1,190 ThreatFox domains + a lab test domain) and
+  escalates a hit to level 12 — the domain analogue of the IP list (100210/211),
+  done with a CDB lookup (not a per-query API call) because DNS is high-volume.
+  NB: match_key is exact, so a subdomain of a listed domain won't match — a known
+  limitation (Wazuh has no suffix-match lookup); documented, not hidden.
+  ============================================================================
+-->
+<group name="local,windows,sysmon,dns,threat_intel,">
+
+  <rule id="100310" level="12">
+    <if_group>sysmon_event_22</if_group>
+    <list field="win.eventdata.queryName" lookup="match_key">etc/lists/malicious-domains</list>
+    <description>DNS query to a known-malicious domain — $(win.eventdata.queryName)</description>
+    <mitre>
+      <id>T1071.004</id>
+    </mitre>
+    <group>threat_intel,attack,dns,</group>
+  </rule>
+
+</group>
+
+<!--
+  ============================================================================
+  DMZ web-attack detection — T1190 Exploit Public-Facing Application. The DMZ
+  runs OWASP Juice Shop (dmz-01:3000). rtr-01's inline Suricata detects the
+  attack on the wire (custom sigs 9100020-9100024 — ET web rules key on
+  $HTTP_PORTS and miss 3000) and its eve.json feeds Wazuh, surfacing as the stock
+  Suricata alert (rule 86601, groups ids/suricata). These children turn that into
+  a labeled, MITRE-mapped SIEM detection scoped to the DMZ app — the piece the lab
+  was missing: Juice Shop had attack surface + container-log ingestion but no
+  detection firing on either.
+  Field note: `alert.signature` is Wazuh's decoded Suricata signature text — confirmed correct via
+  wazuh-logtest and the interpolated $(alert.signature) text in live 86601 alerts (2026-09-07), so that part
+  was never the problem.
+  Field note 2 (2026-09-07, first live fire): 100440/100441 sat at level 10/8, BELOW rule 100211 (level 12,
+  "NSM alert from a known-malicious source IP" — the threat-intel CDB blocklist rule, also `if_sid=86601`).
+  atk-01 (10.10.40.119) is itself in that CDB list from unrelated exercises, so EVERY attack launched from
+  atk-01 against the DMZ made both 100211 and 100440 independently true on the same decoded event — and
+  Wazuh's one-rule-per-event precedence (highest level among matching siblings wins) picked 100211 every
+  time, so the T1190-specific alert never surfaced even though the Suricata signature and the Wazuh field
+  match were both firing correctly underneath it. Confirmed via wazuh-logtest: fed the exact eve.json alert
+  line through it and got rule 100211 back, never 100440. Same class of gotcha as the Sigma detections
+  needing to sit above the stock L3 discovery band to win precedence — just against a different competing
+  rule this time. Fixed by raising both above 100211's level, so a labeled T1190 alert always wins over a
+  generic "known-bad source IP" hit when both are true; 100442 (the burst correlation) already sat at L12
+  and is unaffected, since `if_matched_sid` correlation isn't subject to this same-event precedence rule.
+  See phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md.
+  ============================================================================
+-->
+<group name="local,ids,suricata,web,attack,">
+
+  <rule id="100440" level="13">
+    <if_sid>86601</if_sid>
+    <field name="alert.signature" type="pcre2">LAB WEB ATTACK (SQLi|XSS|path traversal)</field>
+    <description>DMZ web attack against Juice Shop — $(alert.signature)</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+    <group>web_attack,attack,</group>
+  </rule>
+
+  <rule id="100441" level="13">
+    <if_sid>86601</if_sid>
+    <field name="alert.signature" type="pcre2">automated scanner User-Agent</field>
+    <description>DMZ web app being scanned by automated tooling — $(alert.signature)</description>
+    <mitre>
+      <id>T1595.002</id>
+    </mitre>
+    <group>recon,attack,</group>
+  </rule>
+
+  <!-- Correlation: a burst of web-attack signatures from one source = an active
+       exploitation run (sqlmap/nikto), not a stray probe. Escalates to level 12. -->
+  <rule id="100442" level="12" frequency="8" timeframe="60">
+    <if_matched_sid>100440</if_matched_sid>
+    <same_field>src_ip</same_field>
+    <description>DMZ web application under active attack — burst of web-attack signatures from $(src_ip) (T1190)</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+    <group>web_attack,attack,</group>
+  </rule>
+
+  <!-- DNS tunneling — same pattern as 100440 (T1190): rtr-01's inline Suricata
+       already alerts on this at the wire (router role, sid 9100010, "LAB DNS
+       tunneling..." signature) and reaches Wazuh as a stock 86601 Suricata
+       alert, but until now nothing gave it a labeled, MITRE-mapped rule the
+       way the web attack got. GAP FOUND running the capstone for real
+       (2026-09-07): a live iodine tunnel fs-01->atk-01 (60 pings, 0% loss,
+       Suricata sid 9100010 fired 126x in eve.json on rtr-01) never once
+       produced a "DNS tunneling" alert in Wazuh — it only showed up as the
+       generic threat-intel CDB hit (rule 100210, dest_ip match), and only
+       because atk-01's IP happens to be blocklisted from unrelated exercises.
+       Remove that coincidence and this technique would have been fully
+       invisible to the SIEM, caught only in Suricata's own eve.json on the
+       sensor host — a real SIEM-integration gap, not a documentation one.
+       Fixed the same way 100440 was fixed: a child of 86601 keyed on the
+       Suricata signature text, at level 13 so it always wins the same-event
+       precedence tie against 100210/100211 (both level 12) — see the T1190
+       field note above for why an equal-or-lower level loses that race. -->
+  <rule id="100443" level="13">
+    <if_sid>86601</if_sid>
+    <field name="alert.signature" type="pcre2">LAB DNS tunneling</field>
+    <description>DNS tunneling to REDTEAM — long encoded query names ($(alert.signature))</description>
+    <mitre>
+      <id>T1048.003</id>
+      <id>T1071.004</id>
+    </mitre>
+    <group>exfiltration,attack,</group>
+  </rule>
+
+</group>
+
+<!--
+  ============================================================================
+  YARA-on-FIM — malware detection on the fs-01 share. Two-stage:
+  (1) 100450 fires on any file added/modified under the share path (a syscheck
+      child) and is the trigger the `yara` active-response keys on (see the siem
+      role ossec.conf command/active-response) — it runs yara.sh on that agent
+      against the changed file. Level 3: the write itself is routine, it's just
+      the dispatch point.
+  (2) 100460 fires on a YARA match reported back via active-responses.log
+      (decoded by wazuh-yara / wazuh-yara-result) — malware signature matched a
+      file on the share. 100461 surfaces scanner errors so a broken loop is loud,
+      not silent ([[Silent Fallbacks]]).
+  Field note: verify the syscheck path field with wazuh-logtest on first fire
+  (Wazuh exposes the changed path as `file`); the AR trigger only needs 100450 to
+  fire, which the if_group + path match guarantees.
+  ============================================================================
+-->
+<group name="local,yara,malware,">
+
+  <rule id="100450" level="3">
+    <if_group>syscheck</if_group>
+    <field name="file">^/srv/samba/public</field>
+    <description>File added/modified in the fs-01 share — dispatching YARA scan</description>
+    <group>syscheck,yara,</group>
+  </rule>
+
+  <rule id="100460" level="12">
+    <decoded_as>wazuh-yara</decoded_as>
+    <field name="yara_rule">\.+</field>
+    <description>YARA malware match: $(yara_rule) on the fs-01 share — $(yara_scanned_file)</description>
+    <mitre>
+      <id>T1204.002</id>
+    </mitre>
+    <group>yara,malware,attack,</group>
+  </rule>
+
+  <rule id="100461" level="5">
+    <decoded_as>wazuh-yara</decoded_as>
+    <match>wazuh-yara: ERROR</match>
+    <description>YARA active-response error — malware scan did not run correctly</description>
+    <group>yara,</group>
+  </rule>
+
+<!-- T1047 WMI — real fix (2026-09-12). See phase-4-detection/detection-catalog.md row #39 and
+     phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md.
+     Root cause found live: stock rule 92069 ("Windows management instrumentation started a
+     process", level 0, unanchored parentImage match on WmiPrvSE.exe) silently wins the
+     one-rule-per-event resolution against the Sigma-compiled 100515 — 100515 is anchored on the
+     same if_group=sysmon_event1 as an unrelated top-level sibling rather than as a CHILD of
+     92069, so it is never even considered once 92069 matches first. Confirmed empirically:
+     temporarily neutralizing 92069 made 100515 fire immediately on the identical live event.
+     sigma-to-wazuh.py cannot express this (it anchors every process_creation rule uniformly on
+     if_group=sysmon_event1 — see its ANCHOR map), so this is a hand-written escalation child of
+     92069 instead, the same idiom as 100020/100050/100070 elsewhere in this catalog. 100515
+     stays in place (Sigma-verified by sigma-selftest.py, documents the intended logic); this is
+     the rule that actually fires live. -->
+<rule id="100527" level="12">
+  <if_sid>92069</if_sid>
+  <field name="win.eventdata.image" type="pcre2">(?i)(\\cmd\.exe$|\\powershell\.exe$|\\pwsh\.exe$|\\wscript\.exe$|\\cscript\.exe$)</field>
+  <options>no_full_log</options>
+  <description>Remote Command Execution via WMI (WmiPrvSE Child Process) — $(win.eventdata.image)</description>
+  <mitre>
+    <id>T1047</id>
+  </mitre>
+  <group>execution,attack,</group>
+</rule>
 </group>

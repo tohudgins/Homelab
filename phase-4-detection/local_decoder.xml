@@ -41,3 +41,30 @@
   than source IP. Documented so the dead end isn't re-attempted.
 -->
 
+
+<!--
+  MISP integration: custom-misp.py injects `1:misp:{"integration": "misp", ...}`.
+  No custom decoder needed — Wazuh's built-in `json` decoder flattens it into
+  integration / misp.value / misp.source.* fields, which rules 100300+ match on
+  (decoded_as json). A custom decoded_as would only shadow the json decoder and
+  break the field match (learned by exercising, 2026-08-30).
+-->
+
+
+<!--
+  YARA-on-FIM: yara.sh (fs-01 active response) writes match lines to
+  active-responses.log, e.g.
+      2026/09/06 13:20:00 wazuh-yara: INFO - Scan result: EICAR_Test_File /srv/samba/public/x
+  The parent decoder anchors on the `wazuh-yara:` prefix; the child pulls the
+  matched rule name + scanned file into fields for rule 100460.
+-->
+<decoder name="wazuh-yara">
+  <prematch>wazuh-yara:</prematch>
+</decoder>
+
+<decoder name="wazuh-yara-result">
+  <parent>wazuh-yara</parent>
+  <regex>Scan result: (\S+) (\S+)</regex>
+  <order>yara_rule, yara_scanned_file</order>
+</decoder>
+

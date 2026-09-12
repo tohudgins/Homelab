@@ -120,18 +120,28 @@ With the path and privilege both fixed:
   Separately worth noting: impacket-psexec randomizes the binary/service name *unless* `-service-name` is
   passed, so a tool run the default way would evade this rule's literal `PSEXESVC` match even with Defender
   off — a real coverage gap independent of tonight's finding.
-- **T1047 (WMI) — genuinely unresolved.** The call reaches ws-01 (a fresh `WmiPrvSE.exe` provider host spawns
-  — confirmed via syscollector inventory) but never produces a child process, and `nxc` reports "NETBIOS
-  connection... timed out." Not a Defender block (nothing logged for this attempt) and not the firewall
-  (fixed above). Best working theory: the DCOM callback for the `Win32_Process.Create` result needs an
-  ephemeral RPC port Windows negotiates per-call, and something in that specific path isn't getting through.
-  Not root-caused tonight — an open item, not glossed over as "pending" when it was actually tried and failed.
-- **T1021.006 (WinRM) — not exercisable as the lab is currently built.** Port 5985 doesn't accept a
-  connection at all. This isn't a bug: Phase 7's `windows` role deliberately manages ws-01 over **SSH, not
-  WinRM** (see `group_vars/windows.yml` — avoids standing up a listener + certificate). Standing one up just
-  to exercise this technique is a real option, but it changes the host's documented management posture; left
-  as a decision for Tyler rather than made unilaterally.
+- **T1047 (WMI) — two separate findings, both now resolved.** `nxc --exec-method wmiexec` reaches ws-01 (a
+  fresh `WmiPrvSE.exe` provider host spawns — confirmed via syscollector inventory) but never produces a
+  child process, and reports "NETBIOS connection... timed out" — a real, but separate, nxc-vs-lab
+  incompatibility, not this rule's problem (`ad-validate.py`'s WMI scenario works around it by calling
+  `impacket-wmiexec` — the same underlying tool nxc wraps — directly instead). That path *does* succeed
+  cleanly and produces the exact expected telemetry (`WmiPrvSE.exe` → `cmd.exe`), but rule 100515 still
+  didn't fire that night — genuinely unresolved after 5 ruled-out causes (Defender, the firewall, a syntax
+  error, rule precedence up to Wazuh's max level 16, a stale ruleset). **Root-caused and fixed 2026-09-12**
+  (see `detection-catalog.md` #39): stock rule 92069 was silently winning Wazuh's one-rule-per-event
+  resolution against 100515, because 100515 sat as an unrelated top-level sibling in the same
+  `if_group=sysmon_event1` rather than as a child of 92069 — so it was never even considered once 92069
+  matched first. Fixed with a hand-written escalation child of 92069, rule 100527; confirmed live with
+  `impacket-wmiexec` and independently re-verified via `ad-validate.py` (`hits=3`).
+- **T1021.006 (WinRM) — initially not exercisable as the lab was built.** Port 5985 didn't accept a
+  connection at all. Not a bug: Phase 7's `windows` role deliberately manages ws-01 over **SSH, not WinRM**
+  (see `group_vars/windows.yml` — avoids standing up a listener + certificate). Standing one up just to
+  exercise this technique changes the host's documented management posture, so it was left as Tyler's call
+  rather than made unilaterally — and later the same night he made it: a listener went up, and §3/§4 above
+  cover the real rule fix (parent process `WinRShost.exe`, not `wsmprovhost.exe`) that made it fire.
 
-**Net: 1 of 3 live-fire attempted and explained (Defender-blocked, a real finding); 1 open technical question
-(WMI); 1 architectural non-goal (WinRM) rather than a gap.** All three rules' *logic* remains proven by
-`sigma-selftest.py`, unaffected by any of this.
+**Net (as of 2026-09-12): 3 of 3 now resolved.** PsExec is confirmed Defender-blocked (a real, permanent
+finding, not a gap); WinRM is verified firing live; WMI's rule bug is root-caused and fixed (100527, see
+`detection-catalog.md` #39). All three rules' *logic* was proven by `sigma-selftest.py` from the start —
+what took the rest of this investigation was proving (and, for WMI, fixing) that the logic actually fires
+in this live ruleset.

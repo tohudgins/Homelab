@@ -91,7 +91,7 @@ excluded — see below).**
 [PASS] Kerberoasting          rules 100031       request 3+ service tickets in 60s (T1558.003)
 [PASS] DCSync                 rules 100080       DsGetNCChanges from a non-DC (T1003.006)
 [PASS] Credential Theft       rules 100090       read planted cred on the weak share (T1552.001)
-[FAIL] WMI Lateral Movement   rules 100515       WmiPrvSE spawns a shell on ws-01 (T1047)
+[FAIL] WMI Lateral Movement   rules 100515       WmiPrvSE spawns a shell on ws-01 (T1047) — fixed 2026-09-12, see below
 [PASS] WinRM Lateral Movement rules 100516       wsmprovhost/winrshost spawns a shell on ws-01 (T1021.006)
 [PASS] DMZ Web Attack         rules 100440       SQLi against Juice Shop (T1190)
 [PASS] Archive Collection     rules 100519       Compress-Archive stages a fileless archive on ws-01 (T1560.001)
@@ -111,6 +111,26 @@ DCSync dump, and AS-REP roasting all hit Samba-vs-Windows walls — the *telemet
 fires regardless). A scenario gated on a host that's down (cred-theft needs fs-01) **SKIPs** cleanly instead of
 failing. Scenarios that declare a `technique` are read by `generate-coverage.py`, so a passing AD attack
 promotes that technique to **validated (dark green)** on the ATT&CK coverage map (now 12 validated total).
+
+**WMI fixed and re-verified, 2026-09-12** — root cause: stock rule 92069 was silently winning Wazuh's
+one-rule-per-event resolution against 100515 (both anchored on the same top-level `if_group=sysmon_event1`
+as unrelated siblings, so 92069 — matched first, at level 0 — was the only one ever considered; see
+`detection-catalog.md` #39). Fixed with a hand-written escalation child of 92069, rule 100527. Re-ran
+`ad-validate.py` against the live lab (dc-01/fs-01/dmz-01 intentionally suspended/not booted this session
+to stay under the host's RAM ceiling — their FAILs/SKIP below are that, not new regressions):
+```
+[FAIL] Password Spray         rules 100401       dc-01 suspended this session — not a regression
+[FAIL] Kerberoasting          rules 100031       dc-01 suspended this session — not a regression
+[FAIL] DCSync                 rules 100080       dc-01 suspended this session — not a regression
+[SKIP] Credential Theft       needs fs-01 (unreachable)
+[PASS] WMI Lateral Movement   rules 100515,100527   hits=3   WmiPrvSE spawns a shell on ws-01 (T1047)
+[PASS] WinRM Lateral Movement rules 100516       hits=1   wsmprovhost/winrshost spawns a shell on ws-01
+[FAIL] DMZ Web Attack         rules 100440       dmz-01 not booted this session — not a regression
+[PASS] Archive Collection     rules 100519       hits=1   Compress-Archive stages a fileless archive on ws-01
+```
+WMI now passes on both the original Sigma rule (100515, still doesn't fire — kept as the documented,
+Sigma-verified logic) and the real fix (100527, `hits=3`) via the `["100515", "100527"]` rule list in
+`ad-validate.py`'s scenario definition — the harness counts a hit on *either*.
 
 Run: `./ad-validate.py` (needs SSH to atk-01 + siem-01; weak lab creds are baked in — already public in
 `phase-2-identity/known-weaknesses.md`).
@@ -133,3 +153,10 @@ entry and regenerating the coverage map are two separate steps**, never done in 
 harness first, confirm PASS, *then* regenerate. Declaring first and regenerating before ever running it would
 report a technique as validated that has never actually fired — the exact "hand-typed number describing the
 data, not the data" trap this repo's `attack-coverage/README.md` had to fix once already.
+
+**A real instance of exactly that, caught in this audit (2026-09-12):** T1047's `ad-validate.py` scenario
+already declared `"technique": "T1047"` back on 2026-09-06/07, before the WMI detection actually worked, so
+the coverage map had been showing T1047 dark green ("validated") the whole time it was genuinely failing.
+Harmless in hindsight only because the rule got fixed later and the map's claim became true retroactively —
+it would have stayed silently wrong indefinitely otherwise. No process change from this (the convention above
+is still the right one), just a concrete example that the failure mode is real, not theoretical.
