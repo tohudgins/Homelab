@@ -1,0 +1,63 @@
+name: Deploy docs
+
+# Builds the MkDocs Material site (mkdocs.yml, docs/ — symlinked straight at the
+# phase-*/ directories, never a copy) and publishes it to GitHub Pages. Not part
+# of ci.yml on purpose: that workflow validates every push/PR; this one only
+# needs to run on main; keeping them separate means a docs-only push isn't
+# gated on (or gating) the full static-validation suite, and vice versa.
+#
+# One-time manual step this can't do for you: Settings -> Pages -> Build and
+# deployment -> Source -> "GitHub Actions". Until that's set, this job builds
+# and uploads the artifact but there's nowhere for deploy-pages to publish it.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # Pinned exact versions, same convention as the linters in ci.yml
+      # (see docs/RUNBOOK.md's local-check commands).
+      - name: Install MkDocs Material
+        run: pip install mkdocs==1.6.1 mkdocs-material==9.7.7 mkdocs-callouts==1.17.1
+      # Not --strict: 4 pre-existing cross-links in the phase docs point at
+      # things genuinely outside the docs site's scope (the top-level README,
+      # .github/workflows/ci.yml, two ../docs/design-decisions.md links whose
+      # relative-path math only resolves from the real repo layout, not the
+      # symlinked one docs_dir presents) - real 404s if clicked in the built
+      # site, not build breakage, and not worth rewriting the source repo's
+      # own working GitHub-rendered links to silence. See mkdocs build's own
+      # (non-strict) output for the current list if that ever needs revisiting.
+      - name: Build
+        run: mkdocs build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

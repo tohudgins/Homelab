@@ -165,3 +165,34 @@ done
 Config lives at the repo root: `.yamllint`, `.ansible-lint`, `ruff.toml`,
 `.gitleaks.toml`. `ansible-lint` runs at `profile: basic` and must be invoked
 **from the repo root** so it picks up both `.ansible-lint` and `.yamllint`.
+
+## 7. Docs site — the portfolio pages
+
+[`mkdocs.yml`](../mkdocs.yml) builds a [MkDocs Material](https://squidfunk.github.io/mkdocs-material/) site
+out of the same markdown the repo already has — `docs/` holds a few build-plan pages directly plus a
+symlink per phase directory (`docs/phase-4-detection -> ../phase-4-detection`, etc.), so the site reads the
+exact files the catalog/writeups/CI already validate, never a copy that can drift — the same principle
+behind the ATT&CK coverage map being generated rather than hand-maintained
+([`attack-coverage/README.md`](phase-4-detection/attack-coverage/README.md)). A separate workflow,
+[`.github/workflows/docs.yml`](../.github/workflows/docs.yml), builds and publishes it to GitHub Pages on
+every push to `main` — kept out of `ci.yml` deliberately, so a docs-only change isn't gated on the full
+static-validation suite and vice versa.
+
+```bash
+# one-time: the site-building tools
+pip install mkdocs==1.6.1 mkdocs-material==9.7.7 mkdocs-callouts==1.17.1
+
+mkdocs serve      # live preview at http://127.0.0.1:8000 while editing
+mkdocs build      # writes site/ (gitignored) — what CI publishes
+```
+
+`mkdocs-callouts` translates this repo's GitHub/Obsidian-style `> [!check]`/`> [!warning]` blocks into
+Material's admonition boxes — without it they'd render as plain, unstyled blockquotes. Four pre-existing
+cross-links (the top-level `README.md`, `.github/workflows/ci.yml`, and two `../docs/design-decisions.md`
+references whose relative-path math only resolves from the real repo layout, not the symlinked one
+`docs_dir` presents) show as warnings on a `mkdocs build` — real 404s if clicked inside the site, left as-is
+rather than rewritten, since the same links work correctly wherever GitHub renders these files directly.
+
+**One manual, one-time step this can't do for you:** GitHub repo → Settings → Pages → Build and deployment →
+Source → **GitHub Actions**. Until that's set, `docs.yml` still builds and uploads the site artifact on every
+push, there's just nowhere for `deploy-pages` to publish it yet.

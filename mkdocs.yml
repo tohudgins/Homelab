@@ -1,27 +1,101 @@
 site_name: Cybersecurity Homelab
 site_description: A segmented, reproducible security lab on Apple Silicon — AD, Wazuh SIEM, and a full detection-engineering loop.
+site_url: https://tohudgins.github.io/Homelab/
 repo_url: https://github.com/tohudgins/Homelab
+repo_name: tohudgins/Homelab
+edit_uri: edit/main/docs/
 
 theme:
   name: material
   palette:
-    scheme: slate
-    primary: black
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
   features:
     - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - toc.follow
     - content.code.copy
+    - content.code.annotate
+    - search.suggest
+    - search.highlight
+
+plugins:
+  - search
+  - callouts
 
 markdown_extensions:
   - admonition
+  - attr_list
+  - md_in_html
   - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
 
+# Symlinks under docs/ point at the phase-*/ directories at the repo root (and
+# the top-level README) rather than copying content — the docs site reads the
+# exact same files the repo/CI validates, never a duplicate that can drift.
 nav:
   - Home: index.md
-  - IP Plan: 00-ip-plan.md
-  - Network Diagram: 01-network-diagram.md
-  - Design Decisions: design-decisions.md
+  - Build Plan:
+      - IP Plan: 00-ip-plan.md
+      - Network Diagram: 01-network-diagram.md
+      - Design Decisions: design-decisions.md
+      - Runbook: RUNBOOK.md
+  - Phase 2 · Identity:
+      - Known Weaknesses Register: phase-2-identity/known-weaknesses.md
+  - Phase 4 · Detection Engineering:
+      - Detection Catalog: phase-4-detection/detection-catalog.md
+      - ATT&CK Coverage Map: phase-4-detection/attack-coverage/README.md
+      - Sigma Detection-as-Code: phase-4-detection/sigma/README.md
+      - Threat Hunting: phase-4-detection/threat-hunting/README.md
+      - Deception (Honeytoken + Canary): phase-4-detection/deception/README.md
+      - Velociraptor DFIR: phase-4-detection/velociraptor/README.md
+      - YARA-on-FIM: phase-4-detection/yara-fim/README.md
+      - SOC Ops — DFIR-IRIS: phase-4-detection/soc-ops-iris.md
+      - Threat Intel — MISP Integration: phase-4-detection/threat-intel-misp-integration.md
+      - Threat Intel — CDB Enrichment: phase-4-detection/threat-intel-cdb-enrichment.md
+      - Vulnerability Management: phase-4-detection/vulnerability-management-active-vs-passive.md
+      - Compliance — SCA/CIS: phase-4-detection/compliance-sca-cis.md
+  - Phase 5 · Offense in Context:
+      - Capstone — APT Scenario: phase-5-offense/apt-scenario/README.md
+      - Attack / Detect Writeups:
+          - "01 · Credential Theft → DCSync": phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md
+          - "02 · Password Spray (SMB)": phase-5-offense/attack-detect-writeups/02-password-spray-smb.md
+          - "03 · DMZ Web Attack (T1190)": phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md
+          - "04 · Lateral Movement (WMI/WinRM/PsExec)": phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md
+      - BloodHound (AD Attack Paths): phase-5-offense/bloodhound-ce/README.md
+      - Purple-Team Validation: phase-5-offense/purple-team/README.md
+      - Atomic Red Team: phase-5-offense/atomic-red-team/README.md
+      - Web Attacks (DMZ): phase-5-offense/web-attacks/README.md
+      - Sliver C2: phase-5-offense/sliver-c2/README.md
+  - Phase 6 · Network Security Monitoring:
+      - Overview: phase-6-nsm/README.md
+      - DNS Tunneling Detection: phase-6-nsm/dns-tunneling.md
+      - "PCAP Report · AD Attack Chain": phase-6-nsm/pcap-reports/01-attack-chain-nsm.md
+      - "PCAP Report · Recon Scan": phase-6-nsm/pcap-reports/02-recon-scanning-nsm.md
+  - Phase 7 · Automation (IaC):
+      - Overview: phase-7-automation/README.md
+      - Windows Config: phase-7-automation/windows-config/README.md
+      - "Provisioning · dmz-01": phase-7-automation/provisioning/dmz-01/README.md
+      - "Provisioning · misp-01": phase-7-automation/provisioning/misp-01/README.md
+      - "Provisioning · scan-01": phase-7-automation/provisioning/scan-01/README.md
