@@ -32,10 +32,10 @@ is legible and repeatable, not a one-off clever query:
 | **Triage** | The ranking is not a verdict. Which of the top hits are benign, and *why*? |
 | **Outcome** | Promote to a detection, tune an existing one, or dismiss — and record which. |
 
-The two scripts (`hunt-beaconing.py`, `hunt-rare-process.py`) are stdlib-only, read the telemetry over SSH
-(or a local copy / stdin), and **rank on behaviour alone** — they never encode "this IP is bad." The verdict
-is the analyst's, made in the triage step. That separation is the point: a hunt tool that already knows the
-answer isn't hunting.
+All three scripts (`hunt-beaconing.py`, `hunt-rare-process.py`, `hunt-kerberoast-baseline.py`) are
+stdlib-only, read the telemetry over SSH (or a local copy / stdin), and **rank on behaviour alone** — they
+never encode "this IP is bad." The verdict is the analyst's, made in the triage step. That separation is the
+point: a hunt tool that already knows the answer isn't hunting.
 
 ---
 
@@ -171,20 +171,82 @@ adding T1197 as a validated technique and giving Defense-Evasion/Persistence a n
 
 ---
 
+## Hunt C — A patient Kerberoast, by rarity not volume (Wazuh archive)
+
+> [!check] Executed and verified live on 2026-09-12.
+> Fired a single `kvno` ticket request as `jdoe` against `svc-sql`'s SPN — the exact "one targeted request"
+> evasion the T1558.003 write-up already documented against rule 100031. The rule's alert count stayed at 1
+> (unchanged), confirming the evasion still works. The hunt immediately surfaced
+> `jdoe -> MSSQLSvc/dc-01.lab.internal:1433@LAB.INTERNAL` as a fresh singleton — a targeted Kerberoast a
+> threshold rule structurally cannot see, caught anyway.
+
+**Hypothesis.** Rule 100031 keys on *volume* — 3+ TGS-REQs from one account in 60s
+([`detection-catalog.md` #3](../detection-catalog.md#3-t1558003--kerberoasting)) — so a patient attacker who
+already knows which SPN is worth cracking requests **one** ticket and produces zero alerts, confirmed live
+when the catalog entry was first written. But "one ticket" undersells how rare that really is: an ordinary
+domain account has essentially no legitimate reason to ever request a *service* SPN's ticket directly — that
+happens transparently when a real client uses the service, not via an interactive `kinit`/`kvno`/impacket
+call. So the **(account, SPN) pair itself**, not the request count, is the signal — the same "the
+least-frequent occurrence is the most interesting" idea as Hunt B, pointed at Kerberos tickets instead of
+process execution.
+
+**Data source.** The same Wazuh full-event archive Hunt B needs (`<logall_json>yes</logall_json>`, already
+on) — `"type":"KDC Authorization"` TGS-REQ events, the same telemetry rule 100031 itself is built on.
+
+**Analysis — `hunt-kerberoast-baseline.py`.** Stack-count every `(account, serviceDescription)` pair seen in
+the archive; rank singletons first, same as `hunt-rare-process.py`. Samba logs the requesting account as the
+literal string `"null"` when a Kerberoast tool's own TGS-REQ fails to resolve a requester (the same
+`KRB_AP_ERR_INAPP_CKSUM` interop wall documented throughout Phase 5) — those are counted separately as
+*unattributed* rather than silently dropped, since a burst of them is itself exactly what rule 100031's
+`same_field` grouping on the literal `"null"` already catches.
+
+```
+== Kerberoast baseline hunt :: 9 attributed TGS-REQs (7 unattributed), 2 accounts,
+   7 distinct SPNs, 7 distinct (account, SPN) pairs ==
+
+  count  account          spn                                             first seen
+  ---------------------------------------------------------------------------------------------
+      1  WS-01$           LDAP/dc-01.lab.internal/lab.internal@LAB...     2026-09-12T01:37:56Z
+      1  WS-01$           krbtgt/LAB.INTERNAL@LAB.INTERNAL                2026-09-12T01:37:56Z
+      1  jdoe             MSSQLSvc/dc-01.lab.internal:1433@LAB.INTERNAL   2026-09-12T01:50:49Z
+      3  WS-01$           ldap/dc-01.lab.internal/lab.internal@LAB...     2026-09-12T01:37:56Z
+```
+
+**Triage.** The five `WS-01$` singletons are the workstation's own machine-account authentication (LDAP,
+CIFS, `krbtgt`, its own SPN) — routine domain-join traffic, easily dismissed by *who* is asking (a computer
+account, requesting infrastructure tickets its own logon needs). `jdoe -> MSSQLSvc/...` is a human user
+account requesting a **SQL Server** service ticket directly — no legitimate reason for that pairing to ever
+exist, and it's a first-time occurrence for this account. That contrast (routine self-service infrastructure
+vs. a human reaching for someone else's service ticket) is the actual triage signal, not just "singleton."
+
+**Outcome — closes a documented evasion, as a hunt not a rule.** Deliberately **not** promoted to the ATT&CK
+coverage map — a periodic archive query is a different instrument from a real-time correlation rule, the
+same honesty already applied to Velociraptor's fleet hunts. But it closes the gap the catalog named as
+"out of scope for what this lab can verify" back when T1558.003 was first written: a targeted, patient
+Kerberoast that a threshold rule cannot see by design is still visible to an analyst who ranks by rarity
+instead of volume, verified against the identical live evasion the rule itself couldn't catch.
+
+---
+
 ## The loop, both directions
 
 | Hunt | Signal | Data | Result | Detection outcome |
 |---|---|---|---|---|
 | **A — Beaconing** | inter-arrival regularity + payload consistency + persistence | Zeek `conn.log` | Sliver C2 ranked #1 by timing alone | **Confirms** Suricata 9100002 — and proves the analytic stands without the signature |
 | **B — Rare process** | execution frequency (stack counting) | Sysmon EID 1 (Wazuh archive) | one-off `bitsadmin` in the long tail | **Surfaces a gap** → new Sigma rule 100511/100512 (T1197), validated live |
+| **C — Kerberoast baseline** | (account, SPN) pair rarity | KDC Authorization (Wazuh archive) | `jdoe`'s single targeted ticket ranked as a fresh singleton | **Closes a documented evasion** of rule 100031 — as a hunt, not a new rule |
 
-Two honest findings worth carrying forward, both about the *limits* of a single-signal hunt:
+Three honest findings worth carrying forward, all about the *limits* of a single-signal hunt or rule:
 
 - **Jitter defeats naive beacon hunting.** Ranking on interval regularity alone floats a no-jitter benign
   keepalive above a jittered C2. The fix isn't a better threshold — it's more signals (payload, volume) plus
   destination context. A hunt is a ranking to triage, never an alarm to trust.
 - **You can't hunt what you don't collect.** The rare-process hunt was impossible until full-event archiving
   was turned on; the SIEM's default alert-only view had already discarded the population the hunt needed.
+- **A rule can be structurally blind to a shape of attack, and still leave a trail elsewhere.** Rule 100031
+  cannot see a single targeted ticket request by design (no volume, nothing to threshold on) — but the same
+  telemetry it reads is still a rare event when ranked a different way. The rule and the hunt watch the same
+  data for different signals; neither replaces the other.
 
 ---
 
@@ -202,8 +264,16 @@ ssh rtr-01-root "grep -aoE '\"signature_id\":910000[12]' /var/log/suricata/eve.j
 #   close the loop for a rare process with no rule:
 #     1. write phase-4-detection/sigma/rules/<name>.yml   2. ./sigma-to-wazuh.py && ./sigma-selftest.py
 #     3. (ansible) ansible-playbook siem.yml -l siem-01   4. (purple-team) ./purple-team.py
+
+# --- Hunt C: rank (account, SPN) pairs by rarity (needs <logall_json>yes) ---
+./hunt-kerberoast-baseline.py
+#   reproduce the exact evasion + hunt result:
+ssh atk-01 "kinit jdoe@LAB.INTERNAL <<< '<jdoe password>' && kvno MSSQLSvc/dc-01.lab.internal:1433@LAB.INTERNAL"
+ssh siem-01 "sudo grep -ac '\"id\":\"100031\"' /var/ossec/logs/alerts/alerts.json"   # unchanged - the evasion
+./hunt-kerberoast-baseline.py                                                        # jdoe -> MSSQLSvc appears
 ```
 
-Scripts: [`hunt-beaconing.py`](hunt-beaconing.py), [`hunt-rare-process.py`](hunt-rare-process.py). The
-detection they feed lives as code in [`../sigma/`](../sigma/) and the coverage they change is in
-[`../attack-coverage/`](../attack-coverage/).
+Scripts: [`hunt-beaconing.py`](hunt-beaconing.py), [`hunt-rare-process.py`](hunt-rare-process.py),
+[`hunt-kerberoast-baseline.py`](hunt-kerberoast-baseline.py). The detection Hunts A/B feed lives as code in
+[`../sigma/`](../sigma/) and the coverage they change is in [`../attack-coverage/`](../attack-coverage/);
+Hunt C deliberately stays a hunt, not a coverage-map entry (see its Outcome above).

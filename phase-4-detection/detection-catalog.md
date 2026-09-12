@@ -415,10 +415,17 @@ ticket (targeting just the one juiciest-looking SPN, as a patient real attacker 
 recon would). Confirmed via the alert count before/after: **zero new alerts** — a single targeted request
 is indistinguishable from a legitimate client requesting its one normal ticket, and `same_field`
 correlation counts *occurrences*, not *distinct SPNs*, so there's no volume signal to catch here at all.
-This is an honest, real limitation, not patched: a genuinely un-detectable-by-volume targeted Kerberoast
-would need baselining normal per-account SPN request patterns (which SPNs does `jdoe` request in the
-course of legitimate work, and does this one fall outside that set) — meaningfully harder than a
-threshold rule, and out of scope for what this lab can verify against real telemetry tonight.
+
+**Closed as a hunt, 2026-09-12** (not a rule — a different instrument, same honesty as noting Velociraptor
+isn't counted in the ATT&CK coverage map either): built
+[`threat-hunting/hunt-kerberoast-baseline.py`](threat-hunting/hunt-kerberoast-baseline.py), which ranks every
+`(account, SPN)` pair in the Wazuh archive by request count — the same stack-counting rarity idea as
+`hunt-rare-process.py`, applied to Kerberos ticket requests instead of process execution. An ordinary
+account has essentially no legitimate reason to ever request a service SPN's ticket directly, so the *pair*
+itself is the rare event, not the volume. **Verified live:** fired a single `kvno` request as `jdoe` against
+`svc-sql`'s SPN — rule 100031's alert count stayed at 1 (unchanged, confirming the evasion still works
+against the rule), but the hunt immediately surfaced `jdoe -> MSSQLSvc/dc-01.lab.internal:1433@LAB.INTERNAL`
+as a fresh singleton pair. See `threat-hunting/README.md` Hunt C for the full writeup.
 
 **False-positive risk:** a legitimate service or user that genuinely needs 3+ different service tickets
 within a minute — a user opening several different mapped drives/services in quick succession at login,
