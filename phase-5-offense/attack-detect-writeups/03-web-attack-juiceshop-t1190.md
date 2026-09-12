@@ -10,10 +10,11 @@ Application) was uncovered.
 Domain: DMZ segment `10.10.20.0/24` · Target: `dmz-01` (Juice Shop, Docker) · Attacker: `atk-01` (REDTEAM) ·
 Sensor: `rtr-01` (inline Suricata) · SIEM: `siem-01` (Wazuh manager).
 
-> [!warning] Built 2026-09-06 as detection-as-code — live fire pending.
-> Rules, the `HTTP_PORTS` fix, and the exercise harness are written and deployed via Ansible, but the lab
-> was powered off this session so this has **not yet been fired end-to-end**. The exact verification commands
-> are in §5; run `web-attacks/web-attack-scan.sh` from atk-01 with the lab up to confirm and flip this note.
+> [!check] Live-fired end-to-end on 2026-09-07 — 100440 fires clean, correctly labeled T1190.
+> Two real bugs found and fixed along the way: Suricata's PCRE matched the raw URL-encoded request
+> instead of the decoded one (fixed with a `url_decode` transform on rules 20–23), and Wazuh silently
+> lost the alert to a rule-precedence collision with the threat-intel CDB hit 100211 (fixed by raising
+> 100440/100441 to level 13). Full verification in §5.
 
 ---
 

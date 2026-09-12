@@ -11,11 +11,14 @@ Wazuh by the lab's `sigma-to-wazuh.py` pipeline:
 | **T1021.006** — WinRM | 100516 | any child of `wsmprovhost.exe` (evil-winrm, `Enter-PSSession`) |
 | **T1569.002** — Service Execution (PsExec) | 100513, 100514 | `PSEXESVC.exe` runs or spawns a child (Sysinternals/impacket psexec) |
 
-> [!warning] Built 2026-09-06 as detection-as-code — live fire pending.
-> Rule **logic is proven offline** by `sigma-selftest.py` (**26/26**, true-positive + precision cases for all
-> four rule IDs). They have **not** been fired end-to-end — the lab was powered off, and live validation needs
-> a running Windows target (ws-01) plus admin credentials. Exercise commands are in §3; run them from atk-01
-> with the lab up to flip this note.
+> [!check] Live-fire attempted end-to-end on 2026-09-07 — 1 of 3 confirmed, 1 confirmed
+> Defender-blocked, 1 genuinely open.
+> **T1021.006 (WinRM)** verified firing live after standing up a listener and fixing a real Sigma
+> parent-process gap (`WinRShost.exe` vs `wsmprovhost.exe`). **T1569.002 (PsExec)** reaches ws-01 and
+> drops the service binary, but Defender quarantines it before the service runs — a confirmed
+> defense-in-depth block, not a rule gap. **T1047 (WMI)** produces the exact expected telemetry but
+> rule 100515 still doesn't fire — genuinely unresolved after 5 ruled-out causes. Rule logic for all
+> four IDs remains proven offline by `sigma-selftest.py` (26/26). Full investigation in §5.
 
 ---
 
@@ -98,9 +101,11 @@ unreachable on 445/135 from anywhere, even same-segment (`dc-01`). Root cause, f
 
 With the path open, `impacket-psexec` additionally failed to write to `ADMIN$`/`C$` ("share is not
 writable") until `LocalAccountTokenFilterPolicy=1` was set — the standard Microsoft fix for UAC's remote
-token-filtering of local (non-`Administrator`) accounts; `localadmin` is exactly that. **None of this is
-codified into the `windows` Ansible role** — applied live over SSH, not idempotent, doesn't survive a
-rebuild. Flagged as a follow-up, not silently left.
+token-filtering of local (non-`Administrator`) accounts; `localadmin` is exactly that. All four fixes were
+applied live over SSH that night; **now codified into the `windows` Ansible role** (`roles/windows/tasks/main.yml`)
+so a rebuild doesn't silently lose them — idempotent check-then-fix tasks for the firewall rule groups, the
+network profile, the SMB-In scope, and the registry value. Syntax-checked and lint-clean; not yet re-converged
+against a live ws-01 (the lab was down when this was written) — that's the remaining step to actually call it done.
 
 With the path and privilege both fixed:
 
