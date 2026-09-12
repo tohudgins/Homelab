@@ -71,13 +71,15 @@ Rules live on siem-01 at `/var/ossec/etc/rules/local_rules.xml` (mirrored in thi
 | 42 | [T1560.001 – Archive Collected Data: via Utility](https://attack.mitre.org/techniques/T1560/001/) | 100517, 100518, 100519 (Sigma) | ws-01 (Sysmon EID1 + PS 4104) | ✅ **100519 verified TP live (2026-09-07)** — **fills the Collection tactic** (previously empty): fileless `Compress-Archive` staged a real archive on ws-01 (`New-Item .../stage; Compress-Archive -DestinationPath stage.zip`) and rule 100519 fired on the command line. **100517/100518 (rar/7-Zip) remain correct-by-inspection only** — `rar.exe`/`7z.exe` aren't present on this image, an environment gap, not a rule defect, same class as wmic (#43) and no-`rar` (see [`purple-team/tests.json`](../phase-5-offense/purple-team/tests.json)'s exclusion note. Stages right upstream of the DNS-exfil detection (#36). **Sigma-compiled** (2026-09-06) |
 | 43 | [T1490 – Inhibit System Recovery](https://attack.mitre.org/techniques/T1490/) | 100520–100524 (Sigma) | ws-01 (Sysmon EID1) | ✅ **4/5 verified TP live via purple-team.py** (100520 `vssadmin delete shadows`, 100521 `vssadmin resize shadowstorage`, 100523 `wbadmin delete catalog`, 100524 `bcdedit` recovery-disable) — the classic ransomware pre-encryption step. **Deepens the Impact tactic** alongside the fs-01 ransomware canary (#37). **100522 (`wmic shadowcopy delete`) is correct by inspection but unexercisable on this host** — `wmic.exe` doesn't exist on this Windows 11 25H2 build (Microsoft dropped it; `Test-Path`/`Get-Command` both confirm absence), an environment gap, not a rule defect. **Finding while extending the purple-team battery:** the offline ART bundle's *actual* test numbers didn't match the technique's public numbering 1:1 (test 9 here is "Disable System Restore Through Registry", not vssadmin-resize — that's test 10); caught by listing tests directly on ws-01 rather than trusting a remembered number, same "verify by exercising" discipline as everywhere else in this catalog. **Sigma-compiled** (2026-09-06); **live-fire verified** (2026-09-07) |
 | 44 | [T1003.001 – LSASS Memory (command-line angle)](https://attack.mitre.org/techniques/T1003/001/) | 100525, 100526 (Sigma) | ws-01 (Sysmon EID1) | ✅ **verified TP live (2026-09-07) — makes T1003.001 live-fireable, closing gap #12** (stock EID10 rule 92900 was inspection-only, LSASS PPL blocked the memory read). `rundll32.exe comsvcs.dll, MiniDump …` **does** spawn and Sysmon captures the full command line — confirmed 9 real hits across the session on rule 100525, including a fresh one fired specifically to double-check this. **Correction:** an earlier pass tonight concluded this was Defender-blocked with no telemetry (matching the certutil/T1105 pattern) — that was wrong. Microsoft Defender does detect the pattern (`Trojan:Win32/RundllLolBin.AF`, ThreatID 2147793100) and denies the actual memory read/dump write (`Test-Path` on the output file returns `Access is denied`), but that happens **after** process creation, not before — Sysmon still gets the telemetry, and the rule fires on it regardless of whether the dump itself succeeds. **100526** (the companion `rundll32`+`lsass` command-line rule) never independently registers as "the" fired alert — it's a same-level sibling of 100525 matching the identical event, and Wazuh's one-rule-per-event model only records one of two co-matching same-level rules; not evidence either rule's logic is wrong. Exercise: [`phase-5-offense/credential-access/lsass-dump.ps1`](../phase-5-offense/credential-access/lsass-dump.ps1). **Sigma-compiled** (2026-09-06) |
+| 45 | [T1098.007 – Account Manipulation: Additional Local or Domain Groups](https://attack.mitre.org/techniques/T1098/007/) | 100014, 100015 | dc-01 (Samba `dsdb_group_json_audit`) | ✅ **verified TP live (2026-09-12) — closes the gap investigated and left unachieved on 2026-08-15** (see below). Needed log level 5, not 3, on `dsdb_group_audit`/`dsdb_group_json_audit` — not a platform limit after all. Fires on the real remote-LDAP path (not a local shortcut), full MITRE tagging, level 13. |
 
 (#6 is tagged with both IDs deliberately: the rule can't distinguish creating a new local account from
 modifying an existing one's credentials — same file, same rule, same broad-not-narrow tradeoff as the
 rest of this FIM family — but the actual test below specifically exercised account *creation*
-(`useradd`), which is T1136.001, not T1098. There's a separate, more precise T1098.007-flavored angle —
-*AD Domain Admins* group membership specifically — that was investigated and honestly not achieved; see
-[below](#investigated-not-achieved-t1098007-account-manipulation--privileged-group-membership) for why.)
+(`useradd`), which is T1136.001, not T1098. The more precise T1098.007-flavored angle — *AD Domain Admins*
+group membership specifically — is technique #45 above; see
+[below](#t1098007-account-manipulation-privileged-group-membership-closed-2026-09-12) for the full history,
+including the dead end that came first.)
 
 **12 of the build plan's target 8-12 techniques**, spanning Credential Access, Persistence, Defense
 Evasion, and Execution, across both the Linux/AD side (dc-01/rtr-01, techniques 1-7, almost entirely
@@ -897,10 +899,11 @@ LSASS read access, which any real deployment running this rule would need to all
 
 ---
 
-## Investigated, not achieved: T1098.007 (Account Manipulation — privileged group membership)
+## T1098.007 (Account Manipulation — privileged group membership) — closed 2026-09-12
 
-Worth documenting the dead end itself, not just the successes — this is a real, tested platform
-limitation, not a skipped step.
+Worth documenting the dead end itself, not just the eventual success — the section below through "Not
+pursued further tonight" is the original 2026-08-15 investigation, left exactly as written. It genuinely
+looked like a platform limitation at the time. It wasn't — see the resolution after it.
 
 **Goal:** detect an attacker adding an account to Domain Admins (or any privileged group) — one of the
 most consistently-monitored events in real-world AD security (Windows Event ID 4728/4732, *A member was
@@ -941,6 +944,54 @@ account in place would have quietly corrupted the AD state for Phase 5's BloodHo
 schema rather than a log-level flag — is a materially bigger, more invasive change than anything else in
 this catalog, and risks the live DC for a payoff that isn't guaranteed. Worth a dedicated pass later, not
 squeezed in as a footnote to something else.
+
+### Resolution (2026-09-12): it wasn't a platform limit, it was the wrong log level
+
+Went back to actually check the register of Samba debug classes rather than re-deriving them from memory.
+`dsdb_group_audit`/`dsdb_group_json_audit` **is** the officially documented Samba facility for exactly this
+event — group *membership* changes, logged with a fixed schema matching Windows Event ID 4728 — and the
+Samba Wiki's own configuration example uses **level 5**, not the level 3 every class was set to in the
+original attempt above. That's the whole gap: not a missing capability, a log level too low to make this
+one specific class emit anything.
+
+**Confirmed by re-running the identical test methodology from the original investigation, unchanged:**
+`dsdb_group_audit:5 dsdb_group_json_audit:5` in `smb.conf`, then the same bootstrap-account-over-LDAP path
+(`samba-tool group addmembers "Domain Admins" jdoe -H ldap://dc-01.lab.internal -k yes`, authenticated as a
+throwaway admin account, not a local shortcut). This time it produced a full JSON `groupChange` event in
+`/var/log/samba/log.samba` — the same file the Kerberoasting telemetry already uses, so no new Wazuh
+localfile or decoder was needed:
+
+```json
+{"timestamp":"2026-09-12T17:15:44+0000","type":"groupChange","groupChange":{
+  "eventId":4728,"status":"Success","action":"Added",
+  "remoteAddress":"ipv4:10.10.10.10:40790",
+  "group":"CN=Domain Admins,CN=Users,DC=lab,DC=internal",
+  "user":"CN=John Doe,CN=Users,DC=lab,DC=internal", ...}}
+```
+
+`remoteAddress` confirms this came over the wire, from the real attack path, not a local database shortcut
+— the same rigor the original investigation insisted on.
+
+**Why this doesn't risk the "Too many fields" overflow that got the generic `dsdb_json_audit` removed
+elsewhere** (see `roles/dc/files/smb.conf`'s own comment): that removal was about the *generic* class, which
+logs every routine LDB attribute change (`lastLogon`, `badPwdCount`, ...) — real, constant churn on a live
+DC. `dsdb_group_audit`/`dsdb_group_json_audit` is narrower by design: it only fires on group *membership*
+changes specifically, a fixed ~10-field schema, and a genuinely rare event category rather than routine
+noise. No overflow observed in testing; worth revisiting only if a much busier DC ever proves otherwise.
+
+**New rules, verified firing live:** `100014` (base classifier, level 3, tags any `groupChange` event) and
+`100015` (level 13, `if_sid=100014` + `action=Added` + the group matches a curated list of privileged
+groups — Domain Admins, Enterprise Admins, Schema Admins, Administrators, Backup Operators, Account
+Operators). Re-ran the exact test against the fully `ansible-playbook dc.yml`/`siem.yml`-converged state
+(not just the live hand-edit) and confirmed `100015` fires clean with correct MITRE tagging
+(`T1098.007`/`T1098`, tactic Persistence). Cleaned up the same way as the original investigation: removed
+`jdoe` from Domain Admins, deleted `adm-test`.
+
+**Not done (a real follow-up, not silently skipped):** not wired into `ad-validate.py`'s automated battery —
+every existing AD scenario there attacks with an *already-established* weak credential from
+`known-weaknesses.md`; this technique needs the harness itself to bootstrap and tear down a throwaway
+privileged account each run, a bigger design decision than adding one more scenario entry. Verified manually
+instead, with the same reproduce steps documented above.
 
 ---
 

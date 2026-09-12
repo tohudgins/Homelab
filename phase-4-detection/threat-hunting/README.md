@@ -181,7 +181,7 @@ adding T1197 as a validated technique and giving Defense-Evasion/Persistence a n
 > threshold rule structurally cannot see, caught anyway.
 
 **Hypothesis.** Rule 100031 keys on *volume* — 3+ TGS-REQs from one account in 60s
-([`detection-catalog.md` #3](../detection-catalog.md#3-t1558003--kerberoasting)) — so a patient attacker who
+([`detection-catalog.md` #3](../detection-catalog.md#3-t1558003-kerberoasting)) — so a patient attacker who
 already knows which SPN is worth cracking requests **one** ticket and produces zero alerts, confirmed live
 when the catalog entry was first written. But "one ticket" undersells how rare that really is: an ordinary
 domain account has essentially no legitimate reason to ever request a *service* SPN's ticket directly — that

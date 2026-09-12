@@ -268,6 +268,41 @@
     <group>ransomware_canary,attack,impact,</group>
   </rule>
 
+  <!--
+    T1098.007 — Account Manipulation: Additional Local or Domain Groups (closed 2026-09-12)
+
+    detection-catalog.md's original investigation (2026-08-15) tried every plausible Samba dsdb_* audit
+    facility at log level 3 and got zero output for a verified real group-membership change, and left it
+    documented as "investigated, not achieved" — a possible platform limit, worth a dedicated pass later.
+
+    It wasn't a platform limit. It needed log level 5, not 3: `dsdb_group_audit:5 dsdb_group_json_audit:5`
+    in smb.conf immediately produced a full JSON "groupChange" event (Windows Event ID 4728 equivalent) in
+    the SAME /var/log/samba/log.samba file the Kerberoasting telemetry already uses — no new Wazuh localfile
+    or decoder needed, just the existing json-decoded pipeline picking up a new `type`. Confirmed via the
+    real remote path, not a local shortcut: authenticated as a privileged test account over network LDAP
+    (`-H ldap://dc-01.lab.internal -k yes`) and added jdoe to Domain Admins — the event carries
+    `remoteAddress` (confirming it came over the wire), the target group, and the user added.
+  -->
+  <rule id="100014" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="type">^groupChange$</field>
+    <options>no_full_log</options>
+    <description>Samba AD: a security group's membership changed.</description>
+    <group>account_changed,</group>
+  </rule>
+
+  <rule id="100015" level="13">
+    <if_sid>100014</if_sid>
+    <field name="groupChange.action">^Added$</field>
+    <field name="groupChange.group" type="pcre2">(?i)CN=(Domain Admins|Enterprise Admins|Schema Admins|Administrators|Backup Operators|Account Operators),</field>
+    <description>Privileged AD group membership change — $(groupChange.user) added to $(groupChange.group) from $(groupChange.remoteAddress).</description>
+    <mitre>
+      <id>T1098.007</id>
+      <id>T1098</id>
+    </mitre>
+    <group>privilege_escalation,attack,</group>
+  </rule>
+
 </group>
 
 <!--

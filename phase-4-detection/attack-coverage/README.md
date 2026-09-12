@@ -9,7 +9,7 @@ the ruleset**, not hand-drawn, so it can never quietly drift from what's actuall
 (`mitre_technique` metadata), cross-references the **purple-team** battery (`tests.json`), and emits an
 ATT&CK **Navigator layer**:
 
-- **50 techniques** currently have a custom detection.
+- **51 techniques** currently have a custom detection.
 - **23** of those are **validated end-to-end** (the purple-team harness runs the atomic and proves the rule
   fired — not just "a rule exists").
 - Two shades encode that difference: **dark green = validated**, **light green = detection exists**.

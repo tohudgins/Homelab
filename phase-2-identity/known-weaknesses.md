@@ -7,7 +7,7 @@ the intent was always in the Phase 2 plan, this is where it actually gets built 
 
 | # | Weakness | Account(s) | Real-world pattern it mirrors | Attacked/detected in |
 |---|---|---|---|---|
-| 1 | Kerberoastable service accounts with weak, dictionary-guessable passwords | `svc-sql`, `svc-backup`, `svc-web` | Legacy service accounts set up years ago, never rotated, named/passworded by whoever provisioned them at the time | [Phase 4 — T1558.003](../phase-4-detection/detection-catalog.md#3-t1558003--kerberoasting) |
+| 1 | Kerberoastable service accounts with weak, dictionary-guessable passwords | `svc-sql`, `svc-backup`, `svc-web` | Legacy service accounts set up years ago, never rotated, named/passworded by whoever provisioned them at the time | [Phase 4 — T1558.003](../phase-4-detection/detection-catalog.md#3-t1558003-kerberoasting) |
 
 ## 1. Kerberoastable service accounts
 
@@ -49,7 +49,7 @@ the SPN to a machine account instead of a user account where the TGS is encrypte
 key rather than a human-settable password.
 
 **Detected in Phase 4:** see
-[T1558.003 — Kerberoasting](../phase-4-detection/detection-catalog.md#3-t1558003--kerberoasting) for the
+[T1558.003 — Kerberoasting](../phase-4-detection/detection-catalog.md#3-t1558003-kerberoasting) for the
 full attack simulation, the Samba audit-logging setup needed to see it at all (off by default), the
 custom Wazuh rules, and a confirmed real evasion (a single targeted ticket request produces no alert).
 
