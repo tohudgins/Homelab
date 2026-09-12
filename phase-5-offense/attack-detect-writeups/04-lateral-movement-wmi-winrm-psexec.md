@@ -11,14 +11,15 @@ Wazuh by the lab's `sigma-to-wazuh.py` pipeline:
 | **T1021.006** — WinRM | 100516 | any child of `wsmprovhost.exe` (evil-winrm, `Enter-PSSession`) |
 | **T1569.002** — Service Execution (PsExec) | 100513, 100514 | `PSEXESVC.exe` runs or spawns a child (Sysinternals/impacket psexec) |
 
-> [!check] Live-fire attempted end-to-end on 2026-09-07 — 1 of 3 confirmed, 1 confirmed
-> Defender-blocked, 1 genuinely open.
+> [!check] All three resolved as of 2026-09-12 (live-fire attempted 2026-09-07, WMI fixed 2026-09-12).
 > **T1021.006 (WinRM)** verified firing live after standing up a listener and fixing a real Sigma
 > parent-process gap (`WinRShost.exe` vs `wsmprovhost.exe`). **T1569.002 (PsExec)** reaches ws-01 and
 > drops the service binary, but Defender quarantines it before the service runs — a confirmed
-> defense-in-depth block, not a rule gap. **T1047 (WMI)** produces the exact expected telemetry but
-> rule 100515 still doesn't fire — genuinely unresolved after 5 ruled-out causes. Rule logic for all
-> four IDs remains proven offline by `sigma-selftest.py` (26/26). Full investigation in §5.
+> defense-in-depth block, not a rule gap. **T1047 (WMI)** produced the exact expected telemetry but
+> rule 100515 never fired on 2026-09-07 — root-caused 2026-09-12 (stock rule 92069 was silently
+> pre-empting it, see `detection-catalog.md` #39) and fixed with a new escalation rule, 100527, verified
+> firing live. Rule logic for all four Sigma IDs remains proven offline by `sigma-selftest.py` (26/26).
+> Full investigation in §5.
 
 ---
 

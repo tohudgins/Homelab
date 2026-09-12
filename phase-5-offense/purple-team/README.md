@@ -99,10 +99,10 @@ excluded — see below).**
 Getting here needed real infrastructure fixes, not just credentials — ws-01's Windows Firewall had SMB/WMI
 inbound rule groups entirely disabled, its network was misclassified `Public`, and even fixed, the SMB-In
 rule was scoped `LocalSubnet` (invisible to routed REDTEAM traffic). See `detection-catalog.md`'s note below
-row #41 for the full fix, and rows #39-41 for the per-technique findings (WMI is a genuinely open question;
-PsExec is confirmed Defender-blocked, same class as T1105/T1003.001-comsvcs, and deliberately not in this
-battery for that reason — a permanently-red test is worse than none, same reasoning as `tests.json`'s
-wmic/comsvcs exclusions).
+row #41 for the full fix, and rows #39-41 for the per-technique findings (WMI's rule bug is fixed as of
+2026-09-12, see below; PsExec is confirmed Defender-blocked, same class as T1105/T1003.001-comsvcs, and
+deliberately not in this battery for that reason — a permanently-red test is worse than none, same reasoning
+as `tests.json`'s wmic/comsvcs exclusions).
 
 These attacks **complete on Samba** — SMB/NTLM password spraying returns a real credential, and the
 TGS-REQ / DsGetNCChanges reach the DC (which logs them) even where impacket's later parse fails against Samba;
