@@ -13,7 +13,7 @@ Rules live on siem-01 at `/var/ossec/etc/rules/local_rules.xml` (mirrored in thi
 
 | # | ATT&CK Technique | Rule ID(s) | Source Host | Status |
 |---|---|---|---|---|
-| 1 | [T1110 – Brute Force](https://attack.mitre.org/techniques/T1110/) | 100010, 100011 | dc-01 (sshd) | ✅ verified TP, active response confirmed |
+| 1 | [T1110 – Brute Force](https://attack.mitre.org/techniques/T1110/) | 100010, 100011, **100013** | dc-01 (sshd) | ✅ verified TP, active response confirmed; **100013 (added 2026-09-12) closes the mixed-failure-type evasion** — see below |
 | 2 | [T1484.001 – Group Policy Modification](https://attack.mitre.org/techniques/T1484/001/) | 100020 | dc-01 (SYSVOL FIM) | ✅ verified TP (add/modify/delete) |
 | 3 | [T1558.003 – Kerberoasting](https://attack.mitre.org/techniques/T1558/003/) | 100030, 100031 | dc-01 (Samba KDC audit) | ✅ verified TP + evasion confirmed; **100031 off-by-one fixed 2026-08-24** (`frequency` 3→2 — fired on the 4th TGS-REQ, but a roast sends 3; found during Phase 5 re-verify, see `phase-5-offense/`) |
 | 4 | [T1110.001 – Password Guessing (Kerberos)](https://attack.mitre.org/techniques/T1110/001/) | 100040, 100041 | dc-01 (Samba KDC audit) | ✅ verified TP, custom active response confirmed |
@@ -226,17 +226,25 @@ hosts; in this lab, until atk-01 exists (Phase 5), they're the same box by neces
 rather than hidden — this is exactly the kind of active-response collateral-damage risk a real SOC has to
 reason about (see False-positive risk below).
 
-**Evasion attempts — two, both succeeded (honest gap, not patched here):**
-1. *Rate limiting:* staying under 4 failures/60s from one source evades both rules by design — a
-   real attacker throttling below the threshold is a known, standard SSH-brute-force evasion technique.
-2. *Type-mixing:* the very first live test (6 events: 3 wrong-password + 3 non-existent-user, interleaved)
-   evaded detection entirely — each type stayed at 3, under either rule's individual threshold of 4, even
-   though 6 total failing attempts hit the host in ~24 seconds. This is the direct, empirically-discovered
-   cost of abandoning the group-level `if_matched_group` correlator: the working two-rule design only
-   watches one failure type per rule, so an attacker who mixes guess types can split traffic across both
-   thresholds without tripping either. A genuine fix would need a proven-working cross-type correlator —
-   worth another pass once the `if_matched_group` question is better understood (a case for opening a real
-   issue/discussion upstream) or once there's a second CORP host to source a distributed test from.
+**Evasion attempts — one accepted limitation, one closed:**
+1. *Rate limiting:* staying under 4 failures/60s from one source evades all three rules below by design — a
+   real attacker throttling below the threshold is a known, standard SSH-brute-force evasion technique, and
+   no threshold-based rule can close it without behavioral baselining. Accepted, not patched.
+2. *Type-mixing — closed 2026-09-12.* The original live test (6 events: 3 wrong-password + 3 non-existent-
+   user, interleaved) evaded detection entirely — each type stayed at 3, under either rule's individual
+   threshold of 4, even though 6 total failing attempts hit the host in ~24 seconds. That was the direct,
+   empirically-discovered cost of abandoning `if_matched_group` (below). **Root cause confirmed, not just
+   worked around:** `if_matched_group` is a genuine, long-standing upstream Wazuh engine bug, not a config
+   mistake — [wazuh/wazuh#27488](https://github.com/wazuh/wazuh/issues/27488) and
+   [#3291](https://github.com/wazuh/wazuh/issues/3291) document the identical symptom (`if_matched_sid`
+   works, `if_matched_group` silently doesn't) across versions 3.9.1 through 4.9.2. **Real fix:** `if_matched_sid`
+   only takes one rule ID, but plain `if_sid` takes a comma-separated list and isn't affected by the bug —
+   used already elsewhere in this ruleset (`100020`'s `<if_sid>550,553,554</if_sid>`). Rule **100012** merges
+   both failure-decoder rules (5760, 5710) into one ID via that list form; rule **100013** runs the actual
+   frequency correlation off *that* merged ID via `if_matched_sid`, sidestepping `if_matched_group` entirely.
+   Re-ran the identical interleaved test live: **100013 fired, 100010 and 100011 individually stayed silent**
+   — the exact evasion, now caught. 100010/100011 stay in place (still useful for attributing which failure
+   type dominated); 100013 is the rule that actually closes the gap.
 
 **False-positive risk:** A legitimate user mistyping their password 3-4 times in a row; more seriously in
 this specific topology — **any legitimate traffic proxied through the same jump host as an attacker gets
@@ -502,8 +510,7 @@ script instead ([`disable-ad-account.py`](disable-ad-account.py), mirrored here,
    worth knowing before relying on AR timeouts in anything resembling production: a routine config
    deploy/restart during an active incident can permanently strand a block or a lockout — the fix is
    either avoiding manager restarts while responses are in flight, or building monitoring that catches
-   "should have expired by now, didn't" rather than trusting the timeout blindly. See [[Wazuh]] in the
-   vault for the reusable version of this gotcha.
+   "should have expired by now, didn't" rather than trusting the timeout blindly.
 
 **Evasion:** same core gap as the sshd rules — rate-limiting under 4 failures/60s evades detection
 entirely, and this protocol has no equivalent of trying multiple failure "types" to split across rules
@@ -672,8 +679,7 @@ Script Block Logging via registry (`HKLM:\SOFTWARE\Policies\Microsoft\Windows\Po
 off by default — without it the PowerShell channel carries almost nothing useful). All of this reused a
 `localadmin` SSH session bootstrapped the same key-based way as the Linux hosts, once Windows OpenSSH
 Server was manually enabled and given an inbound firewall rule (neither is automatic from installing the
-optional feature alone — a real, if mundane, gotcha in its own right, in [[Windows OpenSSH Server]] in the
-vault).
+optional feature alone — a real, if mundane, gotcha in its own right).
 
 ## 8. T1059.001 — PowerShell (encoded command)
 
@@ -868,8 +874,7 @@ the one already documented for Suricata/Samba sources.** Tracing the rule's full
 JSON blob via the generic `json` decoder, never the `windows_eventchannel` decoder real Windows-agent
 traffic is tagged with at ingestion — no amount of payload accuracy can substitute for that, since it's a
 property of the ingestion path, not the content. This confirms `wazuh-logtest` cannot verify *any*
-eventchannel-sourced rule via manual paste, a stronger and more precise version of the earlier finding
-(see [[Wazuh]] in the vault, updated with both).
+eventchannel-sourced rule via manual paste, a stronger and more precise version of the earlier finding.
 
 **Status: coverage confirmed correct by code inspection; live-fire blocked by a working OS mitigation
 (LSASS PPL); rule-logic verification blocked by a `wazuh-logtest` architectural limitation.** Genuinely

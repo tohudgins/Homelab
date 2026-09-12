@@ -161,6 +161,31 @@
       </ossec_config>
   notify: Restart wazuh-manager
 
+# T1110 SSH brute-force active response: auto-block the source IP at the agent
+# that generated the alert (dc-01). This was live-only on siem-01 since Phase 4's
+# first session (2026-08-14) - never actually codified despite everything else in
+# this role being IaC - so a from-scratch rebuild would silently lose it. Closing
+# that gap here, and adding 100013 (the mixed-failure-type correlator added
+# 2026-09-12, see local_rules.xml) to the same block: the earlier live-only config
+# only covered 100010/100011, so an attacker who mixed failure types evaded both
+# the alert AND the containment, not just the alert. No <command> definition
+# needed here - firewall-drop ships as a stock command in the default ossec.conf
+# Wazuh's installer writes; only the <active-response> linking block is new.
+- name: Register the sshd brute-force active response (firewall-drop on 100010/100011/100013)
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: "<!-- {mark} ANSIBLE MANAGED: sshd brute-force active response -->"
+    block: |
+      <ossec_config>
+        <active-response>
+          <command>firewall-drop</command>
+          <location>local</location>
+          <rules_id>100010,100011,100013</rules_id>
+          <timeout>600</timeout>
+        </active-response>
+      </ossec_config>
+  notify: Restart wazuh-manager
+
 # Active-response self-DoS guard: firewall-drop (rules 100010/100011) blocks the
 # source IP *as siem-01 sees it*. Traffic that arrives via the jump/gateway shows
 # up as a segment gateway IP (rtr-01 is the gateway on every segment AND the SSH

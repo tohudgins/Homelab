@@ -39,11 +39,46 @@
   </rule>
 
   <!--
-  Evasion follow-up: both key on same_source_ip and a single failure type, so (a) a spray that stays
-  under 4/60s from any single source, or (b) an attacker who mixes wrong-password and invalid-user
-  guesses to split their attempts across 100010 and 100011 without tripping either threshold alone,
-  both evade this pair by design. Documented in detection-catalog.md as a known gap, not patched here.
+  Mixed-type evasion, closed 2026-09-12 (see detection-catalog.md).
+  100010/100011 each key on ONE failure type, so an attacker who mixes wrong-password and invalid-user
+  guesses (3 of each, say) stays under both thresholds individually even though 6 total attempts hit
+  the host. if_matched_group="authentication_failed" is the mechanism that SHOULD close this (correlate
+  across both stock decoder rules by their shared group) — confirmed via wazuh-logtest AND live that it
+  never fires in this Wazuh version, and it isn't a config mistake: this is a long-standing, still-open
+  upstream engine bug (wazuh/wazuh#27488, #3291, reported as far back as 3.9.1 — if_matched_sid works,
+  if_matched_group silently doesn't, across every version anyone's filed it against).
+
+  Real fix instead of another workaround: if_matched_sid only takes ONE rule id, but plain if_sid takes
+  a comma-separated list (already used elsewhere in this ruleset, e.g. 100020's `<if_sid>550,553,554</if_sid>`)
+  and is unaffected by the if_matched_group bug. So: 100012 merges both failure-decoder rules into one
+  id via if_sid's list form, and 100013 runs the actual frequency correlation off THAT single merged id
+  via if_matched_sid — sidestepping if_matched_group entirely while achieving the same cross-type count.
+  Verified live: an interleaved 3 wrong-password + 3 invalid-user burst from one source fires 100013 while
+  100010 and 100011 individually stay silent (each only saw 3 of its own type) — the exact evasion this
+  gap describes, now caught.
   -->
+
+  <rule id="100012" level="3">
+    <if_sid>5760,5710</if_sid>
+    <options>no_full_log</options>
+    <description>sshd: authentication failure (either wrong-password or invalid-user) — $(srcip).</description>
+    <mitre>
+      <id>T1110</id>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failed,</group>
+  </rule>
+
+  <rule id="100013" level="12" frequency="4" timeframe="60" ignore="120">
+    <if_matched_sid>100012</if_matched_sid>
+    <same_source_ip />
+    <description>sshd: brute force — $(srcip) had 4+ mixed-type (wrong-password + invalid-user) failures in 60s.</description>
+    <mitre>
+      <id>T1110</id>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failures,attack,</group>
+  </rule>
 
 </group>
 
@@ -1096,7 +1131,9 @@
   (2) 100460 fires on a YARA match reported back via active-responses.log
       (decoded by wazuh-yara / wazuh-yara-result) — malware signature matched a
       file on the share. 100461 surfaces scanner errors so a broken loop is loud,
-      not silent ([[Silent Fallbacks]]).
+      not silent (the "measure the harness, not just the target" discipline
+      applied to alerting itself — a scanner that fails quietly is worse than
+      one that's known to be down).
   Field note: verify the syscheck path field with wazuh-logtest on first fire
   (Wazuh exposes the changed path as `file`); the AR trigger only needs 100450 to
   fire, which the if_group + path match guarantees.
