@@ -63,15 +63,48 @@ def suricata_techniques():
     return cov
 
 
-def validated_techniques():
+def validated_techniques(cov):
     # A technique is "validated" when an automated harness runs the attack and proves
     # the detection fired: purple-team.py (Atomic tests on ws-01, tests.json) OR
-    # ad-validate.py (real domain attacks from atk-01 — scenarios that declare a technique).
+    # ad-validate.py (real domain attacks from atk-01 — scenarios with a "rules" list).
+    #
+    # A harness entry declares ONE "technique" string alongside the rule ID(s) it expects
+    # to fire — but several rules are honestly tagged with more than one MITRE ID (e.g.
+    # 100117/100118 cover both T1548.002 and T1112; 100015 covers both T1098.007 and
+    # T1098). Proving one of those rules fired proves EVERY technique it's tagged with,
+    # not just the one word the test happened to type in "technique" — so cross-reference
+    # each entry's rule ID(s) against the rule->technique map (built from `cov`, i.e.
+    # wazuh_techniques() + suricata_techniques()) rather than only collecting the
+    # literal declared strings. One new test can then validate a whole co-tagged
+    # cluster at once, and a future rule split doesn't silently strand a sibling
+    # technique as unvalidated.
+    rule_to_techs = {}
+    for tech, rids in cov.items():
+        for rid in rids:
+            rule_to_techs.setdefault(rid, set()).add(tech)
+
     v = set()
     if os.path.exists(PT_TESTS):
-        v |= {norm(t["technique"]) for t in json.load(open(PT_TESTS)).get("tests", [])}
+        for t in json.load(open(PT_TESTS)).get("tests", []):
+            v.add(norm(t["technique"]))
+            for rid in t.get("expect_rules", []):
+                v |= rule_to_techs.get(rid, set())
     if os.path.exists(AD_VALIDATE):
-        v |= {norm(m) for m in re.findall(r'"technique":\s*"(T[0-9.]+)"', open(AD_VALIDATE).read())}
+        # Import as a module (SCENARIOS is a plain top-level list; execution is
+        # guarded by `if __name__ == "__main__":`) rather than regex-scraping the
+        # source text — a scenario dict is structured data, and a regex spanning
+        # "technique" and "rules" risks matching across two adjacent scenarios.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("ad_validate", AD_VALIDATE)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        for s in getattr(mod, "SCENARIOS", []):
+            tech = s.get("technique")
+            if not tech:
+                continue
+            v.add(norm(tech))
+            for rid in s.get("rules", []):
+                v |= rule_to_techs.get(rid, set())
     return v
 
 
@@ -79,7 +112,7 @@ def main():
     cov = wazuh_techniques()
     for t, rids in suricata_techniques().items():
         cov.setdefault(t, set()).update(rids)
-    validated = validated_techniques()
+    validated = validated_techniques(cov)
 
     techniques = []
     for tech in sorted(cov):

