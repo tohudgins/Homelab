@@ -234,6 +234,34 @@
       </ossec_config>
   notify: Restart wazuh-manager
 
+# Kerberos brute-force active response: disable the targeted Samba AD account
+# (rule 100041) via the custom disable-ad-account script — see
+# phase-4-detection/disable-ad-account.py, deployed to dc-01 by the dc role.
+# Live-only on siem-01 since Phase 4 (2026-08-15) - never actually codified,
+# same category of gap the sshd brute-force AR was in before it got fixed
+# (2026-09-12, see above) - closing it here too. Custom command definition is
+# needed (unlike firewall-drop, which ships stock): disable-ad-account is a
+# repo-specific script, same idiom as the yara command below.
+- name: Register the disable-ad-account active response (Kerberos brute force, rule 100041)
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: "<!-- {mark} ANSIBLE MANAGED: disable-ad-account active response -->"
+    block: |
+      <ossec_config>
+        <command>
+          <name>disable-ad-account</name>
+          <executable>disable-ad-account</executable>
+          <timeout_allowed>yes</timeout_allowed>
+        </command>
+        <active-response>
+          <command>disable-ad-account</command>
+          <location>local</location>
+          <rules_id>100041</rules_id>
+          <timeout>600</timeout>
+        </active-response>
+      </ossec_config>
+  notify: Restart wazuh-manager
+
 # Apply the restart now (not at play end) so the verification below runs against
 # the freshly-loaded ruleset — a broken rule file fails here, loudly, instead of
 # silently leaving analysisd down.
