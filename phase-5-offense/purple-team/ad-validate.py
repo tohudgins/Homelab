@@ -271,19 +271,17 @@ SCENARIOS = [
         "desc": "add/delete a disguised cron job under /etc/cron.d on dc-01 (T1053.003)",
     },
     {
-        # KNOWN LIMITATION, root-caused not papered over (2026-09-13): this PASSES exactly
-        # once per wazuh-agent lifetime on dc-01, then reliably FAILs on every rerun until
-        # the agent restarts (or its 12h periodic scan runs) — a real gap in rule 100051,
-        # not a flaky test. useradd/userdel replace /etc/passwd+shadow via write-new-
-        # tempfile-then-rename (standard shadow-utils practice), which silently orphans
-        # the inotify-based `realtime` FIM watch (it tracks the old inode, now unlinked).
-        # 100020 (SYSVOL) and 100050 (cron) don't have this problem — their scenarios only
-        # touch/tee/rm the same inode in place. See detection-catalog.md's T1136.001
-        # section for the full before/after evidence. Deliberately NOT fixed by forcing an
-        # agent restart before this scenario runs — that would hide a real, worth-knowing
-        # detection gap behind a green checkmark.
+        # FIXED 2026-09-13, not just documented (see the once-per-restart history in
+        # detection-catalog.md's T1136.001 section): switched /etc/passwd+shadow+sudoers+
+        # crontab to `whodata` FIM mode (audit-backed, tracks by path via auditd — immune
+        # to the inotify rename-orphans-the-watch gap that broke plain `realtime` here).
+        # Re-verified with 5 consecutive useradd/userdel cycles, zero agent restarts in
+        # between — all 5 fired. `settle` bumped 25->45: whodata's audit-log pipeline has
+        # real, variable latency (observed 5-40s across those 5 runs) that plain inotify
+        # never had — a real, honest tradeoff for closing the blind spot, not a new bug.
         "name": "Local Account Creation",
         "host": "dc-01",
+        "settle": 45,
         "cmd": "sudo useradd -m pt-account-test && sudo userdel -r pt-account-test",
         "rules": ["100051"],
         "technique": "T1136.001",

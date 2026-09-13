@@ -631,16 +631,29 @@ now-different-inode `/etc/passwd` is invisible until `wazuh-syscheckd` restarts 
 **Why this matters more than a lab curiosity:** it means the very first legitimate account change after an
 agent restart "uses up" the watch for every attacker who creates a backdoor account afterward, for up to 12
 hours, with **zero indication in any log that the watch is gone** — `wazuh-syscheckd` doesn't report a
-dropped watch as an error, it just quietly stops seeing changes. Not patched here (would mean switching
-these two paths to `whodata` — the audit-backed FIM mode that tracks by path via `auditd` rules, immune to
-this specific gap, at the cost of needing `auditd` running on dc-01, which it currently isn't) — named
-honestly instead, the same as every other accepted limitation in this catalog.
+dropped watch as an error, it just quietly stops seeing changes.
 
-**Consequence for the automated harness:** `ad-validate.py`'s "Local Account Creation" scenario is
-therefore only reliably repeatable *once per `wazuh-agent` restart on dc-01* — a `FAIL` on a rerun without
-restarting the agent in between is this real, now-understood gap surfacing exactly as designed, not a
-broken test. Left as-is rather than papered over with a forced restart before every run, which would hide
-the very thing worth knowing about.
+**Fixed for real (2026-09-13), not just documented.** Installed and enabled `auditd` on dc-01 (now
+codified in the `dc` Ansible role) and switched `/etc/passwd`/`/etc/shadow`/`/etc/sudoers`/`/etc/crontab`
+from `realtime` to **`whodata`** — the audit-backed FIM mode that tracks by *path* via `auditd` rules rather
+than by inode, immune to the rename-orphans-the-watch mechanism above. **Re-verified with 5 consecutive
+`useradd`/`userdel` cycles and zero agent restarts in between — all 5 fired**, closing the exact gap the
+before/after evidence above documents. `/var/lib/samba/sysvol` and the cron paths stay on `realtime`
+(they never had this problem, and `whodata` carries real overhead not worth paying where it isn't needed).
+
+**One genuine, honest tradeoff, not hidden:** `whodata`'s audit-log pipeline has real, variable latency
+that plain `inotify` never did — the 5 verification runs landed anywhere from ~5s to ~40s after the
+triggering command, versus `realtime`'s near-instant delivery. `ad-validate.py`'s scenario `settle` was
+bumped 25→45s to give this margin; a real deployment relying on this for time-sensitive alerting should
+know the SLA changed, not just that the blind spot closed. Wazuh's own log gave one more curiosity worth
+recording: `wazuh-syscheckd` logged "Monitored directory '/etc/passwd' was removed: Audit rule removed"
+after *every* rename (confirming the underlying audit rule is just as rename-sensitive as the inotify
+watch was) — but each removal still re-armed correctly in time for the next change, so `whodata` clearly
+does self-heal this where `realtime` didn't; the code path just isn't instant or logged as a success case.
+
+**Consequence for the automated harness:** `ad-validate.py`'s "Local Account Creation" scenario is now
+reliably repeatable on every run, no agent restart needed — the `settle` bump above is the only change
+required.
 
 ---
 

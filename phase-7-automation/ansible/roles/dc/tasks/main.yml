@@ -65,6 +65,44 @@
       </ossec_config>
   notify: Restart wazuh-agent
 
+# --- FIM: SYSVOL/cron/passwd/shadow/sudoers/crontab (T1484.001/T1053.003/T1136.001) ---
+# Live-only on dc-01 since Phase 4 (detection-catalog.md's "2 & 5 & 6" sections) -
+# never actually codified, despite the rules that consume this telemetry
+# (100020/100050/100051) being in local_rules.xml all along. A from-scratch
+# rebuild would silently lose real-time FIM on these paths entirely. Closing
+# that gap here, and switching passwd/shadow/sudoers/crontab specifically to
+# whodata (SYSVOL/cron stay realtime, they don't need it): plain `realtime`
+# is inotify-based and watches an inode, not a path, so a file replaced via
+# rename() (exactly how useradd/userdel/vipw update /etc/passwd) orphans the
+# watch after its first detected change — confirmed live 2026-09-13, see
+# detection-catalog.md's T1136.001 section and [[File Integrity Monitoring]]
+# in the vault. whodata is audit-backed (tracks by path via auditd, immune to
+# the rename gap) at the cost of needing auditd running, which this installs.
+- name: Install auditd (required for whodata FIM mode)
+  ansible.builtin.apt:
+    name: auditd
+    state: present
+
+- name: Enable and start auditd
+  ansible.builtin.systemd:
+    name: auditd
+    enabled: true
+    state: started
+
+- name: Real-time/whodata FIM on SYSVOL, cron, and account/credential files
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: "<!-- {mark} ANSIBLE MANAGED: dc-01 SYSVOL/cron/account FIM -->"
+    block: |
+      <ossec_config>
+        <syscheck>
+          <directories realtime="yes" report_changes="yes">/var/lib/samba/sysvol</directories>
+          <directories realtime="yes" report_changes="yes">/etc/cron.d,/etc/cron.daily,/etc/cron.hourly,/etc/cron.weekly,/etc/cron.monthly</directories>
+          <directories whodata="yes" report_changes="yes">/etc/passwd,/etc/shadow,/etc/sudoers,/etc/crontab</directories>
+        </syscheck>
+      </ossec_config>
+  notify: Restart wazuh-agent
+
 # --- Accounts (create-only; existing accounts are never touched) --------------
 - name: Enumerate current domain users
   ansible.builtin.command: samba-tool user list
