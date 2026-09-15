@@ -54,6 +54,22 @@ each stage's rule and prints a DETECTED/MISSED matrix.
 > fresh 12/12 needs a full re-run with every host up — not done this session, noted as the natural next
 > step rather than claimed without doing it.
 
+> [!check] The genuine fresh full re-run, all 7 hosts up — 2026-09-15, **11 of 12 kill-chain stages detected.**
+> Booted every non-`scan-01` VM (the same 7-VM combination that OOM-killed 5 of them in an earlier session —
+> watched memory closely this time, no repeat) and live-fired all 7 phases for real, including supplying
+> `ADMIN_USER`/`ADMIN_PW` to actually attempt Phase 2 (discovery) and Phase 4 (WMI/WinRM/PsExec) rather than
+> letting them skip. **The only MISSED is `100525` (LSASS comsvcs)** — confirmed genuinely Defender-blocked
+> again, this time even earlier than before: `lsass-dump.ps1` was rejected outright with
+> `ScriptContainedMaliciousContent` before a single line executed, an AMSI-level block upstream of the
+> process-launch block documented previously. Same class of finding as PsExec (`100513/514`, also
+> Defender-blocked) — a permanently-red stage, not a coverage gap. Also found and fixed, unrelated to the
+> capstone script itself: `dmz-01`'s `docker0` bridge had silently lost its IPv4 address (likely a
+> suspend/resume artifact), which broke Juice Shop's port forwarding until `systemctl restart docker`
+> rebuilt it — caught by Ansible's own "Verify Juice Shop answers on its port" health check before the
+> attack phase even started, not by a mysterious Phase 1 failure. **`11/12` is the real, current ceiling
+> until the LSASS block is deliberately weakened for a test pass** — not a number expected to reach 12/12
+> under this lab's default (correctly hardened) Defender posture.
+
 ## The kill chain
 
 ```mermaid
