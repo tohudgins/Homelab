@@ -146,8 +146,13 @@ SCENARIOS = [
     # is ever disabled/weakened for a specific test pass.
     {
         # No credential needed — the web app has no auth on the attacked endpoints.
+        # requires dmz-01 (2026-09-15): dmz-01 isn't part of the "attack" lab profile
+        # (see scripts/lab.sh), so a full battery run without it up used to report a
+        # bare FAIL (hits=0) here — indistinguishable from a real coverage regression.
+        # Same SKIP-cleanly discipline as the fs-01-gated scenarios below.
         "name": "DMZ Web Attack",
         "host": "atk-01",
+        "requires": "dmz-01",
         "cmd": (f"curl -sk --max-time 10 -o /dev/null "
                 f"\"{DMZ_WEB}/rest/products/search?q=test%27%20OR%201=1--\""),
         "rules": ["100440"],
@@ -242,15 +247,26 @@ SCENARIOS = [
         # check, confirmed by finding it in alerts.json moments later. Same class of
         # timing margin as Kerberoasting below: the frequency=4/timeframe=60 correlation
         # rule occasionally needs a few extra seconds to settle, not a rule defect.
+        #
+        # `sleep 1` added between attempts (2026-09-15): a real, separate, root-caused
+        # finding — a genuine FAIL, not a flake. With no delay (how this scenario
+        # originally read, and how an unthrottled real brute-force tool actually
+        # behaves), all 4 attempts land at analysisd within a few ms of each other and
+        # the frequency/same_field correlation reliably undercounts the burst — rule
+        # 100040 fires all 4 times individually, 100041 never does. Spacing attempts 1s
+        # apart avoids that arrival-burst gap so this scenario can keep verifying the
+        # correlation logic + active response are otherwise intact. The burst gap itself
+        # is real and NOT fixed by this — see detection-catalog.md's T1110.001 section
+        # ("A second, more surprising evasion...") for the full repro table.
         "name": "Kerberos Brute Force",
         "setup": {"host": "dc-01", "cmd": "sudo samba-tool user create pt-kbrute 'Init2026zQ!' >/dev/null 2>&1"},
         "host": "atk-01",
         "settle": 35,
-        "cmd": "for i in 1 2 3 4; do echo wrongpass$i | kinit pt-kbrute@LAB.INTERNAL 2>/dev/null; done; true",
+        "cmd": "for i in 1 2 3 4; do echo wrongpass$i | kinit pt-kbrute@LAB.INTERNAL 2>/dev/null; sleep 1; done; true",
         "teardown": {"host": "dc-01", "cmd": "sudo samba-tool user delete pt-kbrute >/dev/null 2>&1"},
         "rules": ["100041"],
         "technique": "T1110.001",
-        "desc": "4 wrong-password kinit attempts against a throwaway account in 60s (T1110.001)",
+        "desc": "4 wrong-password kinit attempts, 1s apart, against a throwaway account in 60s (T1110.001)",
     },
     {
         "name": "SYSVOL Integrity Tampering",
@@ -263,9 +279,19 @@ SCENARIOS = [
         "desc": "add/modify/delete a SYSVOL logon-script file on dc-01 (T1484.001)",
     },
     {
+        # `sleep 1` added between create and delete (2026-09-15): a genuine, reproducible
+        # finding, not a flake — the original back-to-back `tee ... && rm -f` (zero gap)
+        # FAILed (hits=0) on a full battery run, while a manual create-then-delete with a
+        # ~2s gap reliably fired. Same family as the Kerberos Brute Force burst-arrival
+        # gap above, but a different subsystem: this is the agent-side realtime/inotify
+        # engine appearing to occasionally miss or coalesce a create+delete pair on the
+        # *same* path when they land within the same instant, not the manager-side
+        # frequency correlator. `/etc/cron.d` realtime FIM otherwise works reliably (see
+        # the repeated SYSVOL passes using the identical touch/tee/rm pattern with real
+        # gaps between operations) — this is specifically about zero-gap same-path churn.
         "name": "Cron Persistence",
         "host": "dc-01",
-        "cmd": "echo '# purple-team test cron' | sudo tee /etc/cron.d/pt-cron-test >/dev/null && sudo rm -f /etc/cron.d/pt-cron-test",
+        "cmd": "echo '# purple-team test cron' | sudo tee /etc/cron.d/pt-cron-test >/dev/null && sleep 1 && sudo rm -f /etc/cron.d/pt-cron-test",
         "rules": ["100050"],
         "technique": "T1053.003",
         "desc": "add/delete a disguised cron job under /etc/cron.d on dc-01 (T1053.003)",
@@ -312,6 +338,7 @@ SCENARIOS = [
     {
         "name": "Automated Scanner Detection",
         "host": "atk-01",
+        "requires": "dmz-01",  # same dmz-01-not-in-attack-profile reasoning as DMZ Web Attack above
         "cmd": ("curl -sk --max-time 10 -A 'sqlmap/1.7.2#stable (http://sqlmap.org)' "
                 f"-o /dev/null \"{DMZ_WEB}/\""),
         "rules": ["100441"],

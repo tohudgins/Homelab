@@ -89,6 +89,40 @@
     enabled: true
     state: started
 
+# Real, reproducible finding (2026-09-15): after ANY auditd restart (this playbook,
+# a reboot, a manual `systemctl restart auditd`), the audisp-af_unix plugin that
+# feeds whodata events to Wazuh tries to bind /var/ossec/queue/sockets/audit and
+# fails ("Couldn't bind af_unix socket (Address already in use)") because the
+# previous plugin instance's own shutdown-time unlink of that same socket silently
+# failed ("Failed to unlink socket ... (Permission denied)") and left it behind.
+# auditd retries the plugin 10x, gives up ("has exceeded max_restarts"), and from
+# then on wazuh-syscheckd can't reach the audit socket at all — it logs "Who-data
+# engine could not start. Switching who-data to real-time." and silently falls
+# back to the exact inode-rename-orphans-the-watch bug whodata was built to fix
+# (see the comment above). Verified this actually happened live: the passwd/shadow
+# FIM scenario in ad-validate.py FAILed on a full battery run right after an
+# `ansible-playbook site.yml` restart, even though whodata was correctly deployed.
+# Fix: force-remove the stale socket before auditd starts, every time, so the
+# plugin always gets a clean bind. `rm -f` on a nonexistent path just no-ops.
+- name: Ensure the auditd systemd drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/auditd.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy the auditd socket-cleanup drop-in (fixes the af_unix stale-socket race)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/auditd.service.d/wazuh-socket-cleanup.conf
+    content: |
+      [Service]
+      ExecStartPre=-/usr/bin/rm -f /var/ossec/queue/sockets/audit
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart auditd
+
 - name: Real-time/whodata FIM on SYSVOL, cron, and account/credential files
   ansible.builtin.blockinfile:
     path: /var/ossec/etc/ossec.conf

@@ -270,6 +270,54 @@ bugs worth fixing" pattern as the capstone script's own history:
 this batch, caught only because building `generate-coverage.py`'s rule-tag cross-referencing (below) meant
 reading every scenario closely for the first time in a while.
 
+## First full re-run since the T1098.007/whodata fixes landed (2026-09-15)
+
+The battery hadn't been run end-to-end since the T1098.007 logging fix (rule 100015) and the passwd/shadow
+`whodata` fix both landed in separate later sessions — this was the first chance to actually prove, not
+assume, that both still work together and that nothing regressed. It didn't just confirm; it found three
+more real bugs, the same "trust the harness, not the memory of the last run" discipline as the 23→48 pass
+above:
+
+```
+== 18/21 AD detections validated (2 skipped) ==   # first raw run
+```
+
+- **`T1098.007` (`AD Group Membership Manipulation`, rule 100015) genuinely PASSED live** — resolving a
+  stale claim in `detection-catalog.md`'s own history: the commit that built rule 100015 said the scenario
+  "wasn't wired into `ad-validate.py`'s automated battery," but the scenario had actually been written
+  *before* that rule existed (referencing rule ID 100015 as a forward declaration) and never re-checked
+  once the rule went live. It was already there; it just needed running.
+- **A real, reproducible regression, not a flake: `whodata` was silently back to plain `realtime`.** A
+  routine `ansible-playbook site.yml` converge restarted `auditd`, and the `audisp-af_unix` plugin that
+  feeds Wazuh's whodata engine couldn't rebind its own socket (a stale-socket-from-shutdown race — full
+  root cause and the systemd-drop-in fix are in `detection-catalog.md`'s T1136.001 section). This silently
+  undid the whole point of the earlier passwd/shadow FIM fix; **any future `auditd` restart would have hit
+  it again** had it not been fixed at the systemd level, not just live-patched.
+- **A second real, reproducible finding: zero-gap create-then-delete on the same path can miss `/etc/cron.d`
+  FIM (rule 100050).** The original scenario chained create+delete with no gap and failed 3 of 4 manual
+  reproductions; a ~1-2s gap fired reliably every time. Agent-side inotify coalescing/dropping one half of
+  a same-instant create+delete pair, not a settle-timing issue — full writeup in the same catalog section.
+- **A real correlation-engine finding, and the opposite of the usual brute-force blind spot: firing *fast*
+  evades `Kerberos Brute Force` (rule 100041), firing at human/throttled pace doesn't.** All 4 wrong-password
+  `kinit` attempts landing at the manager within a few ms of each other reliably failed to correlate, even
+  though every individual attempt matched the base rule; spacing them ~1s apart fired every time. Full
+  repro table (three paces tested) in `detection-catalog.md`'s T1110.001 section.
+- **Two scenarios (`DMZ Web Attack`, `Automated Scanner Detection`) used to report a bare FAIL whenever
+  `dmz-01` was down**, indistinguishable from a real regression. Both now declare `"requires": "dmz-01"`
+  and SKIP cleanly, same discipline as the existing `fs-01`-gated scenarios.
+
+All three real gaps got a real fix (an Ansible-codified systemd drop-in for the auditd race; `sleep 1`
+added to the two burst-sensitive scenarios) rather than a relaxed assertion. Clean re-run after every fix:
+
+```
+== 19/19 AD detections validated (4 skipped) ==
+[exited with code 0]
+```
+
+The 4 skips are the pre-existing `ADMIN_USER`/`ADMIN_PW`-gated WMI/WinRM scenarios (no credential set this
+session) and the two now-cleanly-skipping `dmz-01` scenarios (VM intentionally left out of this session's
+6-VM `attack` profile to stay under the RAM ceiling — see the OOM note above).
+
 ## `generate-coverage.py`'s cross-referencing (2026-09-12)
 
 Before this pass, a technique was "validated" only if some test's own `"technique"` string matched it

@@ -13,3 +13,13 @@
   ansible.builtin.systemd:
     name: wazuh-agent
     state: restarted
+
+# Only fires when the socket-cleanup drop-in itself changes. A plain `daemon-reload`
+# doesn't retroactively fix an auditd process already wedged from a prior restart's
+# stale socket, so this restart is what actually applies the fix — see the drop-in's
+# own comment in tasks/main.yml for why it's needed at all.
+- name: Restart auditd
+  ansible.builtin.systemd:
+    name: auditd
+    state: restarted
+    daemon_reload: true

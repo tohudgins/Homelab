@@ -525,6 +525,34 @@ script instead ([`disable-ad-account.py`](disable-ad-account.py), mirrored here,
 entirely, and this protocol has no equivalent of trying multiple failure "types" to split across rules
 (the base account discovery is what's happening here; there's just one failure mode: wrong password).
 
+**A second, more surprising evasion found running the full `ad-validate.py` battery for real (2026-09-15):
+firing *fast*, not slow, is what evades this rule.** The scenario's own attack step (`kinit` against a
+throwaway account, 4 wrong passwords, no delay between attempts — how an unthrottled real brute-force tool
+actually behaves) FAILed (hits=0) even though every individual attempt still logged and alerted as rule
+100040. Root-caused by reproducing the same attack at three different paces against fresh throwaway
+accounts:
+
+| Attempt spacing | 100040 (base) fires? | 100041 (correlation) fires? |
+|---|---|---|
+| No delay, from atk-01 (the scenario as originally written) | ✅ all 4 | ❌ never |
+| `sleep 0.3` between attempts, from atk-01 | ✅ all 4 | ❌ never — **all 4 still arrived at the manager within ~3ms of each other**, so client-side spacing didn't help |
+| `sleep 1` between attempts, from atk-01 | ✅ all 4 | ✅ fired |
+| No delay, run locally on dc-01 (not through the network stack the same way) | ✅ all 4, ~30ms apart | ✅ fired |
+
+The pattern isn't about *attack* timing — it's about how tightly the 4 matching events cluster *when they
+arrive at analysisd*. Every case where all 4 qualifying 100040 matches landed within roughly a
+single-digit-millisecond window failed to correlate into 100041, even though `same_field`/`if_matched_sid`
+correctly matched all 4 individually and the ~30ms-apart local case (and the 1s-spaced case) correlated
+correctly. This points to a real gap in Wazuh 4.14's `frequency`/`same_field` rule-matching under bursty
+arrival, not a lab misconfiguration or a settle-timing issue (bumping `settle` doesn't fix an undercount).
+It's the opposite of the usual brute-force blind spot: a slow, human-paced guesser is what this rule
+catches reliably; a genuinely fast, unthrottled tool — arguably the more realistic attacker behavior for an
+automated Kerberos brute-forcer — is more likely to land in one burst and evade it. Documented honestly
+rather than patched, in the same spirit as the `if_matched_group` finding above: `ad-validate.py`'s scenario
+was adjusted to space its attempts 1s apart so the harness keeps verifying the detection logic itself
+(same_field/frequency counting works, the active response works), while this table stands as the record of
+the real, separate burst-arrival gap it can't exercise.
+
 **False-positive risk — real and worth taking seriously given the active response attached:** a user who
 mistypes their password 4 times in a row gets their own account disabled for 10 minutes by the system
 that was supposed to be helping them. This is the honest cost of pairing account-lockout active response
@@ -606,6 +634,22 @@ High-noise by design in a lab with no separate change-management signal to cross
 deployment would pair this with a ticketing/CMDB lookup before treating every alert as an incident, same
 caveat as the SYSVOL rule.
 
+**A third real finding, this one agent-side (2026-09-15): a zero-gap create-then-delete on the *same* path
+can miss rule 100050 entirely.** `ad-validate.py`'s original Cron Persistence scenario chained the whole
+attack as one shell command with no gap (`tee ... >/dev/null && rm -f ...`) and FAILed (hits=0) on a full
+battery run, even though the identical rule/path/config had fired correctly minutes earlier in the same
+run's SYSVOL scenario and in an earlier battery run's own cron test. Manually reproducing at different
+paces isolated it cleanly: back-to-back create+delete (no gap) missed detection on 3 of 4 attempts; the
+same create+delete with a ~1-2s gap fired reliably every time, including 3/3 in a row once the harness was
+fixed. This looks like the agent-side realtime/inotify engine occasionally coalescing or dropping one half
+of a create+delete pair on the same path when they land within the same instant — a different subsystem
+than the manager-side correlation gap documented for Kerberos Brute Force above, but the same underlying
+lesson: **this SIEM's real-time pipelines have a genuine minimum-spacing assumption that a fast enough
+attacker (or test) can violate**, in both directions (agent-side FIM here, manager-side correlation there).
+Fixed in the harness with a `sleep 1` between create and delete — verifying the detection logic still
+works reliably, while this paragraph is the honest record that true zero-gap churn is a real, unresolved
+gap, not a settle-timing artifact.
+
 **A real, more serious gap found automating this into `ad-validate.py` (2026-09-13): rule 100051
 (`/etc/passwd`/`/etc/shadow`) goes silently blind after its FIRST hit per Wazuh agent lifetime, and
 100050/100020 (cron/SYSVOL) don't.** Discovered because the automated scenario passed once, then reliably
@@ -654,6 +698,44 @@ does self-heal this where `realtime` didn't; the code path just isn't instant or
 **Consequence for the automated harness:** `ad-validate.py`'s "Local Account Creation" scenario is now
 reliably repeatable on every run, no agent restart needed — the `settle` bump above is the only change
 required.
+
+**A second, real regression found running the full battery for the first time since this fix landed
+(2026-09-15): `whodata` was silently back to `realtime` again, undoing the fix above.** An
+`ansible-playbook site.yml` run (a routine converge, not a rebuild) restarted `auditd` as a side effect. On
+that restart, `wazuh-syscheckd` logged `Cannot connect to socket 'queue/sockets/audit'` /
+`Who-data engine could not start. Switching who-data to real-time.` — exactly the fallback mode this whole
+section exists to eliminate. Root cause, from `journalctl -u auditd`:
+
+```
+audisp-af_unix[<old-pid>]: Failed to unlink socket /var/ossec/queue/sockets/audit (Permission denied)
+auditd[<new-pid>]: audit dispatcher initialized ... 1 active plugins
+audisp-af_unix[<new-pid>]: Couldn't bind af_unix socket (Address already in use)
+auditd[<new-pid>]: plugin /sbin/audisp-af_unix has exceeded max_restarts
+```
+
+The outgoing `audisp-af_unix` plugin instance's own shutdown-time attempt to remove its socket file fails,
+leaving it behind; the incoming instance then can't `bind()` a fresh socket at the same path, retries 10x,
+and gives up — silently, with no warning surfaced anywhere Wazuh-side. **Every future `auditd` restart**
+(another Ansible converge, a reboot, a manual restart) re-triggers this, which makes it a standing landmine
+for the whole `whodata` fix, not a one-off. Confirmed by reproducing the exact chain live: the
+`ad-validate.py` "Local Account Creation" scenario FAILed (hits=0) immediately after a routine converge,
+while `useradd`/`userdel` cycles run directly on dc-01 still correctly logged to `/var/log/samba` — the
+gap was specifically the audit pipeline to Wazuh, not the underlying OS-level change.
+
+**Fixed for real, not worked around:** added a systemd drop-in
+(`/etc/systemd/system/auditd.service.d/wazuh-socket-cleanup.conf`, deployed by the `dc` Ansible role) that
+force-removes the stale socket in `auditd.service`'s own `ExecStartPre`, so the plugin always gets a clean
+bind regardless of whether the previous instance's cleanup succeeded:
+
+```ini
+[Service]
+ExecStartPre=-/usr/bin/rm -f /var/ossec/queue/sockets/audit
+```
+
+Verified end-to-end: restarted `auditd` with the drop-in in place (`audisp-af_unix plugin is listening for
+events`, no bind error), restarted `wazuh-agent` (`File integrity monitoring real-time Whodata engine
+started`), then re-ran a live `useradd`/`userdel` cycle — rule 100051 fired correctly again. Re-converging
+`site.yml` with the fix in place reports `changed=0` (idempotent, matches the already-applied live fix).
 
 ---
 
