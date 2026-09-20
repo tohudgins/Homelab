@@ -31,6 +31,7 @@ make profiles               # list profiles
 | `networking` | rtr-01 | firewall/segmentation work |
 | `ad` | rtr-01 dc-01 ws-01 | Active Directory / GPO |
 | `soc` | rtr-01 dc-01 ws-01 siem-01 | detection engineering (the daily driver) |
+| `soc-ops` | rtr-01 dc-01 siem-01 misp-01 | case management / threat intel (MISP+IRIS) — swaps ws-01 for misp-01, same 24 GB |
 | `attack` | + fs-01 atk-01 | attack/detect pairing (suspend dmz first) |
 | `vulnscan` | rtr-01 dc-01 siem-01 scan-01 | authenticated vuln scanning |
 | `services` | rtr-01 dc-01 siem-01 fs-01 dmz-01 | file/web services + monitoring |

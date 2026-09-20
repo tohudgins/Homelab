@@ -27,7 +27,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ANSIBLE_DIR="$HERE/../phase-7-automation/ansible"
 [ -f "$HERE/.lab-secrets" ] && . "$HERE/.lab-secrets"
 
-ALL_VMS="rtr-01 dc-01 ws-01 siem-01 fs-01 dmz-01 atk-01 scan-01"
+ALL_VMS="rtr-01 dc-01 ws-01 siem-01 misp-01 fs-01 dmz-01 atk-01 scan-01"
 
 vmx_path() {
   case "$1" in
@@ -51,13 +51,14 @@ profile_vms() {
     networking) echo "rtr-01" ;;
     ad)         echo "rtr-01 dc-01 ws-01" ;;
     soc)        echo "rtr-01 dc-01 ws-01 siem-01" ;;
+    soc-ops)    echo "rtr-01 dc-01 siem-01 misp-01" ;;
     attack)     echo "rtr-01 dc-01 ws-01 siem-01 fs-01 atk-01" ;;
     vulnscan)   echo "rtr-01 dc-01 siem-01 scan-01" ;;
     services)   echo "rtr-01 dc-01 siem-01 fs-01 dmz-01" ;;
     *)          echo "" ;;
   esac
 }
-ALL_PROFILES="networking ad soc attack vulnscan services"
+ALL_PROFILES="networking ad soc soc-ops attack vulnscan services"
 
 running() { vmrun list | grep -qF "$(vmx_path "$1")"; }
 
