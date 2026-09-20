@@ -9,8 +9,8 @@ the ruleset**, not hand-drawn, so it can never quietly drift from what's actuall
 (`mitre_technique` metadata), cross-references the **purple-team** battery (`tests.json`), and emits an
 ATT&CK **Navigator layer**:
 
-- **51 techniques** currently have a custom detection.
-- **48** of those are **validated end-to-end** (the purple-team harness runs the atomic and proves the rule
+- **52 techniques** currently have a custom detection.
+- **49** of those are **validated end-to-end** (the purple-team harness runs the atomic and proves the rule
   fired — not just "a rule exists"). The remaining 3 (T1027/T1105 certutil download, T1569.002 PsExec) are
   deliberately excluded from the automated battery, not gaps: Microsoft Defender blocks all three outright
   before the technique produces any telemetry, confirmed live — a permanently-red automated test would be
@@ -50,7 +50,7 @@ python3 generate-coverage.py     # re-reads the rules + purple-team tests, rewri
 ```
 Run it whenever rules change; because it's derived, the map is always exactly the deployed coverage — and
 the `layerURL` link above always points at whatever's on `main`, so there's no separate "publish" step.
-48 of 51 are validated (see above for the 3 deliberately-excluded exceptions) — extending coverage further
+49 of 52 are validated (see above for the 3 deliberately-excluded exceptions) — extending coverage further
 now means adding a *new* rule and a *new* test together, not chasing the automation gap that used to sit
 between "detected" and "validated" (23 → 48, closed 2026-09-12/13: `phase-5-offense/purple-team/README.md`
 has the full batch-by-batch story, including two real infra bugs the automation itself surfaced).

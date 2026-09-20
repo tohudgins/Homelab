@@ -26,6 +26,14 @@ fileserver_canary_files:
   - Customer-PII-Export.csv
   - Board-Minutes-Confidential.txt
 
+# Deliberate weakness (T1548.003 — Sudo and Sudo Caching): a local support/ops
+# account with a NOPASSWD sudo grant on `find`, mirroring a real-world "let ops
+# search logs/files without full root" grant — exploitable via the well-known
+# GTFOBins `find ... -exec /bin/sh` escape. See phase-5-offense/
+# attack-detect-writeups/05-linux-sudo-privesc-t1548.003.md.
+fileserver_privesc_user: ops-logview
+fileserver_privesc_user_comment: "Ops support — log/file search (no shell access needed)"
+
 # Wazuh agent — same pinned version/repo as the other agents.
 wazuh_agent_version: "4.14.7-1"
 wazuh_apt_key_url: "https://packages.wazuh.com/key/GPG-KEY-WAZUH"

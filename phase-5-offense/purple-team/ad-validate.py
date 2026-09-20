@@ -442,6 +442,29 @@ SCENARIOS = [
         "technique": "T1048.003",
         "desc": "a real fs-01->atk-01 iodine DNS tunnel carrying 20 pings (T1048.003/T1071.004)",
     },
+    {
+        # T1548.003 — sudo/GTFOBins privesc via `find` (2026-09-20). fs-01's
+        # ops-logview account has a deliberate NOPASSWD sudo grant on `find`
+        # (phase-7-automation/ansible/roles/fileserver); the classic GTFOBins
+        # escape (`find ... -exec /bin/sh`) spawns a root shell. No setup/
+        # teardown needed — the weakness is a permanent fixture (same idiom
+        # as Phase 2's Kerberoastable service accounts), not a throwaway
+        # test-only account. Detection is auditd (a genuinely new telemetry
+        # path for this lab — every other auditd use is Wazuh's own whodata
+        # FIM plumbing, not general process auditing) keyed on the actual
+        # weaponization signal (-exec/-execdir/-ok/-okdir), not just "any
+        # root shell from a non-root login" — that alone false-positives on
+        # Ubuntu's own /etc/update-motd.d/* scripts, which legitimately run
+        # `find` as root on every single SSH login. No settle needed — the
+        # rule fires synchronously on the single merged auditd event, no
+        # correlation window like the Kerberos scenario above.
+        "name": "Sudo find GTFOBins Privesc",
+        "host": "fs-01",
+        "cmd": "sudo -u ops-logview sudo find /var/log -maxdepth 0 -exec /bin/sh -c 'whoami' \\;",
+        "rules": ["100540"],
+        "technique": "T1548.003",
+        "desc": "GTFOBins find privesc — sudo find -exec spawns a root shell on fs-01 (T1548.003)",
+    },
 ]
 
 

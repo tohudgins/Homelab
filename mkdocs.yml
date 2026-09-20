@@ -83,6 +83,7 @@ nav:
           - "02 · Password Spray (SMB)": phase-5-offense/attack-detect-writeups/02-password-spray-smb.md
           - "03 · DMZ Web Attack (T1190)": phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md
           - "04 · Lateral Movement (WMI/WinRM/PsExec)": phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md
+          - "05 · Linux Sudo Privesc (T1548.003)": phase-5-offense/attack-detect-writeups/05-linux-sudo-privesc-t1548.003.md
       - BloodHound (AD Attack Paths): phase-5-offense/bloodhound-ce/README.md
       - Purple-Team Validation: phase-5-offense/purple-team/README.md
       - Atomic Red Team: phase-5-offense/atomic-red-team/README.md

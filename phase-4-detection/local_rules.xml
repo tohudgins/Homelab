@@ -1264,3 +1264,48 @@
   </rule>
 
 </group>
+
+<!-- T1548.003 — sudo/GTFOBins privesc via `find` (2026-09-20). See
+     phase-5-offense/attack-detect-writeups/05-linux-sudo-privesc-t1548.003.md.
+     fs-01's ops-logview account has a deliberate NOPASSWD sudo grant on `find`
+     (phase-7-automation/ansible/roles/fileserver). The auditd rule
+     (wazuh-root-shell.rules) watches execve of /usr/bin/find at euid=0 with a
+     non-root auid — real signal, but ALSO matches Ubuntu's own
+     /etc/update-motd.d/* scripts, which legitimately run `find` as root on
+     every SSH login with the logging-in user's auid. auditd can't filter argv
+     substrings at the kernel level, so narrowing to the actual weaponization
+     (-exec/-execdir/-ok/-okdir) has to happen here, on the decoded fields.
+
+     First cut of this rule split the SYSCALL condition (key=sudo_find_as_root)
+     and the EXECVE condition (-exec/etc in the args) into two rules correlated
+     via if_matched_sid + same_field on audit.id, on the theory that Wazuh
+     treats each raw audit.log line as its own event — that's what
+     `wazuh-logtest` (fed the lines one at a time) showed, and the two-rule
+     version fired correctly there. It never fired on a single live attack,
+     though: checking the real archived event showed why — the PRODUCTION
+     `audit` log_format logcollector actually FUSES every line sharing one
+     audit.id (SYSCALL + EXECVE + CWD + PATH + PROCTITLE) into ONE combined
+     event before any rule ever sees it, carrying `audit.key` AND
+     `audit.execve.*` together. `wazuh-logtest`'s one-line-at-a-time REPL mode
+     doesn't reproduce that fusion, so it was quietly testing a scenario that
+     doesn't occur in production — a real trap: this tool doesn't fully model
+     the log_format it's testing. One rule below checks both conditions on the
+     single merged event instead; no correlation needed at all. -->
+<group name="local,privilege_escalation,">
+
+  <rule id="100540" level="12">
+    <!-- Child of stock 80700 (level 0, decoded_as=auditd, no other conditions)
+         — a top-level sibling rule here loses Wazuh's one-rule-per-event
+         resolution to 80700 every time, the exact same class of bug the
+         T1047 WMI rule (100527) hit against stock rule 92069. -->
+    <if_sid>80700</if_sid>
+    <field name="audit.key">^sudo_find_as_root$</field>
+    <match type="pcre2">(?i)-(exec|execdir|ok|okdir)\b</match>
+    <description>T1548.003: GTFOBins find privilege escalation — root shell spawned via sudo find -exec/-execdir/-ok/-okdir (auid=$(audit.auid))</description>
+    <mitre>
+      <id>T1548.003</id>
+    </mitre>
+    <group>privilege_escalation,attack,</group>
+  </rule>
+
+</group>

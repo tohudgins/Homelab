@@ -187,6 +187,91 @@
     enabled: true
     state: started
 
+# --- Deliberate weakness (T1548.003): sudo/GTFOBins privesc via `find` -------
+# A local support/ops account granted NOPASSWD sudo on `find` (a common real-
+# world grant — "let ops search logs/files without full root") is exploitable
+# via the well-known GTFOBins escape (`find ... -exec /bin/sh`), spawning a
+# root shell. The weakness itself stays in place deliberately — same idiom as
+# Phase 2's Kerberoastable service accounts, not a throwaway test fixture.
+- name: Create the ops-logview local support account (the deliberate privesc target)
+  ansible.builtin.user:
+    name: "{{ fileserver_privesc_user }}"
+    comment: "{{ fileserver_privesc_user_comment }}"
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+- name: Grant NOPASSWD sudo on find (the deliberate weakness)
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/ops-logview-find
+    content: |
+      # Deliberate weakness (T1548.003) — see
+      # phase-5-offense/attack-detect-writeups/05-linux-sudo-privesc-t1548.003.md
+      {{ fileserver_privesc_user }} ALL=(root) NOPASSWD: /usr/bin/find
+    owner: root
+    group: root
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+# --- Detection: auditd execve auditing keyed on the find GTFOBins vector (T1548.003) ---
+# First cut of this rule watched ANY execve at euid=0 with a non-root `auid`
+# (the audit login uid, set once at login and immutable across su/sudo/setuid
+# — unlike euid, an attacker can't reset it by escalating privilege). Verified
+# live that this is real signal for a GTFOBins escape, but also real NOISE:
+# Ubuntu's /etc/update-motd.d/* scripts run entirely as root on every single
+# SSH login (any admin, not just an attacker), and legitimately execve `find`/
+# `cat`/`sh`/etc. with the logging-in user's non-root auid the whole way
+# through — auditd has no cheap way to tell "root process spawned by routine
+# login machinery" from "root process spawned by a privesc" without full
+# parent-process-name correlation, which plain auditd rules don't give you
+# (only a raw ppid, not the parent's exe path) — the same class of limitation
+# that made the Windows-side T1047 WMI rule need a hand-written parent-lineage
+# rule instead of a simple field match. Narrowed to the actual weaponization
+# signal instead: `find` invoked with `-exec`/`-execdir`/`-ok`/`-okdir` is the
+# GTFOBins pattern (a legitimate "search files" grant never needs it) — the
+# same idiom published Sigma GTFOBins rules use. auditd can't filter argv
+# substrings at the kernel level, so this rule captures every root-euid `find`
+# call (including MOTD's own benign ones) and the Wazuh rule (local_rules.xml)
+# does the precise -exec/-execdir/-ok/-okdir match on the decoded command
+# line. This is a genuinely new telemetry path for the homelab: every other
+# auditd use so far (the `dc` role) is Wazuh's own whodata FIM plumbing (a
+# dedicated af_unix socket for file-watch events); this ingests the raw audit
+# log as text via Wazuh's stock `audit` log_format for general process
+# auditing, which whodata never touches.
+- name: Install auditd
+  ansible.builtin.apt:
+    name: auditd
+    state: present
+
+- name: Deploy the sudo-find-as-root auditd rule
+  ansible.builtin.copy:
+    dest: /etc/audit/rules.d/wazuh-root-shell.rules
+    content: |
+      -a always,exit -F arch=b64 -S execve -F exe=/usr/bin/find -F euid=0 -F auid!=0 -F auid!=4294967295 -k sudo_find_as_root
+    owner: root
+    group: root
+    mode: "0640"
+  notify: Restart auditd
+
+- name: Enable and start auditd
+  ansible.builtin.systemd:
+    name: auditd
+    enabled: true
+    state: started
+
+- name: Ship the raw audit log to the manager (Wazuh's stock auditd decoder parses it)
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: "<!-- {mark} ANSIBLE MANAGED: fs-01 auditd execve log -->"
+    block: |
+      <ossec_config>
+        <localfile>
+          <log_format>audit</log_format>
+          <location>/var/log/audit/audit.log</location>
+        </localfile>
+      </ossec_config>
+  notify: Restart wazuh-agent
+
 # --- Verify -------------------------------------------------------------------
 - name: Verify the [public] share is exported and the bait is present
   ansible.builtin.shell: |
