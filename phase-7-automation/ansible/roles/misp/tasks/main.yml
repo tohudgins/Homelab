@@ -70,9 +70,43 @@
   register: misp_up
   changed_when: "'Started' in misp_up.stderr or 'Created' in misp_up.stderr"
 
+# Real, reproducible bug (found 2026-09-20): the self-signed key.pem the
+# misp-docker stack generates on first run ships root-only (0600), but the
+# misp-nginx container runs as uid/gid 101, not root (see docker-compose.yml's
+# tmpfs uid=101,gid=101 on that service) — it can never read its own TLS key.
+# This went unnoticed for weeks because the container simply never restarted
+# after its first successful boot; it only surfaced once something else (the
+# docker0-bridge fix above) forced a real restart, and nginx crash-looped on
+# "cannot load certificate key ... BIO_new_file() failed" instead of coming
+# back up. Fixed live 2026-09-20, then codified here — group-readable by 101,
+# not world-readable, keeps the key from being any more exposed than it needs
+# to be while still letting nginx actually read it.
+- name: Fix the MISP TLS key's permission (nginx runs as uid/gid 101, key.pem ships root-only)
+  ansible.builtin.file:
+    path: "{{ misp_deploy_dir }}/ssl/key.pem"
+    group: "101"
+    mode: "0640"
+  become: true
+  register: misp_key_perm
+
+- name: Restart misp-nginx if its key permission just changed (it crash-loops on a stale unreadable key)
+  ansible.builtin.command: docker restart misp-docker-misp-nginx-1
+  become: true
+  when: misp_key_perm.changed
+
 - name: Wait for the MISP web UI to answer
+  # Pre-existing bug found 2026-09-20: this checked misp-core's OWN loopback,
+  # but misp-core only runs PHP-FPM (no netstat/ss even installed in the
+  # image, confirmed live) — it never listens on 80 or 443 itself. TLS
+  # termination and the actual HTTP listener are the separate misp-nginx
+  # sidecar, which proxies to misp-core over FastCGI on the shared docker
+  # network. This task could never have passed as written; it silently never
+  # got exercised again after the original 2026-08-29 build (re-running
+  # ansible-playbook misp.yml against a live host is rare) until this
+  # session's reliability pass re-ran it and it hung for its full 30x20s
+  # retry budget every time. Checking the host's own port 443 (what nginx
+  # actually publishes) is both correct and simpler — no docker exec needed.
   ansible.builtin.shell: >
-    docker exec misp-docker-misp-core-1
     curl -sk -o /dev/null -w '%{http_code}' https://127.0.0.1/users/login
   become: true
   register: misp_web

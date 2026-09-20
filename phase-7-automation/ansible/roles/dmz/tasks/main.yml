@@ -18,6 +18,38 @@
     enabled: true
     state: started
 
+- name: Check the docker0 bridge state (suspend/resume can silently take it down)
+  ansible.builtin.command: ip -br addr show docker0
+  register: docker0_state
+  changed_when: false
+  failed_when: false
+
+- name: Restart Docker if its bridge network came back down after a VM suspend/resume
+  # Real, reproducible bug (found 2026-09-15): a VMware suspend/resume cycle
+  # can leave docker0 DOWN even though the Juice Shop container still shows
+  # "Up" in `docker ps` — the container and port-forwarding config both look
+  # correct, the bridge just has no route. Juice Shop went unreachable this
+  # exact way until `systemctl restart docker` rebuilt it, caught only
+  # because the verify task below happened to retry long enough. Previously
+  # only ever fixed by hand, live, each time it was hit — codified here so a
+  # normal converge self-heals it instead.
+  #
+  # docker0 specifically matters here because Juice Shop is a bare `docker
+  # run` with no --network flag, so it lands on Docker's default bridge.
+  # Don't copy this check onto a docker-compose-based role without checking
+  # first — a compose stack gets its own auto-created named network (e.g.
+  # misp-docker_default), and docker0 sits unused and harmlessly DOWN the
+  # whole time regardless of whether the stack is healthy. Tried exactly that
+  # on the misp/iris/scan roles 2026-09-20: docker0 was DOWN on misp-01 while
+  # every container was actually healthy, and the "fix" forced an unneeded
+  # ~10min full-stack restart that then caused a real, separate timeout.
+  # Reverted there; the real misp-01 bug that day was a TLS key permission
+  # issue (see the misp role), unrelated to any bridge.
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  when: "'DOWN' in docker0_state.stdout"
+
 - name: List existing containers
   ansible.builtin.command: docker ps -a --format '{{ "{{" }}.Names{{ "}}" }}'
   register: dmz_containers

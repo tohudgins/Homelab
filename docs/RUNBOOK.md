@@ -22,7 +22,26 @@ make stop                   # clean poweroff of everything
 make snapshot NAME=clean    # snapshot every running VM
 make restore NAME=clean     # revert to a snapshot
 make profiles               # list profiles
+make dashboards              # open SSH tunnels to every lab web UI, one command
 ```
+
+### Reaching each tool's web UI
+
+Five UIs live behind SSH tunnels (the segmented network routes through rtr-01 as a
+jump host, same as SSH); one is local. `make dashboards` opens all the tunnels at
+once instead of hand-typing an `ssh -L` per tool per session:
+
+| Tool | URL once tunneled | Needs |
+|---|---|---|
+| Wazuh dashboard | `https://localhost:9001` | siem-01 up |
+| Velociraptor GUI | `https://localhost:8889` | siem-01 up |
+| MISP | `https://localhost:9002` | misp-01 up |
+| DFIR-IRIS | `https://localhost:8443` | misp-01 up |
+| Greenbone/OpenVAS | `https://localhost:9392` | scan-01 up |
+| BloodHound CE | `http://localhost:8080` | local `docker compose up -d` in `phase-5-offense/bloodhound-ce/` — **no tunnel needed** |
+
+Credentials for all of these: the vault's Virtual Machines note. `Ctrl+C` closes
+every tunnel `make dashboards` opened.
 
 ### Run profiles — never run everything (24 GB host ceiling)
 
@@ -48,8 +67,8 @@ make converge                # ensure everything is in its known-good state
 1. **Attack** — from atk-01 (`ssh atk-01`): recon, BloodHound collection, execute a
    path (Kerberoasting, the fs-01 credential share, DCSync, etc. — see
    `phase-5-offense/`).
-2. **Hunt** — in Wazuh (`https://<siem-01>` or `ssh siem-01`): find the telemetry,
-   confirm the detection fired, or write a new rule (`phase-4-detection/`).
+2. **Hunt** — in Wazuh (`make dashboards` → `https://localhost:9001`, or `ssh siem-01`):
+   find the telemetry, confirm the detection fired, or write a new rule (`phase-4-detection/`).
 3. **Evade** — try to slip past your own rule; document what worked.
 4. **Snapshot** before a destructive test, `make restore NAME=clean` after.
 
@@ -84,8 +103,8 @@ ssh scan-01 'sudo /opt/greenbone/greenbone-scan.sh status'  # watch progress
   ws-01 (`10.10.10.10,10.10.10.50`) and a **"Full and fast" Task**, idempotently,
   then starts it. Reachable because rtr-01 allows **REDTEAM → CORP**.
 - The **GSA web UI** (Scans › Tasks, reports, CVE detail) is on scan-01 at
-  `127.0.0.1:9392` — tunnel to it: `ssh -L 9392:127.0.0.1:9392 scan-01`, then
-  `https://127.0.0.1:9392` (admin / see the vault's Virtual Machines note).
+  `127.0.0.1:9392` — `make dashboards` (§1) tunnels it to `https://localhost:9392`
+  (admin / see the vault's Virtual Machines note).
 - **First run only:** the NVT/SCAP/CERT/GVMD_DATA feeds must finish syncing
   (~20-40 min after the stack first comes up) before scan configs exist. `<get_feeds/>`
   with no `<currently_syncing>` means ready; the launcher says so if they aren't.
