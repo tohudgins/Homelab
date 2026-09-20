@@ -44,6 +44,25 @@
     group: wazuh
     mode: "0750"
 
+# Ship the AR's own outcome back to the manager — same idiom as the fileserver
+# role's yara active-response log shipping. Without this, disable-ad-account.py's
+# "disable jdoe: rc=0" line only ever exists in a local file; the soc-ops playbook
+# (siem role's custom-iris — see phase-4-detection/soc-ops-iris.md) needs it as a
+# real Wazuh alert (rules 100530-100532) to merge the containment action into the
+# same IRIS case as the detection that triggered it.
+- name: Ship the active-response log to the manager (carries disable-ad-account outcomes)
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: "<!-- {mark} ANSIBLE MANAGED: dc-01 active-response log -->"
+    block: |
+      <ossec_config>
+        <localfile>
+          <log_format>syslog</log_format>
+          <location>/var/ossec/logs/active-responses.log</location>
+        </localfile>
+      </ossec_config>
+  notify: Restart wazuh-agent
+
 # --- Telemetry: ship smbd's SMB/NTLM auth log to Wazuh (password-spray detection) ---
 # smbd handles SMB session-setup auth and logs it to log.smbd, NOT log.samba (the AD DC
 # process, which is all the Kerberoast/Kerberos-brute rules ever read). Failed SMB logons

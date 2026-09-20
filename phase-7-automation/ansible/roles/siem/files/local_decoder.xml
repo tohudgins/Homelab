@@ -68,3 +68,43 @@
   <order>yara_rule, yara_scanned_file</order>
 </decoder>
 
+
+<!--
+  disable-ad-account AR completion: disable-ad-account.py (dc-01, rule 100041's
+  active response) writes a line to active-responses.log on every invocation, e.g.
+      2026-09-20T14:03:11.123456+00:00 disable-ad-account: disable jdoe: rc=0 ...
+  Same log-line -> localfile -> decoder -> rule idiom as wazuh-yara above, so the
+  AR's own outcome becomes a real Wazuh alert instead of a silent log line — the
+  piece the soc-ops playbook (custom-iris.py, see phase-4-detection/soc-ops-iris.md)
+  needs to merge "contained" into the same IRIS case as the detection that
+  triggered it. Only "disable"/"enable rc=<n>" lines match the child regex; the
+  refuse-protected-account / no-account-found lines match the parent (still
+  logged, just not alert-worthy for the case playbook) but not the child.
+-->
+<!-- program_name, not prematch: unlike wazuh-yara's non-standard "YYYY/MM/DD
+     HH:MM:SS" date (which Wazuh's syslog predecoder doesn't recognize, so the
+     raw line passes through untouched for <prematch> to search), this script's
+     ISO8601 timestamp (isoformat(), including the UTC offset) IS recognized —
+     the predecoder extracts it as `timestamp` and consumes the next colon-
+     terminated token as `program_name`, stripping "disable-ad-account:" out
+     of the text before <prematch> would ever see it. Confirmed live via
+     wazuh-logtest 2026-09-20: the prematch form produced "No decoder matched"
+     even though the literal substring is right there in full_log. Matching
+     on program_name instead uses the field Wazuh already extracts, rather
+     than fighting its own predecoder. -->
+<decoder name="disable-ad-account">
+  <program_name>disable-ad-account</program_name>
+</decoder>
+
+<decoder name="disable-ad-account-result">
+  <parent>disable-ad-account</parent>
+  <!-- Wazuh's plain <regex> is OSRegex, not PCRE — no (a|b) alternation
+       support (that needs an explicit type="pcre2", unused elsewhere in this
+       file). \w+ captures "disable" or "enable" generically instead —
+       verified live 2026-09-20 after the alternation form failed analysisd's
+       config parse with "Syntax error on regex". Matches against the message
+       remaining after program_name is stripped, e.g. " disable jdoe: rc=0". -->
+  <regex>(\w+) (\S+): rc=(\d+)</regex>
+  <order>ar_action, ar_account, ar_rc</order>
+</decoder>
+

@@ -1224,3 +1224,43 @@
   <group>execution,attack,</group>
 </rule>
 </group>
+
+<!-- soc-ops playbook: disable-ad-account active-response completion (2026-09-20).
+     See phase-4-detection/soc-ops-iris.md — these turn the AR's own outcome (a
+     line in active-responses.log, decoded by disable-ad-account/-result in
+     local_decoder.xml) into a real alert, so custom-iris.py's automated
+     escalate-or-merge playbook can thread "contained" into the same IRIS case
+     as the rule 100041 detection that triggered the response — both alerts
+     share the dc-01 asset, which is what the playbook correlates on. -->
+<group name="local,active_response,soar,">
+
+  <rule id="100530" level="12">
+    <decoded_as>disable-ad-account</decoded_as>
+    <field name="ar_action">^disable$</field>
+    <field name="ar_rc">^0$</field>
+    <options>no_full_log</options>
+    <description>Automated response: Samba AD account $(ar_account) disabled (Kerberos brute-force containment, rule 100041)</description>
+    <mitre>
+      <id>T1110.001</id>
+    </mitre>
+    <group>active_response,soar,</group>
+  </rule>
+
+  <rule id="100531" level="3">
+    <decoded_as>disable-ad-account</decoded_as>
+    <field name="ar_action">^enable$</field>
+    <options>no_full_log</options>
+    <description>Automated response: Samba AD account $(ar_account) re-enabled (active-response timeout expired)</description>
+    <group>active_response,</group>
+  </rule>
+
+  <rule id="100532" level="10">
+    <decoded_as>disable-ad-account</decoded_as>
+    <field name="ar_action">^disable$</field>
+    <field name="ar_rc" negate="yes">^0$</field>
+    <options>no_full_log</options>
+    <description>Automated response FAILED: Samba AD account $(ar_account) disable attempt returned rc=$(ar_rc)</description>
+    <group>active_response,soar,</group>
+  </rule>
+
+</group>
