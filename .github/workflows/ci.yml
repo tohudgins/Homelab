@@ -61,7 +61,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install "sigma-cli==3.1.0" "pyyaml==6.0.2"
+      - run: pip install "sigma-cli==3.1.0" "pyyaml==6.0.3"
       - name: sigma check (schema-validate the detection rules)
         run: sigma check phase-4-detection/sigma/rules/
       - name: sigma-to-wazuh --check (fail on any unsupported/skipped rule)

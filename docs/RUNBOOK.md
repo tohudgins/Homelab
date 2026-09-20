@@ -144,7 +144,7 @@ a command you can run locally:
 
 ```bash
 # one-time: the linters CI uses
-pip install "yamllint==1.38.0" "ansible-lint==26.8.0" "ruff==0.15.14" "sigma-cli==3.1.0"
+pip install "yamllint==1.38.0" "ansible-lint==26.8.0" "ruff==0.15.14" "sigma-cli==3.1.0" "pyyaml==6.0.3"
 ansible-galaxy collection install -r phase-7-automation/ansible/collections/requirements.yml
 
 # the checks (each is one CI job)
