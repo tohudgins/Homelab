@@ -161,14 +161,46 @@
     state: started
     timeout: 300
 
-- name: Probe the GSA endpoint (best-effort — confirms nginx is serving)
+- name: Probe the GSA endpoint (confirms nginx is actually serving, not just accepting TCP)
+  # The `wait_for` above only proves a TCP connection can be established — a
+  # wedged docker-proxy (real, reproducible bug found 2026-09-20 on misp-01;
+  # see the misp/iris roles' identical guard) still accepts the TCP SYN and
+  # even starts a TLS handshake, then never responds, so a TCP-only check
+  # passes right through it. This used to be `failed_when: false` — a
+  # "best-effort" probe that could never gate or trigger anything even when
+  # it correctly detected the endpoint was unreachable. Short budget on this
+  # first attempt: gvmd is already confirmed responsive by this point (the
+  # dedicated wait above already absorbed the slow first-run DB migration),
+  # so a real cold start doesn't need long here — a wedge hangs on the very
+  # first attempt regardless of how long you wait.
   ansible.builtin.uri:
     url: "https://127.0.0.1:{{ scan_gsa_port }}/"
     validate_certs: false
     status_code: [200, 301, 302, 401]
-    timeout: 20
+    timeout: 5
   register: gsa_check
-  failed_when: false
+  until: gsa_check.status is defined and gsa_check.status in [200, 301, 302, 401]
+  retries: 15
+  delay: 5
+  ignore_errors: true
+
+- name: Restart Docker if the GSA endpoint still isn't answering (docker-proxy can wedge after a VM suspend/resume)
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  become: true
+  when: gsa_check is failed
+
+- name: Re-check the GSA endpoint after the Docker-restart remediation
+  ansible.builtin.uri:
+    url: "https://127.0.0.1:{{ scan_gsa_port }}/"
+    validate_certs: false
+    status_code: [200, 301, 302, 401]
+  register: gsa_check_retry
+  until: gsa_check_retry.status in [200, 301, 302, 401]
+  retries: 30
+  delay: 20
+  when: gsa_check is failed
 
 - name: Report scanner status
   ansible.builtin.debug:
