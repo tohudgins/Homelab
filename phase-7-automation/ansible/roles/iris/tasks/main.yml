@@ -76,12 +76,45 @@
 
 - name: Wait for the IRIS web UI to answer on {{ iris_https_port }}  # noqa: command-instead-of-module
   # curl (not uri) on purpose: a self-signed-TLS health probe retried with until:
+  # Short budget here (see the misp role's identical guard for the full
+  # explanation) — a genuine cold start doesn't need long; a docker-proxy
+  # wedge (real, reproducible bug found 2026-09-20, host-level, not specific
+  # to IRIS) hangs on the very first attempt regardless of how long you wait.
+  # --max-time matters: without it curl's own hang (a TLS handshake that
+  # never completes against a wedge) can run far longer than intended before
+  # this task's retry loop even gets a chance to give up and remediate.
   ansible.builtin.shell: >
-    curl -sk -o /dev/null -w '%{http_code}'
+    curl -sk --max-time 5 -o /dev/null -w '%{http_code}'
     https://127.0.0.1:{{ iris_https_port }}/login
   become: true
   register: iris_web
   until: iris_web.stdout in ['200', '302']
-  retries: 30
-  delay: 10
+  retries: 15
+  delay: 5
   changed_when: false
+  ignore_errors: true
+
+- name: Restart Docker if the IRIS web UI still isn't answering (docker-proxy can wedge after a VM suspend/resume)
+  # Same host-level bug as the misp role's identical guard: after a VMware
+  # suspend/resume, Docker's userland docker-proxy process for a published
+  # port can wedge — it keeps listening and accepting TCP, but never
+  # forwards, so the TLS handshake hangs until timeout. Every container-level
+  # signal looks healthy the whole time; only systemctl restart docker
+  # (not a container-level restart) respawns docker-proxy and clears it.
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  become: true
+  when: iris_web is failed
+
+- name: Re-check the IRIS web UI after the Docker-restart remediation  # noqa: command-instead-of-module
+  ansible.builtin.shell: >
+    curl -sk -o /dev/null -w '%{http_code}'
+    https://127.0.0.1:{{ iris_https_port }}/login
+  become: true
+  register: iris_web_retry
+  until: iris_web_retry.stdout in ['200', '302']
+  retries: 30
+  delay: 20
+  changed_when: false
+  when: iris_web is failed

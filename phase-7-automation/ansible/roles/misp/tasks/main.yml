@@ -106,14 +106,62 @@
   # session's reliability pass re-ran it and it hung for its full 30x20s
   # retry budget every time. Checking the host's own port 443 (what nginx
   # actually publishes) is both correct and simpler — no docker exec needed.
+  #
+  # Short budget on this first attempt (not the full 600s): if the stack is
+  # just cold-starting, nginx's own plain-HTTP healthcheck (a separate,
+  # container-internal probe Docker runs on its own) reliably goes healthy
+  # within seconds — so a real cold start doesn't need long here. A wedge
+  # (see the next task) hangs on the very first attempt regardless of how
+  # long you wait, so failing fast and remediating beats burning the full
+  # budget on something that will never resolve itself. Explicit `timeout`
+  # matters: the uri module's own default is 30s per request, which against
+  # a wedge (a TLS handshake that hangs until timeout, not a fast refusal)
+  # made the very first live test of this task take ~625s instead of the
+  # intended ~2min before it gave up and moved on to remediation.
   ansible.builtin.uri:
     url: "https://127.0.0.1/users/login"
     validate_certs: false
     status_code: [200, 302]
+    timeout: 5
   register: misp_web
   until: misp_web.status in [200, 302]
+  retries: 15
+  delay: 5
+  ignore_errors: true
+
+# Real, reproducible bug found 2026-09-20, separate from (and more specific
+# than) the docker0-bridge finding on dmz-01: after a VMware suspend/resume,
+# `docker-proxy` (Docker's userland process forwarding published host ports
+# into a container) can wedge — it keeps LISTENing and accepting TCP
+# connections, but never forwards them, so a client's TLS handshake hangs
+# until it times out. Every other signal looks completely healthy the whole
+# time: `docker ps` shows every container "Up ... (healthy)" with 0 restarts,
+# nginx's own container-internal healthcheck (plain HTTP, not published)
+# succeeds every ~30s the entire time, and the container IPs behind the
+# iptables DNAT rules are correct — this is specifically the host-level
+# docker-proxy processes for the *published* ports getting stuck, invisible
+# to every container-level health signal. `systemctl restart docker`
+# respawns docker-proxy fresh and clears it — confirmed live: restarting
+# just the nginx *container* did NOT fix it (its docker-proxy listener is a
+# separate, longer-lived host process Docker doesn't necessarily recreate on
+# a container-only restart), only a full daemon restart did.
+- name: Restart Docker if the web UI still isn't answering (docker-proxy can wedge after a VM suspend/resume)
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  become: true
+  when: misp_web is failed
+
+- name: Re-check the MISP web UI after the Docker-restart remediation
+  ansible.builtin.uri:
+    url: "https://127.0.0.1/users/login"
+    validate_certs: false
+    status_code: [200, 302]
+  register: misp_web_retry
+  until: misp_web_retry.status in [200, 302]
   retries: 30
   delay: 20
+  when: misp_web is failed
 
 # Feeds (CIRCL OSINT, abuse.ch Feodo/URLhaus) are enabled + fetched once via the
 # API/CLI after first boot — a stateful, one-time action, documented in the
