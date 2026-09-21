@@ -106,14 +106,14 @@
   # session's reliability pass re-ran it and it hung for its full 30x20s
   # retry budget every time. Checking the host's own port 443 (what nginx
   # actually publishes) is both correct and simpler — no docker exec needed.
-  ansible.builtin.shell: >
-    curl -sk -o /dev/null -w '%{http_code}' https://127.0.0.1/users/login
-  become: true
+  ansible.builtin.uri:
+    url: "https://127.0.0.1/users/login"
+    validate_certs: false
+    status_code: [200, 302]
   register: misp_web
-  until: misp_web.stdout in ['200', '302']
+  until: misp_web.status in [200, 302]
   retries: 30
   delay: 20
-  changed_when: false
 
 # Feeds (CIRCL OSINT, abuse.ch Feodo/URLhaus) are enabled + fetched once via the
 # API/CLI after first boot — a stateful, one-time action, documented in the
