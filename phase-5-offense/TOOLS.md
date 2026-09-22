@@ -14,6 +14,19 @@ rule 100515/100527 keys on); `impacket-GetUserSPNs` requests service tickets for
 the domain to Kerberoast them offline. Used in `apt-scenario/run-scenario.sh` and
 `ad-validate.py`'s lateral-movement and Kerberoasting scenarios.
 
+## Hashcat / John the Ripper
+
+Offline password crackers — given a captured hash and a candidate password (from a wordlist,
+rule-mangled variants, or a brute-force mask), they compute the same hash algorithm on each
+candidate and compare, recovering the plaintext behind a hash pulled from somewhere like a SAM
+dump or a Kerberoast ticket. Hashcat is GPU-first (OpenCL/CUDA) and by far the faster of the two
+on real hardware; John the Ripper is CPU-only and needs no compute backend at all, which matters
+here — this lab's ARM64 VMware VMs have no GPU passthrough and no packaged CPU OpenCL runtime for
+Kali ARM64, so hashcat genuinely cannot run standalone in this environment (confirmed, not
+assumed — see `attack-detect-writeups/08-sam-dump-credential-cracking-t1003.002.md`), and John
+does the actual cracking. Both read the same hash-format conventions (mode `1000`/`--format=NT`
+for a Windows NTLM hash, mode `13100` for a Kerberoast TGS ticket).
+
 ## NetExec (`nxc`)
 
 The actively-maintained fork of CrackMapExec — a Swiss-army-knife for authenticating against

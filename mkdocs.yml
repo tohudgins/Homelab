@@ -89,6 +89,7 @@ nav:
           - "05 · Linux Sudo Privesc (T1548.003)": phase-5-offense/attack-detect-writeups/05-linux-sudo-privesc-t1548.003.md
           - "06 · Inhibit System Recovery (T1490)": phase-5-offense/attack-detect-writeups/06-inhibit-system-recovery-t1490.md
           - "07 · Registry Run Keys (T1547.001)": phase-5-offense/attack-detect-writeups/07-registry-run-keys-t1547.001.md
+          - "08 · SAM Dump + Cracking (T1003.002)": phase-5-offense/attack-detect-writeups/08-sam-dump-credential-cracking-t1003.002.md
       - BloodHound (AD Attack Paths): phase-5-offense/bloodhound-ce/README.md
       - Purple-Team Validation: phase-5-offense/purple-team/README.md
       - Atomic Red Team: phase-5-offense/atomic-red-team/README.md
