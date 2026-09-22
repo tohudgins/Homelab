@@ -52,7 +52,7 @@ every tunnel `make dashboards` opened.
 | `soc` | rtr-01 dc-01 ws-01 siem-01 | detection engineering (the daily driver) |
 | `soc-ops` | rtr-01 dc-01 siem-01 misp-01 | case management / threat intel (MISP+IRIS) — swaps ws-01 for misp-01, same 24 GB |
 | `attack` | + fs-01 atk-01 | attack/detect pairing (suspend dmz first) |
-| `vulnscan` | rtr-01 dc-01 siem-01 scan-01 | authenticated vuln scanning |
+| `vulnscan` | rtr-01 dc-01 scan-01 | authenticated vuln scanning |
 | `services` | rtr-01 dc-01 siem-01 fs-01 dmz-01 | file/web services + monitoring |
 
 ## 2. Run a simulation (the detection loop)
@@ -94,14 +94,17 @@ A different loop from attack/detect — active vulnerability assessment of the C
 hosts, cross-referenced against Wazuh's own passive vuln module:
 
 ```bash
-make up PROFILE=vulnscan                       # rtr-01 dc-01 siem-01 scan-01
+make up PROFILE=vulnscan                       # rtr-01 dc-01 scan-01
 ssh scan-01 'sudo /opt/greenbone/greenbone-scan.sh'         # create target+task, launch
 ssh scan-01 'sudo /opt/greenbone/greenbone-scan.sh status'  # watch progress
 ```
 
 - The launcher (GMP via the stack's `gvm-tools`) creates a **Target** for dc-01 +
   ws-01 (`10.10.10.10,10.10.10.50`) and a **"Full and fast" Task**, idempotently,
-  then starts it. Reachable because rtr-01 allows **REDTEAM → CORP**.
+  then starts it. Reachable because rtr-01 allows **REDTEAM → CORP**. `vulnscan`
+  itself only boots dc-01 — ws-01 stays suspended unless you bring it up too
+  (e.g. via `soc`/`ad`), in which case it just scans dead and reports 0 results
+  for that host, same as any other target that's actually off.
 - The **GSA web UI** (Scans › Tasks, reports, CVE detail) is on scan-01 at
   `127.0.0.1:443` (nginx's real TLS port — its own `:9392` is just a plain-HTTP
   redirect-to-`:443` compat port, not a second TLS listener) — `make dashboards`
@@ -110,9 +113,13 @@ ssh scan-01 'sudo /opt/greenbone/greenbone-scan.sh status'  # watch progress
 - **First run only:** the NVT/SCAP/CERT/GVMD_DATA feeds must finish syncing
   (~20-40 min after the stack first comes up) before scan configs exist. `<get_feeds/>`
   with no `<currently_syncing>` means ready; the launcher says so if they aren't.
-- **Cross-reference:** compare Greenbone's active findings on dc-01/ws-01 with
-  Wazuh's passive package-CVE detections for the same hosts — active vs. agent-based
-  vuln management on the same targets.
+- **Cross-reference (separate, sequential step — not simultaneous):** `vulnscan`
+  (rtr-01+dc-01+scan-01 = 18 GB) deliberately leaves siem-01 out to stay well
+  under the 24 GB ceiling; it isn't needed to *run* the scan. To compare
+  Greenbone's active findings against Wazuh's passive package-CVE detections for
+  the same hosts, suspend scan-01 once the scan's done and bring up `soc` (or
+  `soc-ops`) instead — the GSA report already has everything Greenbone found, so
+  nothing is lost by not running both stacks at once.
 
 ## 3. Add a new host (the scalability story)
 

@@ -53,7 +53,7 @@ profile_vms() {
     soc)        echo "rtr-01 dc-01 ws-01 siem-01" ;;
     soc-ops)    echo "rtr-01 dc-01 siem-01 misp-01" ;;
     attack)     echo "rtr-01 dc-01 ws-01 siem-01 fs-01 atk-01" ;;
-    vulnscan)   echo "rtr-01 dc-01 siem-01 scan-01" ;;
+    vulnscan)   echo "rtr-01 dc-01 scan-01" ;;
     services)   echo "rtr-01 dc-01 siem-01 fs-01 dmz-01" ;;
     *)          echo "" ;;
   esac
