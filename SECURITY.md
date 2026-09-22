@@ -35,6 +35,34 @@ mistake still fails the scan. If you fork this lab for real use, rotate every on
 of these and move them into the existing `ansible-vault` setup
 (`phase-7-automation/ansible/.vault_pass`).
 
+## Accepted risk: TLS certificate validation disabled between siem-01 and misp-01
+
+`custom-iris.py` and `custom-misp.py` (Wazuh's IRIS/MISP integration scripts,
+`roles/siem/files/`) call `requests.*` with `verify=False`. Flagged by CI's
+Semgrep SAST job, and left in place on purpose, inline-documented at each
+occurrence: IRIS's and MISP's certs are self-signed (same posture as every
+other lab credential above), and every one of these calls stays on the internal
+SOC segment — siem-01 talking to misp-01, never a path that leaves the lab. The
+real fix (distributing each service's cert, or a shared internal CA, to
+siem-01 and pointing `verify=` at it) is legitimate future hardening, not
+something this training lab needs to demonstrate.
+
+## What CI does and doesn't check
+
+Beyond linting and the secret scan above, CI runs a Semgrep SAST pass
+(`p/python`) over the repo's own scripts, and a Trivy scan of the three images
+`phase-5-offense/bloodhound-ce/docker-compose.yml` pins by exact tag
+(`postgres:18`, `neo4j:4.4.42`, `specterops/bloodhound:latest`) — **not**
+MISP/IRIS/Greenbone/Velociraptor, whose compose files are fetched from their
+own upstream repos at deploy time rather than committed here, so there's no
+fixed image list to check statically (see `docs/design-decisions.md`). The
+Trivy job is deliberately informational, not gating: a base Debian or JVM image
+routinely carries dozens of HIGH/CRITICAL CVEs in packages this repo doesn't
+control the patch cadence of, and a real vuln-management program tracks and
+triages that baseline on its own schedule rather than blocking every unrelated
+merge on it. Juice Shop is excluded entirely — it's the deliberately vulnerable
+app under test, not a finding.
+
 ## Reporting a problem
 
 If you find a security issue in the *tooling or automation itself* (as opposed to

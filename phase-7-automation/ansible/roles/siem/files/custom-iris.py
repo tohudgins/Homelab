@@ -54,6 +54,16 @@ try:
 except ImportError:
     sys.exit("iris: python3 requests/urllib3 not installed")
 
+# Every requests.* call below passes verify=False (flagged by Semgrep's
+# disabled-cert-validation rule) on purpose: IRIS's cert is self-signed
+# (SECURITY.md's documented lab-cert posture) and every one of these calls is
+# siem-01 talking to misp-01 over the internal SOC segment, never a path that
+# leaves the lab. The real fix — distributing IRIS's cert (or a shared internal
+# CA) to siem-01 and pointing verify= at it — is legitimate future hardening,
+# not done here because it's out of scope for what this integration script
+# needs to demonstrate. urllib3.disable_warnings() above silences the resulting
+# InsecureRequestWarning so this accepted risk doesn't spam every alert's log.
+
 ALERT_FILE = sys.argv[1]
 API_KEY = sys.argv[2]
 IRIS_BASE = sys.argv[3].rstrip("/")
@@ -124,7 +134,7 @@ def find_open_case(asset_name):
             f"{IRIS_BASE}/alerts/filter",
             headers=HEADERS,
             params={"alert_assets": asset_name, "per_page": CORRELATION_LOOKBACK_ALERTS, "sort": "desc"},
-            verify=False, timeout=15)
+            verify=False, timeout=15)  # nosemgrep: python.requests.security.disabled-cert-validation.disabled-cert-validation
         if r.status_code >= 300:
             sys.stderr.write(f"iris: correlation filter failed http={r.status_code}: {r.text[:200]}\n")
             return None
@@ -133,7 +143,7 @@ def find_open_case(asset_name):
             candidate_case_ids += a.get("cases") or []
         for case_id in dict.fromkeys(candidate_case_ids):  # de-dup, keep order (most recent first)
             cr = requests.get(f"{IRIS_BASE}/manage/cases/{case_id}", headers=HEADERS,
-                              verify=False, timeout=15)
+                              verify=False, timeout=15)  # nosemgrep: python.requests.security.disabled-cert-validation.disabled-cert-validation
             if cr.status_code < 300 and cr.json().get("data", {}).get("close_date") is None:
                 return case_id
     except Exception as e:
@@ -159,7 +169,7 @@ def escalate_or_merge(alert_id, asset_name, case_title, source_note, case_tags):
                 "iocs_import_list": [],
                 "note": note,
                 "case_tags": case_tags,
-            }), verify=False, timeout=15)
+            }), verify=False, timeout=15)  # nosemgrep: python.requests.security.disabled-cert-validation.disabled-cert-validation
         action, case_id = "merged into", existing_case_id
     else:
         note = f"Auto-escalated by the soc-ops playbook — no correlated open case found. {source_note}"
@@ -171,7 +181,7 @@ def escalate_or_merge(alert_id, asset_name, case_title, source_note, case_tags):
                 "iocs_import_list": [],
                 "note": note,
                 "case_tags": case_tags,
-            }), verify=False, timeout=15)
+            }), verify=False, timeout=15)  # nosemgrep: python.requests.security.disabled-cert-validation.disabled-cert-validation
         action, case_id = "escalated to new", None
 
     if r.status_code >= 300 or r.json().get("status") != "success":
@@ -192,7 +202,7 @@ def add_ar_task(case_id, rule_id, ar_note):
             "task_status_id": 1,
             "task_assignees_id": [],
             "task_tags": "soar,automated-response",
-        }), verify=False, timeout=15)
+        }), verify=False, timeout=15)  # nosemgrep: python.requests.security.disabled-cert-validation.disabled-cert-validation
     if r.status_code >= 300 or r.json().get("status") != "success":
         sys.stderr.write(f"iris: add AR task failed http={r.status_code}: {r.text[:200]}\n")
 
@@ -246,7 +256,7 @@ def main():
 
     try:
         r = requests.post(f"{IRIS_BASE}/alerts/add", headers=HEADERS,
-                          data=json.dumps(payload), verify=False, timeout=15)
+                          data=json.dumps(payload), verify=False, timeout=15)  # nosemgrep: python.requests.security.disabled-cert-validation.disabled-cert-validation
         if r.status_code >= 300 or r.json().get("status") != "success":
             sys.stderr.write(f"iris: add failed http={r.status_code}: {r.text[:300]}\n")
             return

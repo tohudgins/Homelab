@@ -41,7 +41,7 @@ import json
 import os
 import re
 import sys
-from xml.sax.saxutils import escape as xml_escape
+from xml.sax.saxutils import escape as xml_escape  # nosemgrep: python.lang.security.use-defused-xml.use-defused-xml — output-escaping only, never parses XML, no XXE surface
 
 import yaml
 

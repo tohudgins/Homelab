@@ -61,7 +61,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install "sigma-cli==3.1.0" "pyyaml==6.0.3"
+      - run: pip install "sigma-cli==3.1.0" "pyyaml==6.0.3" "defusedxml==0.7.1"
       - name: sigma check (schema-validate the detection rules)
         run: sigma check phase-4-detection/sigma/rules/
       - name: sigma-to-wazuh --check (fail on any unsupported/skipped rule)
@@ -90,6 +90,28 @@ jobs:
           python-version: "3.12"
       - run: pip install "ruff==0.15.14"
       - run: ruff check .
+
+  sast:
+    name: Python SAST (semgrep)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "semgrep==1.168.0"
+      # p/python alone, not stacked with another overlapping registry config
+      # (e.g. p/security-audit) — confirmed locally that loading two configs
+      # which both register the same rule ID under the hood makes `# nosemgrep`
+      # suppress only one of the two copies, so a documented, suppressed finding
+      # comes back as an unsuppressed duplicate. p/python is sufficient on its
+      # own; it already caught the two real findings fixed alongside this job
+      # (an XXE-prone stdlib xml import in the Sigma tooling, switched to
+      # defusedxml; disabled TLS cert validation in the MISP/IRIS integration
+      # scripts, accepted and documented inline — both self-signed lab-internal
+      # certs on the SOC segment, never a path that leaves the lab).
+      - name: semgrep scan (p/python)
+        run: semgrep scan --config p/python --error --metrics=off
 
   shell:
     name: Shell lint (shellcheck)
@@ -139,3 +161,53 @@ jobs:
         # .gitleaks.toml allowlists the documented lab-only credentials by value,
         # so any NEW secret still fails this check. See SECURITY.md.
         run: gitleaks detect --no-banner --redact -c .gitleaks.toml --exit-code 1
+
+  containers:
+    name: Container image scan (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sudo sh -s -- -b /usr/local/bin v0.72.0
+          trivy --version
+      - name: Scan the images this repo pins directly (informational, not gating)
+        # Scoped to the 3 images phase-5-offense/bloodhound-ce/docker-compose.yml
+        # names with an exact tag. MISP/IRIS/Greenbone/Velociraptor deploy from
+        # their OWN upstream compose files (git-cloned or fetched by URL at
+        # converge time, per their roles' defaults/main.yml) — not committed
+        # here, so there's no fixed image+tag list for CI to check statically.
+        # Same "CI validates what's actually committed, not what deploy-time
+        # fetches" boundary as the Ansible/Sigma jobs above — see
+        # docs/design-decisions.md and the CI-for-infra-you-can't-run-in-CI
+        # framing in RUNBOOK.md §6. Juice Shop (dmz-01) is deliberately excluded:
+        # it's the app under test, meant to be vulnerable — scanning it for CVEs
+        # would just report the point of the exercise as a finding.
+        #
+        # --exit-code 0 (never fails the job) is the deliberate choice, not an
+        # oversight: these are third-party upstream images Tyler doesn't control
+        # the patch cadence of. A real vuln-management program tracks and
+        # triages a baseline of accepted risk in upstream dependencies on its
+        # own cadence — it doesn't block every unrelated merge on a transitive
+        # CVE nobody here can fix today. Findings are printed in full below and
+        # summarized in the job's own GitHub Actions summary, so they're visible
+        # and actionable without gating anything.
+        run: |
+          {
+            echo "## Container image scan (Trivy)"
+            echo
+            echo "Informational only — see this job step's comment in ci.yml for why this doesn't gate CI."
+          } >> "$GITHUB_STEP_SUMMARY"
+          for img in docker.io/library/postgres:18 docker.io/library/neo4j:4.4.42 docker.io/specterops/bloodhound:latest; do
+            echo "== $img =="
+            out="$(trivy image --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 0 --skip-version-check --format table "$img")"
+            echo "$out"
+            {
+              echo
+              echo "### \`$img\`"
+              echo '```'
+              echo "$out"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          done

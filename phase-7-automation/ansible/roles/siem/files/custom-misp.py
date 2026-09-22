@@ -25,6 +25,11 @@ try:
 except ImportError:
     sys.exit("misp: python3 requests/urllib3 not installed")
 
+# verify=False below (flagged by Semgrep's disabled-cert-validation rule) is the
+# same accepted, documented risk as custom-iris.py's identical call: MISP's cert
+# is self-signed, and this is siem-01 talking to misp-01 over the internal SOC
+# segment only. See custom-iris.py's fuller note.
+
 # Wazuh passes: [1]=alert file, [2]=api_key, [3]=hook_url (MISP base URL)
 ALERT_FILE = sys.argv[1]
 API_KEY = sys.argv[2]
@@ -80,7 +85,7 @@ def misp_lookup(value):
                      "Content-Type": "application/json"},
             data=json.dumps({"returnFormat": "json", "value": value, "limit": 1,
                              "enforceWarninglist": True}),
-            verify=False, timeout=15)
+            verify=False, timeout=15)  # nosemgrep: python.requests.security.disabled-cert-validation.disabled-cert-validation
         attrs = r.json().get("response", {}).get("Attribute", [])
         return attrs[0] if attrs else None
     except Exception as e:

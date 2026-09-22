@@ -197,7 +197,8 @@ a command you can run locally:
 
 ```bash
 # one-time: the linters CI uses
-pip install "yamllint==1.38.0" "ansible-lint==26.8.0" "ruff==0.15.14" "sigma-cli==3.1.0" "pyyaml==6.0.3"
+pip install "yamllint==1.38.0" "ansible-lint==26.8.0" "ruff==0.15.14" "sigma-cli==3.1.0" \
+            "pyyaml==6.0.3" "defusedxml==0.7.1" "semgrep==1.168.0"
 ansible-galaxy collection install -r phase-7-automation/ansible/collections/requirements.yml
 
 # the checks (each is one CI job)
@@ -206,8 +207,12 @@ yamllint .                                                      # YAML lint
 ansible-lint phase-7-automation/ansible/                        # run from repo root
 sigma check phase-4-detection/sigma/rules/                      # detection schema
 ruff check .                                                    # Python lint
+semgrep scan --config p/python --error --metrics=off            # Python SAST
 shellcheck -S warning $(git ls-files '*.sh')                    # shell lint
 gitleaks detect -c .gitleaks.toml --exit-code 1                 # secret scan
+# Container image scan (Trivy) — informational, not gating; see ci.yml's
+# `containers` job for the full command and why it's scoped to only the 3
+# images phase-5-offense/bloodhound-ce/docker-compose.yml pins directly.
 
 # Wazuh rule/decoder files are multi-root XML fragments — wrap before validating:
 for x in $(git ls-files '*.xml'); do
@@ -218,6 +223,14 @@ done
 Config lives at the repo root: `.yamllint`, `.ansible-lint`, `ruff.toml`,
 `.gitleaks.toml`. `ansible-lint` runs at `profile: basic` and must be invoked
 **from the repo root** so it picks up both `.ansible-lint` and `.yamllint`.
+
+**Semgrep gotcha, found standing this up:** loading two overlapping registry
+configs together (`--config p/security-audit --config p/python`, both of which
+register some of the same underlying rules) makes `# nosemgrep: <rule-id>`
+suppress only one of the two copies — a documented, suppressed finding comes
+back as an unsuppressed duplicate. Use one sufficient config (`p/python`) rather
+than stacking packs, or verify with `--json` that a suppression actually holds
+before trusting it.
 
 ## 7. Docs site — the portfolio pages
 
