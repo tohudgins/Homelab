@@ -31,7 +31,6 @@ SURICATA_RULES = os.path.join(REPO, "phase-7-automation/ansible/roles/router/fil
 PT_TESTS = os.path.join(REPO, "phase-5-offense/purple-team/tests.json")
 AD_VALIDATE = os.path.join(REPO, "phase-5-offense/purple-team/ad-validate.py")
 WRITEUPS_DIR = os.path.join(REPO, "phase-5-offense/attack-detect-writeups")
-DETECTION_CATALOG = os.path.join(REPO, "phase-4-detection/detection-catalog.md")
 
 OUT = os.path.join(HERE, "attack-navigator-layer.json")
 INDEX_OUT = os.path.join(HERE, "technique-index.md")
@@ -111,10 +110,21 @@ def validated_techniques(cov):
     return v
 
 
-def techniques_in_file(path):
+def technique_counts_in_file(path):
+    """technique -> how many times its ID appears in this file. A count, not
+    just a set: a file substantively about a technique typically names its ID
+    more than once (a rule table row, a verification section, a related-links
+    footer), while a passing cross-reference ("the same bug the T1047 fix
+    hit") names it exactly once — the count is the signal that tells those
+    two cases apart.
+    """
     if not os.path.exists(path):
-        return set()
-    return {norm(t) for t in re.findall(r"T[0-9]{4}(?:\.[0-9]{3})?", open(path).read())}
+        return {}
+    counts = {}
+    for t in re.findall(r"T[0-9]{4}(?:\.[0-9]{3})?", open(path).read()):
+        t = norm(t)
+        counts[t] = counts.get(t, 0) + 1
+    return counts
 
 
 # Directory names never worth descending into while looking for narrative docs:
@@ -127,12 +137,17 @@ SKIP_DIRS = {".git", "site", "docs", "attack-coverage", "__pycache__", "node_mod
 
 
 def feature_readmes():
-    """Every other narrative .md in the repo — the feature READMEs
-    (threat-hunting/, deception/, velociraptor/, yara-fim/, sliver-c2/, ...) and
-    standalone writeups (dns-tunneling.md, soc-ops-iris.md, ...) that exist
-    alongside detection-catalog.md and sigma/README.md but aren't linked from
-    the coverage map at all. Excludes DETECTION_CATALOG and WRITEUPS_DIR, which
-    are handled as their own priority tiers.
+    """Every narrative .md in the repo that isn't a curated attack/detect
+    writeup — the feature READMEs (threat-hunting/, deception/, velociraptor/,
+    yara-fim/, sliver-c2/, ...), standalone writeups (dns-tunneling.md,
+    soc-ops-iris.md, ...), and detection-catalog.md itself. Excludes only
+    WRITEUPS_DIR, which is a genuinely higher-priority, deliberately curated
+    tier (see `build_references`) — detection-catalog.md is included here
+    rather than kept as its own always-wins-or-always-loses tier, because it's
+    real content with genuine per-technique table rows, just narrower in
+    scope than its name implies (see its own top-of-file note); it should
+    compete on the same density basis as every other feature doc, not be
+    structurally forced to lose to a single passing mention elsewhere.
     """
     writeups_abs = os.path.abspath(WRITEUPS_DIR)
     for dirpath, dirnames, filenames in os.walk(REPO):
@@ -143,38 +158,68 @@ def feature_readmes():
             if not fname.endswith(".md"):
                 continue
             path = os.path.join(dirpath, fname)
-            if os.path.abspath(path) == DETECTION_CATALOG:
-                continue
             yield path
 
 
-def build_references():
-    """technique -> best repo-relative file to learn it from, in priority order:
-    a dedicated attack/detect writeup (curated, highest signal) > any other
-    feature README/writeup in the repo > the original detection-catalog.md
-    (narrower in scope than its name implies — see its own top-of-file note).
-    Scanned by which techniques each file actually MENTIONS — data-driven the
-    same way the rule coverage above is, so a new writeup is picked up
-    automatically and there's no hand-maintained technique->doc table to drift
-    out of sync as writeups get added.
+def _tier_refs(paths):
+    """technique -> repo-relative file, resolved within one tier (a list of
+    candidate paths). When more than one file in the tier mentions the same
+    technique, the file where that technique is the most CONCENTRATED wins —
+    its mention count divided by how many distinct techniques the file
+    discusses at all. Raw count alone isn't enough: a big multi-technique
+    status file (purple-team.py's own README, covering ~45 techniques across
+    its test-battery write-ups) can rack up as many raw mentions of any one
+    technique as a short file that's actually *about* just that one (e.g.
+    sliver-c2/README.md, ~6 techniques total) purely by being long — density
+    is what tells "this file is specifically about T1071" apart from "this
+    file happens to mention T1071 among dozens of others in passing."
+    Raw count, then path, are the tiebreaks for a genuine density tie.
+
+    Known limitation: density still under-ranks a genuinely comprehensive
+    reference (detection-catalog.md documents ~50 techniques, each with a
+    real per-technique row) against a short file that mentions a technique
+    only once in passing — a handful of techniques resolve to a thinner
+    source than the catalog's own row for that reason. Not worth a more
+    elaborate heuristic to chase the last few percent; every technique still
+    resolves to a file that genuinely mentions it, and nothing points at an
+    unrelated technique's writeup, which was the actual bug this exists to
+    prevent.
     """
+    file_data = []
+    for path in paths:
+        counts = technique_counts_in_file(path)
+        total_distinct = len(counts) or 1
+        file_data.append((path, counts, total_distinct))
+
     refs = {}
-    # Lowest priority first so a higher-priority source overwrites it below.
-    rel = os.path.relpath(DETECTION_CATALOG, REPO)
-    for t in techniques_in_file(DETECTION_CATALOG):
-        refs[t] = rel
-    for path in feature_readmes():
+    best_key = {}
+    for path, counts, total_distinct in file_data:
         rel = os.path.relpath(path, REPO)
-        for t in techniques_in_file(path):
-            refs[t] = rel
+        for t, n in counts.items():
+            key = (n / total_distinct, n, rel)
+            if t not in best_key or key > best_key[t]:
+                best_key[t] = key
+                refs[t] = rel
+    return refs
+
+
+def build_references():
+    """technique -> best repo-relative file to learn it from, in two tiers:
+    a dedicated attack/detect writeup (curated, deliberately highest priority)
+    > every other narrative doc in the repo (feature READMEs and
+    detection-catalog.md, competing with each other on equal footing — see
+    `_tier_refs`). Scanned by which techniques each file actually MENTIONS —
+    data-driven the same way the rule coverage above is, so a new writeup is
+    picked up automatically and there's no hand-maintained technique->doc
+    table to drift out of sync as writeups get added.
+    """
+    writeup_paths = []
     if os.path.isdir(WRITEUPS_DIR):
-        for fname in sorted(os.listdir(WRITEUPS_DIR)):
-            if not fname.endswith(".md"):
-                continue
-            path = os.path.join(WRITEUPS_DIR, fname)
-            rel = os.path.relpath(path, REPO)
-            for t in techniques_in_file(path):
-                refs[t] = rel  # highest priority — applied last, always wins
+        writeup_paths = [os.path.join(WRITEUPS_DIR, f) for f in sorted(os.listdir(WRITEUPS_DIR)) if f.endswith(".md")]
+
+    refs = {}
+    refs.update(_tier_refs(list(feature_readmes())))
+    refs.update(_tier_refs(writeup_paths))  # the curated tier's assignment fully overrides the previous
     return refs
 
 
