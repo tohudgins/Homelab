@@ -20,8 +20,14 @@ ATT&CK **Navigator layer**:
 Coverage now spans **13 of ATT&CK's 14 tactics** — everything except Resource Development — from
 Reconnaissance (T1595.002) and Initial Access (T1190) through Execution, Persistence, Privilege Escalation,
 Defense Evasion, Credential Access, Discovery, Lateral Movement, Collection, Command & Control,
-Exfiltration, and Impact. Full per-technique detail lives in the generated layer itself (load it, per below)
-or in [`../detection-catalog.md`](../detection-catalog.md).
+Exfiltration, and Impact.
+
+**Want to learn a specific technique, not just see that it's covered?** [`technique-index.md`](technique-index.md)
+is the other generated artifact here — one row per technique linking to wherever its real explanation
+actually lives (a dedicated [attack/detect writeup](../../phase-5-offense/attack-detect-writeups/), a feature
+README, or [`detection-catalog.md`](../detection-catalog.md) as the fallback). It exists because those
+explanations are scattered across ~20 files by design (each lives next to the code it documents) — this is
+the one page that ties a technique ID back to where its story is.
 
 ## View it
 

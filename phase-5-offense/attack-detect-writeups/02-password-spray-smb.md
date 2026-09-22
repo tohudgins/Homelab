@@ -1,5 +1,7 @@
 # Attack / Detect: SMB password spraying → a real credential, and the rule that catches it
 
+**Tools used:** Impacket (`impacket-GetNPUsers`), NetExec (`nxc`) — see [`../TOOLS.md`](../TOOLS.md) if either is unfamiliar.
+
 **Phase 5 — Offense in context.** A paired attacker-console / defender-alert walkthrough of a **password
 spray** executed from `atk-01` (Kali, REDTEAM) against the Samba AD DC, and the detection built to catch it.
 Unlike the Kerberoast/DCSync chain (where impacket hits Samba interop walls), this attack **completes

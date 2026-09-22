@@ -1,5 +1,11 @@
 # Phase 4 — Detection Catalog
 
+> **Scope note:** this catalog captures the original Phase 4 build (2026-08-14/15) plus a handful of later
+> additions — it does **not** cover everything the lab detects today. For the full 52-technique picture, and
+> a link to wherever each technique's real explanation lives (this file, a feature README, or a dedicated
+> [attack/detect writeup](../phase-5-offense/attack-detect-writeups/)), start at
+> [`attack-coverage/technique-index.md`](attack-coverage/technique-index.md) instead.
+
 For each technique: run/simulate the attack → observe raw telemetry in Wazuh → write a custom rule in
 `local_rules.xml` → verify it fires on a true positive → attempt evasion → document false-positive risk.
 

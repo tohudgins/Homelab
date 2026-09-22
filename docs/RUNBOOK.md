@@ -6,8 +6,9 @@ operator's guide to driving it.
 
 > Prereqs on the control node (macOS): VMware Fusion, Ansible (`pipx install
 > --include-deps ansible`), the homelab SSH key at `~/.ssh/id_ed25519_homelab`,
-> and the SSH aliases in `~/.ssh/config`. The encrypted ws-01 needs its passphrase
-> in `scripts/.lab-secrets` (git-ignored) as `WS01_VMENC_PASS=...`.
+> and the SSH aliases in `~/.ssh/config`. `scripts/.lab-secrets` (git-ignored) holds
+> every credential these scripts need as plain `VAR=value` lines — see the table in
+> §4 for what goes in it.
 
 ## 1. Start / stop the lab (the `make` control surface)
 
@@ -16,13 +17,15 @@ Everything runs through `scripts/lab.sh`, wrapped by a `Makefile`:
 ```bash
 make status                 # power state of every VM
 make up PROFILE=soc         # start a run profile's VMs
-make converge               # ansible-playbook site.yml (bring config to desired state)
+make converge                     # ansible-playbook site.yml (bring config to desired state)
+make converge PLAY=misp.yml       # or iris.yml / velociraptor.yml — site.yml does NOT include these three
 make down                   # suspend everything running
 make stop                   # clean poweroff of everything
 make snapshot NAME=clean    # snapshot every running VM
 make restore NAME=clean     # revert to a snapshot
 make profiles               # list profiles
 make dashboards              # open SSH tunnels to every lab web UI, one command
+make attack MODE=capstone    # run a simulation with creds from scripts/.lab-secrets (MODE=ad-validate too)
 ```
 
 ### Reaching each tool's web UI
@@ -50,10 +53,14 @@ every tunnel `make dashboards` opened.
 | `networking` | rtr-01 | firewall/segmentation work |
 | `ad` | rtr-01 dc-01 ws-01 | Active Directory / GPO |
 | `soc` | rtr-01 dc-01 ws-01 siem-01 | detection engineering (the daily driver) |
-| `soc-ops` | rtr-01 dc-01 siem-01 misp-01 | case management / threat intel (MISP+IRIS) — swaps ws-01 for misp-01, same 24 GB |
+| `soc-ops` | rtr-01 dc-01 siem-01 misp-01 | case management / threat intel (MISP+IRIS) — swaps ws-01 for misp-01, same 24 GB. **`make converge` alone won't configure misp-01** — run `make converge PLAY=misp.yml` then `PLAY=iris.yml` too |
 | `attack` | + fs-01 atk-01 | attack/detect pairing (suspend dmz first) |
 | `vulnscan` | rtr-01 dc-01 scan-01 | authenticated vuln scanning |
 | `services` | rtr-01 dc-01 siem-01 fs-01 dmz-01 | file/web services + monitoring |
+
+`site.yml` (what plain `make converge` runs) covers rtr-01/dc-01/siem-01/dmz-01/fs-01/scan-01/ws-01 only —
+**misp-01 (MISP + IRIS) and Velociraptor are standalone plays**, run explicitly with `PLAY=misp.yml`,
+`PLAY=iris.yml`, or `PLAY=velociraptor.yml` the first time each is needed.
 
 ## 2. Run a simulation (the detection loop)
 
@@ -66,7 +73,12 @@ make converge                # ensure everything is in its known-good state
 
 1. **Attack** — from atk-01 (`ssh atk-01`): recon, BloodHound collection, execute a
    path (Kerberoasting, the fs-01 credential share, DCSync, etc. — see
-   `phase-5-offense/`).
+   `phase-5-offense/README.md` for which of the 3 offense scripts to reach for). The
+   two that need ws-01's admin credential (`ad-validate.py`, the `run-scenario.sh`
+   capstone) don't need it typed by hand: `make attack MODE=ad-validate` or
+   `MODE=capstone` (`ARGS=--verify` etc.) pulls `ADMIN_USER`/`ADMIN_PW` from
+   `scripts/.lab-secrets` and, for the capstone, syncs the latest script to atk-01
+   first — see `scripts/run-attack.sh`.
 2. **Hunt** — in Wazuh (`make dashboards` → `https://localhost:9001`, or `ssh siem-01`):
    find the telemetry, confirm the detection fired, or write a new rule (`phase-4-detection/`).
 3. **Evade** — try to slip past your own rule; document what worked.
@@ -154,6 +166,18 @@ stanza to the `router` role, converge rtr-01.
 | Attack writeups + BloodHound | `phase-5-offense/` |
 | NSM / PCAP analysis | `phase-6-nsm/` |
 | **Credentials, per-VM config** | the second-brain `Virtual Machines` note (not in git) |
+
+### Environment variables / secrets
+
+Every credential a script needs goes in `scripts/.lab-secrets` (git-ignored, plain
+`VAR=value` lines) — `lab.sh`, `run-attack.sh`, and `ad-validate.py` all read it
+the same way. Actual values live in the vault's `Virtual Machines` note, never here.
+
+| Variable | Used by | Purpose |
+|---|---|---|
+| `WS01_VMENC_PASS` | `lab.sh` (start/stop/suspend) | ws-01's VM-encryption passphrase — Fusion forces this on for a Windows 11 guest's vTPM |
+| `ADMIN_USER` / `ADMIN_PW` | `run-attack.sh`, `ad-validate.py`, `run-scenario.sh` | ws-01's local-admin Windows credential — gates the WMI/WinRM/PsExec lateral-movement scenarios; skip cleanly (not fail) when unset |
+| `SPRAY_PW` | `run-scenario.sh` | the weak password the capstone's password-spray phase guesses; defaults to a known lab value if unset |
 
 ## 5. End a session
 

@@ -66,6 +66,7 @@ nav:
   - Phase 4 · Detection Engineering:
       - Detection Catalog: phase-4-detection/detection-catalog.md
       - ATT&CK Coverage Map: phase-4-detection/attack-coverage/README.md
+      - Technique Index (start here to learn one): phase-4-detection/attack-coverage/technique-index.md
       - Sigma Detection-as-Code: phase-4-detection/sigma/README.md
       - Threat Hunting: phase-4-detection/threat-hunting/README.md
       - Deception (Honeytoken + Canary): phase-4-detection/deception/README.md
@@ -77,6 +78,8 @@ nav:
       - Vulnerability Management: phase-4-detection/vulnerability-management-active-vs-passive.md
       - Compliance — SCA/CIS: phase-4-detection/compliance-sca-cis.md
   - Phase 5 · Offense in Context:
+      - Overview (which script do I run?): phase-5-offense/README.md
+      - Offensive Tools Glossary: phase-5-offense/TOOLS.md
       - Capstone — APT Scenario: phase-5-offense/apt-scenario/README.md
       - Attack / Detect Writeups:
           - "01 · Credential Theft → DCSync": phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md

@@ -1,5 +1,7 @@
 # Attack / Detect: Windows lateral movement — WMI, WinRM, PsExec
 
+**Tools used:** Impacket (`impacket-wmiexec`, `impacket-psexec`), NetExec (`nxc`) — see [`../TOOLS.md`](../TOOLS.md) if either is unfamiliar.
+
 **Phase 5 — Offense in context.** The lab detected one lateral-movement technique (T1021.002, SMB admin
 shares) — thin for an AD-centric lab, since the three most common remote-execution methods an operator
 reaches for after landing a credential were uncovered. This adds them, authored as **Sigma** and compiled to

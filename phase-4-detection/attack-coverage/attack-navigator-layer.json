@@ -12,364 +12,364 @@
       "techniqueID": "T1003.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100525, 100526",
+      "comment": "VALIDATED (purple-team) \u2014 100525, 100526 | learn: phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md",
       "enabled": true
     },
     {
       "techniqueID": "T1003.006",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100080",
+      "comment": "VALIDATED (purple-team) \u2014 100080 | learn: phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md",
       "enabled": true
     },
     {
       "techniqueID": "T1007",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100507, 100508",
+      "comment": "VALIDATED (purple-team) \u2014 100507, 100508 | learn: phase-4-detection/sigma/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1016",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100100, 100101",
+      "comment": "VALIDATED (purple-team) \u2014 100100, 100101 | learn: phase-5-offense/apt-scenario/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1018",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100110",
+      "comment": "VALIDATED (purple-team) \u2014 100110 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1021.002",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100119, 100120",
+      "comment": "VALIDATED (purple-team) \u2014 100119, 100120 | learn: phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md",
       "enabled": true
     },
     {
       "techniqueID": "T1021.006",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100516",
+      "comment": "VALIDATED (purple-team) \u2014 100516 | learn: phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md",
       "enabled": true
     },
     {
       "techniqueID": "T1027",
       "score": 50,
       "color": "#66bb6a",
-      "comment": "detection \u2014 100500, 100501",
+      "comment": "detection \u2014 100500, 100501 | learn: phase-4-detection/sigma/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1033",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100504, 100505",
+      "comment": "VALIDATED (purple-team) \u2014 100504, 100505 | learn: phase-4-detection/sigma/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1047",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100515, 100527",
+      "comment": "VALIDATED (purple-team) \u2014 100515, 100527 | learn: phase-5-offense/attack-detect-writeups/05-linux-sudo-privesc-t1548.003.md",
       "enabled": true
     },
     {
       "techniqueID": "T1048.003",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100443, suricata:9100010",
+      "comment": "VALIDATED (purple-team) \u2014 100443, suricata:9100010 | learn: phase-5-offense/apt-scenario/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1049",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100102, 100103",
+      "comment": "VALIDATED (purple-team) \u2014 100102, 100103 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1053.003",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100050",
+      "comment": "VALIDATED (purple-team) \u2014 100050 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1057",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100502, 100503",
+      "comment": "VALIDATED (purple-team) \u2014 100502, 100503 | learn: phase-4-detection/sigma/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1059.004",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100200",
+      "comment": "VALIDATED (purple-team) \u2014 100200 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1069.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100106, 100107",
+      "comment": "VALIDATED (purple-team) \u2014 100106, 100107 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1069.002",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100109",
+      "comment": "VALIDATED (purple-team) \u2014 100109 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1071",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100210, 100211, 100301, suricata:9100002",
+      "comment": "VALIDATED (purple-team) \u2014 100210, 100211, 100301, suricata:9100002 | learn: phase-5-offense/sliver-c2/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1071.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100200, suricata:9100001",
+      "comment": "VALIDATED (purple-team) \u2014 100200, suricata:9100001 | learn: phase-5-offense/sliver-c2/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1071.004",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100310, 100443, suricata:9100010",
+      "comment": "VALIDATED (purple-team) \u2014 100310, 100443, suricata:9100010 | learn: phase-7-automation/windows-config/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1078",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100421",
+      "comment": "VALIDATED (purple-team) \u2014 100421 | learn: phase-4-detection/deception/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1082",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100509, 100510",
+      "comment": "VALIDATED (purple-team) \u2014 100509, 100510 | learn: phase-4-detection/sigma/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1087.002",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100108, 100112",
+      "comment": "VALIDATED (purple-team) \u2014 100108, 100112 | learn: phase-5-offense/apt-scenario/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1098",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100015, 100051",
+      "comment": "VALIDATED (purple-team) \u2014 100015, 100051 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1098.007",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100015",
+      "comment": "VALIDATED (purple-team) \u2014 100015 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1105",
       "score": 50,
       "color": "#66bb6a",
-      "comment": "detection \u2014 100500, 100501",
+      "comment": "detection \u2014 100500, 100501 | learn: phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md",
       "enabled": true
     },
     {
       "techniqueID": "T1110",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100010, 100011, 100012, 100013, 100041, 100401",
+      "comment": "VALIDATED (purple-team) \u2014 100010, 100011, 100012, 100013, 100041, 100401 | learn: phase-5-offense/attack-detect-writeups/02-password-spray-smb.md",
       "enabled": true
     },
     {
       "techniqueID": "T1110.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100010, 100011, 100012, 100013, 100040, 100041, 100400, 100530",
+      "comment": "VALIDATED (purple-team) \u2014 100010, 100011, 100012, 100013, 100040, 100041, 100400, 100530 | learn: phase-5-offense/attack-detect-writeups/02-password-spray-smb.md",
       "enabled": true
     },
     {
       "techniqueID": "T1110.003",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100401",
+      "comment": "VALIDATED (purple-team) \u2014 100401 | learn: phase-5-offense/attack-detect-writeups/02-password-spray-smb.md",
       "enabled": true
     },
     {
       "techniqueID": "T1112",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100117, 100118",
+      "comment": "VALIDATED (purple-team) \u2014 100117, 100118 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1136.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100051",
+      "comment": "VALIDATED (purple-team) \u2014 100051 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1190",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100440, 100442, suricata:9100020, suricata:9100021, suricata:9100022, suricata:9100023",
+      "comment": "VALIDATED (purple-team) \u2014 100440, 100442, suricata:9100020, suricata:9100021, suricata:9100022, suricata:9100023 | learn: phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md",
       "enabled": true
     },
     {
       "techniqueID": "T1197",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100511, 100512",
+      "comment": "VALIDATED (purple-team) \u2014 100511, 100512 | learn: phase-4-detection/sigma/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1201",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100113",
+      "comment": "VALIDATED (purple-team) \u2014 100113 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1204.002",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100200, 100460",
+      "comment": "VALIDATED (purple-team) \u2014 100200, 100460 | learn: phase-4-detection/yara-fim/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1218.005",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100116",
+      "comment": "VALIDATED (purple-team) \u2014 100116 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1218.010",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100114",
+      "comment": "VALIDATED (purple-team) \u2014 100114 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1218.011",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100115",
+      "comment": "VALIDATED (purple-team) \u2014 100115 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1482",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100111",
+      "comment": "VALIDATED (purple-team) \u2014 100111 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1484.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100020",
+      "comment": "VALIDATED (purple-team) \u2014 100020 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1486",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100430, 100431",
+      "comment": "VALIDATED (purple-team) \u2014 100430, 100431 | learn: phase-4-detection/deception/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1490",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100520, 100521, 100522, 100523, 100524",
+      "comment": "VALIDATED (purple-team) \u2014 100520, 100521, 100522, 100523, 100524 | learn: phase-4-detection/sigma/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1518.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100104, 100105",
+      "comment": "VALIDATED (purple-team) \u2014 100104, 100105 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1547.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100070",
+      "comment": "VALIDATED (purple-team) \u2014 100070 | learn: phase-4-detection/velociraptor/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1548.002",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100117, 100118",
+      "comment": "VALIDATED (purple-team) \u2014 100117, 100118 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1548.003",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100540",
+      "comment": "VALIDATED (purple-team) \u2014 100540 | learn: phase-5-offense/attack-detect-writeups/05-linux-sudo-privesc-t1548.003.md",
       "enabled": true
     },
     {
       "techniqueID": "T1552.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100090",
+      "comment": "VALIDATED (purple-team) \u2014 100090 | learn: phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md",
       "enabled": true
     },
     {
       "techniqueID": "T1558.003",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100031, 100420",
+      "comment": "VALIDATED (purple-team) \u2014 100031, 100420 | learn: phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md",
       "enabled": true
     },
     {
       "techniqueID": "T1560.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100517, 100518, 100519",
+      "comment": "VALIDATED (purple-team) \u2014 100517, 100518, 100519 | learn: phase-4-detection/sigma/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1562.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100060, 100506",
+      "comment": "VALIDATED (purple-team) \u2014 100060, 100506 | learn: phase-4-detection/sigma/README.md",
       "enabled": true
     },
     {
       "techniqueID": "T1569.002",
       "score": 50,
       "color": "#66bb6a",
-      "comment": "detection \u2014 100513, 100514",
+      "comment": "detection \u2014 100513, 100514 | learn: phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md",
       "enabled": true
     },
     {
       "techniqueID": "T1595.002",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100441, suricata:9100024",
+      "comment": "VALIDATED (purple-team) \u2014 100441, suricata:9100024 | learn: phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md",
       "enabled": true
     }
   ],

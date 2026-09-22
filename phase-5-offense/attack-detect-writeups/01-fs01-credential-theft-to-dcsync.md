@@ -1,5 +1,7 @@
 # Attack / Detect: fs-01 credential theft → Backup Operators → DCSync
 
+**Tools used:** Impacket (`impacket-GetUserSPNs`), NetExec (`nxc`), BloodHound CE — see [`../TOOLS.md`](../TOOLS.md) if any of these are unfamiliar.
+
 **Phase 5 — Offense in context.** A paired attacker-console / defender-alert walkthrough of one attack
 path that BloodHound surfaces in this lab, executed from `atk-01` (Kali, REDTEAM segment) and hunted in
 Wazuh on `siem-01`. It also documents — honestly — where the standard Linux offensive tooling does and

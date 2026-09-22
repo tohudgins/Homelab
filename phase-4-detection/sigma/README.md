@@ -190,4 +190,12 @@ structurally-identical tasklist/whoami rules fire live.
 1. Drop a Sigma `.yml` in `rules/` (Windows `process_creation` or `ps_script`; add a `LOGSOURCE` entry for a new category).
 2. `./sigma-to-wazuh.py` → regenerates `sigma_local_rules.xml` + `id-map.json`.
 3. `./sigma-selftest.py` (add a case for it) and, from the ansible dir, `ansible-playbook siem.yml -l siem-01`.
-4. `phase-5-offense/purple-team/purple-team.py` to prove it fires; `attack-coverage/generate-coverage.py` to refresh the map.
+4. Add a scenario/test entry so it's provable, not just deployed — `../../phase-5-offense/purple-team/README.md`'s
+   ["Extending" section](../../phase-5-offense/purple-team/README.md#extending) walks the two paths (a local
+   ART atomic → `tests.json`; anything else, including inbound/lateral techniques no local atomic can fake →
+   `ad-validate.py`'s `SCENARIOS`) and the exact object shape each needs.
+5. Run that harness (`purple-team.py` or `make attack MODE=ad-validate`) and confirm a real PASS.
+6. Only then, `attack-coverage/generate-coverage.py` to refresh the map — regenerating *before* step 5 actually
+   passes reports a technique "validated" that has never fired; see the `README.md`'s own note on this failure
+   mode. This also regenerates `attack-coverage/technique-index.md`, so link a new writeup (if you wrote one)
+   into that flow for free.
