@@ -21,11 +21,25 @@ scan_compose_project: greenbone-community-edition
 # current. An nginx reverse proxy now fronts the UI and terminates TLS.
 scan_compose_url: "https://greenbone.github.io/docs/latest/_static/docker-compose.yml"
 
-# Greenbone Security Assistant (the web UI). The compose binds it to 127.0.0.1
-# only — reach it from the Mac with an SSH tunnel through the rtr-01 jump host:
-#   ssh -J tohudgins@<rtr-wan> -L 9392:127.0.0.1:9392 tohudgins@10.10.40.20
-# then browse https://127.0.0.1:9392  (self-signed).
-scan_gsa_port: 9392
+# Greenbone Security Assistant (the web UI). The compose binds nginx to
+# 127.0.0.1 on BOTH 443 and 9392, but they aren't equivalent: gvm-config (the
+# one-shot init container that writes nginx's config) always regenerates
+# nginx's conf.d **unconditionally** on every start — no existence guard, unlike
+# its TLS-cert step just below, which does have one — using its own tool's
+# default template, which terminates TLS on 443 and makes 9392 a plain-HTTP
+# 301-redirect-to-443 compat port (for anyone still muscle-memory-typing the
+# classic GVM/OpenVAS port). A raw `https://` request to 9392 sends a TLS
+# ClientHello straight at that plain listener, which nginx logs as a garbled
+# "request" and refuses — confirmed 2026-09-21 while root-causing the
+# "Greenbone intermittently serves plain HTTP on 9392" report from 2026-09-20;
+# it isn't intermittent, it's just that gvm-config only re-templates conf.d
+# (and so only surfaces this) when something restarts it — see
+# `scan-01: nginx-9392-redirect` in Build Progress. 443 is the real TLS port.
+# Reach it from the Mac with an SSH tunnel through the rtr-01 jump host:
+#   ssh -J tohudgins@<rtr-wan> -L 9392:127.0.0.1:443 tohudgins@10.10.40.20
+# then browse https://127.0.0.1:9392  (self-signed) — `make dashboards` does
+# this same local-9392-to-remote-443 remap already.
+scan_gsa_port: 443
 
 # Lab admin credential for the GSA web UI / gvmd. A deliberate, documented lab
 # secret (recorded in the vault's Virtual Machines note), same posture as the

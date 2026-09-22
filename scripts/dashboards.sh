@@ -11,7 +11,10 @@
 #   siem-01  -> Velociraptor GUI  https://localhost:8889  (remote :8889)
 #   misp-01  -> MISP              https://localhost:9002  (remote :443)
 #   misp-01  -> DFIR-IRIS         https://localhost:8443  (remote :8443)
-#   scan-01  -> Greenbone/OpenVAS https://localhost:9392  (remote :9392)
+#   scan-01  -> Greenbone/OpenVAS https://localhost:9392  (remote :443 — nginx's
+#                own :9392 is a plain-HTTP redirect-to-:443 compat port, not a
+#                second TLS listener; see phase-7-automation/ansible/roles/scan
+#                /defaults/main.yml for how that was root-caused)
 #
 # BloodHound CE is deliberately NOT here: it runs locally via `docker compose`
 # (phase-5-offense/bloodhound-ce/), already at http://localhost:8080 with no
@@ -37,7 +40,7 @@ open_tunnel() {
 echo "Opening tunnels (through rtr-01, same as SSH)..."
 open_tunnel siem-01 -L 9001:127.0.0.1:443 -L 8889:127.0.0.1:8889
 open_tunnel misp-01 -L 9002:127.0.0.1:443 -L 8443:127.0.0.1:8443
-open_tunnel scan-01 -L 9392:127.0.0.1:9392
+open_tunnel scan-01 -L 9392:127.0.0.1:443
 
 sleep 1
 cat <<'EOF'

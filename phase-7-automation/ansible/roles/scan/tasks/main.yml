@@ -206,7 +206,9 @@
   ansible.builtin.debug:
     msg: >-
       Greenbone CE up on scan-01. GSA answering on 127.0.0.1:{{ scan_gsa_port }}
-      (tunnel from the Mac to reach it). Admin user '{{ greenbone_admin_user }}'
+      (the real TLS port — 9392 is gvm-config's own plain-HTTP redirect-to-443
+      compat port, not a second TLS listener; `make dashboards` already tunnels
+      the Mac's localhost:9392 to this host's :443). Admin user '{{ greenbone_admin_user }}'
       {{ 'created' if scan_admin_created is changed else 'already present' }}.
       Feed sync (SCAP/CERT/VT/NOTUS) runs in the background and can take 20-40 min
       the first time — check Administration > Feed Status in the UI.

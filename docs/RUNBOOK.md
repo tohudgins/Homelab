@@ -103,8 +103,10 @@ ssh scan-01 'sudo /opt/greenbone/greenbone-scan.sh status'  # watch progress
   ws-01 (`10.10.10.10,10.10.10.50`) and a **"Full and fast" Task**, idempotently,
   then starts it. Reachable because rtr-01 allows **REDTEAM → CORP**.
 - The **GSA web UI** (Scans › Tasks, reports, CVE detail) is on scan-01 at
-  `127.0.0.1:9392` — `make dashboards` (§1) tunnels it to `https://localhost:9392`
-  (admin / see the vault's Virtual Machines note).
+  `127.0.0.1:443` (nginx's real TLS port — its own `:9392` is just a plain-HTTP
+  redirect-to-`:443` compat port, not a second TLS listener) — `make dashboards`
+  (§1) tunnels it to `https://localhost:9392` (admin / see the vault's Virtual
+  Machines note).
 - **First run only:** the NVT/SCAP/CERT/GVMD_DATA feeds must finish syncing
   (~20-40 min after the stack first comes up) before scan configs exist. `<get_feeds/>`
   with no `<currently_syncing>` means ready; the launcher says so if they aren't.

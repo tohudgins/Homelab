@@ -138,4 +138,4 @@ echo "== Start =="
 gmp "<start_task task_id=\"${TASK_ID}\"/>" | grep -o 'status="[0-9]*"[^>]*' | head -1 || true
 echo
 echo "Scan launched. Watch it with:  sudo $DEPLOY_DIR/$(basename "$0") status"
-echo "Or in the GSA web UI (Scans > Tasks) via an SSH tunnel to 127.0.0.1:9392."
+echo "Or in the GSA web UI (Scans > Tasks) — from the Mac: 'make dashboards', then https://localhost:9392."
