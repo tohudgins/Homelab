@@ -1,0 +1,10 @@
+---
+- name: Restart osqueryd
+  ansible.builtin.systemd:
+    name: osqueryd
+    state: restarted
+
+- name: Restart wazuh-agent
+  ansible.builtin.systemd:
+    name: wazuh-agent
+    state: restarted

@@ -1,0 +1,17 @@
+---
+# osquery — continuous, scheduled fleet-state querying (SQL over OS state: processes,
+# listening ports, users, crontab, ...), distinct from Velociraptor's on-demand VQL
+# hunts. Deployed to dc-01 and fs-01 (Ubuntu/arm64) via the official osquery.io apt
+# repo — real upstream packages, not vendored. Ships as its own systemd service
+# (osqueryd, the package's own default flags/config paths) rather than run as a Wazuh
+# subprocess, matching how osquery is actually run in production fleets (a
+# long-lived agent whose output any log pipeline can consume) — Wazuh's osquery wodle
+# just tails the results log (run_daemon: no) rather than managing the process.
+
+osquery_apt_key_url: "https://pkg.osquery.io/deb/pubkey.gpg"
+osquery_apt_keyring: /usr/share/keyrings/osquery.gpg
+osquery_apt_repo: "deb [arch=arm64,amd64 signed-by={{ osquery_apt_keyring }}] https://pkg.osquery.io/deb deb main"
+
+osquery_config_path: /etc/osquery/osquery.conf
+osquery_flags_path: /etc/osquery/osquery.flags
+osquery_results_log: /var/log/osquery/osqueryd.results.log

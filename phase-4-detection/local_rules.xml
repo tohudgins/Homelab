@@ -1309,3 +1309,99 @@
   </rule>
 
 </group>
+
+<!-- osquery — promoting continuous-schedule differentials to real alerts (2026-09-22).
+     Closes the boundary documented in phase-4-detection/osquery/README.md: stock rule
+     24010 (level 3, group "osquery") fires identically for EVERY scheduled query result,
+     so a genuinely new artifact ("added" row) looked exactly like routine snapshot noise.
+     Children of 24010 (same idiom as 100527/100540 above — a top-level sibling anchored
+     on the same group as 24010 would silently lose the one-rule-per-event race to it,
+     the same class of bug already documented on those two rules).
+
+     Real noise found live before writing these: listening_ports' own "added" stream was
+     76% garbage (194/256 events on dc-01) — every AF_UNIX socket (family=1) osquery's
+     listening_ports table returns comes back with port=0/protocol=0/address="", and each
+     one flaps added/removed on its own schedule, unrelated to any real network exposure
+     change. Confirmed via osqueryi (`family` column) before touching the rule. Fixed at
+     the SOURCE, not by filtering it out per-rule: osquery.conf's listening_ports query
+     now has `WHERE family != 1`, so every consumer of this stream (not just 100550) gets
+     the real signal without the churn, and the base 24010 visibility log for this query
+     roughly quarters in volume as a side effect. Verified live on redeploy: osquery diffs
+     against its last snapshot by query NAME, not by SQL text, so the already-open real
+     ports (SSH/SMB/DNS/etc., unchanged before and after the WHERE clause) produced no
+     spurious "added" burst at all — only the 163 now-excluded AF_UNIX rows fired a
+     one-time "removed" (correctly un-alerted; only "added" is promoted) as osquery
+     reconciled its baseline to the narrower query. Cleaner than expected, not a
+     coincidence to rely on unverified — confirmed on dc-01 by unixTime-filtering the
+     results log around the exact restart timestamp.
+
+     All three rules below verified against real, live, non-synthetic events on dc-01
+     (2026-09-22): 100551 fired on a real `crontab -e` addition, 100552 on a real
+     `useradd`, and 100550 on a real `python3 -m http.server` bound to 0.0.0.0:8899 —
+     each removed/cleaned up immediately after confirming the alert in siem-01's archive.
+
+     `processes` and `logged_in_users` are deliberately NOT promoted here: processes
+     churns constantly by design (see the README's query-pack table) and would need real
+     baselining/allow-listing to be alertable without paging on kernel worker threads;
+     logged_in_users adds a row on every ordinary SSH login in a lab where that happens
+     constantly, so "added" there isn't a discriminating signal on its own either. Both
+     stay visibility-only under 24010, same as before. -->
+<group name="local,osquery,">
+
+  <!-- A genuinely new listening socket. Can't tell from osquery alone whether it's a
+       persistent unit (T1543.002) or an ad hoc interactive listener (nc/python -m
+       http.server/a reverse shell, T1059.004) — both tagged, same honest
+       can't-distinguish tradeoff as 100051's account-vs-credential dual tag. Level 6,
+       not "attack": a new listener is also exactly what a legitimate service restart or
+       fresh install produces, so this is a hunt signal, not a confirmed positive. -->
+  <rule id="100550" level="6">
+    <if_sid>24010</if_sid>
+    <field name="osquery.name">^listening_ports$</field>
+    <field name="osquery.action">^added$</field>
+    <options>no_full_log</options>
+    <description>osquery: new listening port — pid $(osquery.columns.pid) on $(osquery.columns.address):$(osquery.columns.port)/$(osquery.columns.protocol)</description>
+    <mitre>
+      <id>T1543.002</id>
+      <id>T1059.004</id>
+    </mitre>
+    <group>persistence,execution,</group>
+  </rule>
+
+  <!-- A genuinely new cron entry, same tactic 100050 already covers via FIM on the cron
+       PATHS. This is a second, independent telemetry source on the cron TABLE CONTENTS —
+       corroborating, not a duplicate: 100050 fires on any write to a cron file (routine
+       package installs included) with no visibility into what changed; this carries the
+       actual new command and schedule. Level 6 for the same reason as 100550 — a fresh
+       apt/certbot/logrotate timer is a legitimate everyday cause of this event. -->
+  <rule id="100551" level="6">
+    <if_sid>24010</if_sid>
+    <field name="osquery.name">^crontab$</field>
+    <field name="osquery.action">^added$</field>
+    <options>no_full_log</options>
+    <description>osquery: new cron entry — $(osquery.columns.command) (schedule: $(osquery.columns.minute) $(osquery.columns.hour) $(osquery.columns.day_of_month) $(osquery.columns.month) $(osquery.columns.day_of_week))</description>
+    <mitre>
+      <id>T1053.003</id>
+    </mitre>
+    <group>persistence,attack,</group>
+  </rule>
+
+  <!-- A genuinely new local account (uid>=1000 or root, matching the schedule's own
+       WHERE clause) — the osquery-table counterpart to 100051's passwd/shadow FIM rule,
+       same T1136.001/T1098 can't-distinguish-create-from-modify tradeoff. Level 10, one
+       tier below 100051's 12: account creation is rarer and more deliberate than a
+       listening port or cron line appearing, but still not unconditionally an attack (a
+       real admin provisioning a new service account produces the identical event). -->
+  <rule id="100552" level="10">
+    <if_sid>24010</if_sid>
+    <field name="osquery.name">^users$</field>
+    <field name="osquery.action">^added$</field>
+    <options>no_full_log</options>
+    <description>osquery: new local account — $(osquery.columns.username) (uid=$(osquery.columns.uid), shell=$(osquery.columns.shell))</description>
+    <mitre>
+      <id>T1136.001</id>
+      <id>T1098</id>
+    </mitre>
+    <group>persistence,attack,</group>
+  </rule>
+
+</group>

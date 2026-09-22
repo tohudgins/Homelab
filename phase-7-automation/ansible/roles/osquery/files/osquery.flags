@@ -1,0 +1,4 @@
+--logger_plugin=filesystem
+--logger_path=/var/log/osquery
+--disable_events=false
+--utc

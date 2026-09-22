@@ -18,7 +18,7 @@ Everything runs through `scripts/lab.sh`, wrapped by a `Makefile`:
 make status                 # power state of every VM
 make up PROFILE=soc         # start a run profile's VMs
 make converge                     # ansible-playbook site.yml (bring config to desired state)
-make converge PLAY=misp.yml       # or iris.yml / velociraptor.yml — site.yml does NOT include these three
+make converge PLAY=misp.yml       # or iris.yml / velociraptor.yml / osquery.yml — site.yml does NOT include these
 make down                   # suspend everything running
 make stop                   # clean poweroff of everything
 make snapshot NAME=clean    # snapshot every running VM
@@ -59,8 +59,9 @@ every tunnel `make dashboards` opened.
 | `services` | rtr-01 dc-01 siem-01 fs-01 dmz-01 | file/web services + monitoring |
 
 `site.yml` (what plain `make converge` runs) covers rtr-01/dc-01/siem-01/dmz-01/fs-01/scan-01/ws-01 only —
-**misp-01 (MISP + IRIS) and Velociraptor are standalone plays**, run explicitly with `PLAY=misp.yml`,
-`PLAY=iris.yml`, or `PLAY=velociraptor.yml` the first time each is needed.
+**misp-01 (MISP + IRIS), Velociraptor, and osquery are standalone plays**, run explicitly with
+`PLAY=misp.yml`, `PLAY=iris.yml`, `PLAY=velociraptor.yml`, or `PLAY=osquery.yml` the first time each is
+needed.
 
 ## 2. Run a simulation (the detection loop)
 

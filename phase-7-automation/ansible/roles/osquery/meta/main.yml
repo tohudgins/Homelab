@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: osquery
+  author: Tyler Hudgins
+  license: MIT
+  description: >
+    osquery — continuous scheduled fleet-state querying (SQL over OS state) on
+    dc-01/fs-01, official arm64 apt packages, fed into Wazuh via its osquery wodle
+    in log-tail mode. Distinct from Velociraptor's on-demand VQL hunts.
+  min_ansible_version: "2.14"
+dependencies: []

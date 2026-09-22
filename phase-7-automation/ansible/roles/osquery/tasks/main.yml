@@ -1,0 +1,76 @@
+---
+# osquery — install from the official upstream apt repo (real arm64 packages,
+# confirmed: pkg.osquery.io/deb redirects to pkg.osquerypackages.com, which
+# publishes an arm64 Packages index alongside amd64), configure the scheduled
+# query pack, run it as its own systemd service, then feed the results log to
+# Wazuh in tail-only mode.
+
+- name: Add the osquery apt signing key
+  ansible.builtin.get_url:
+    url: "{{ osquery_apt_key_url }}"
+    dest: /tmp/osquery-pubkey.gpg
+    mode: "0644"
+
+- name: Dearmor the osquery signing key into the apt keyring
+  ansible.builtin.command: gpg --dearmor -o {{ osquery_apt_keyring }} /tmp/osquery-pubkey.gpg
+  args:
+    creates: "{{ osquery_apt_keyring }}"
+
+- name: Add the osquery apt repo
+  ansible.builtin.copy:
+    content: "{{ osquery_apt_repo }}\n"
+    dest: /etc/apt/sources.list.d/osquery.list
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install osquery
+  ansible.builtin.apt:
+    name: osquery
+    state: present
+    update_cache: true
+
+- name: Deploy the scheduled query pack (osquery.conf)
+  ansible.builtin.copy:
+    src: osquery.conf
+    dest: "{{ osquery_config_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart osqueryd
+
+- name: Deploy osqueryd's persistent flags (logger plugin/path, UTC timestamps)
+  ansible.builtin.copy:
+    src: osquery.flags
+    dest: "{{ osquery_flags_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart osqueryd
+
+- name: Enable and start osqueryd
+  ansible.builtin.systemd:
+    name: osqueryd
+    enabled: true
+    state: started
+
+# Wazuh's osquery wodle in "monitor an externally-run osqueryd" mode: run_daemon:no
+# means the agent never spawns/manages the osqueryd process itself (that's this
+# role's systemd service, above) — it only tails log_path and forwards each result
+# line as a Wazuh event. config_path is still required by the wodle's schema even
+# though it's unused in this mode.
+- name: Feed osquery's results log to Wazuh (monitor-only, doesn't manage the daemon)
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: "<!-- {mark} ANSIBLE MANAGED: osquery wodle -->"
+    block: |
+      <ossec_config>
+        <wodle name="osquery">
+          <disabled>no</disabled>
+          <run_daemon>no</run_daemon>
+          <log_path>{{ osquery_results_log }}</log_path>
+          <config_path>{{ osquery_config_path }}</config_path>
+          <add_labels>yes</add_labels>
+        </wodle>
+      </ossec_config>
+  notify: Restart wazuh-agent

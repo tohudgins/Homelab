@@ -1,0 +1,9 @@
+---
+# Deploy osquery (continuous fleet-state querying) to the Linux hosts, then feed its
+# results log into Wazuh. Standalone play like misp.yml/iris.yml/velociraptor.yml —
+# not part of site.yml, run explicitly: `make converge PLAY=osquery.yml`.
+- name: Osquery — Linux fleet (dc-01, fs-01)
+  hosts: domain_controllers:fileservers
+  become: true
+  roles:
+    - osquery

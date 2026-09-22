@@ -71,6 +71,7 @@ nav:
       - Threat Hunting: phase-4-detection/threat-hunting/README.md
       - Deception (Honeytoken + Canary): phase-4-detection/deception/README.md
       - Velociraptor DFIR: phase-4-detection/velociraptor/README.md
+      - osquery Fleet Visibility: phase-4-detection/osquery/README.md
       - YARA-on-FIM: phase-4-detection/yara-fim/README.md
       - SOC Ops — DFIR-IRIS: phase-4-detection/soc-ops-iris.md
       - Threat Intel — MISP Integration: phase-4-detection/threat-intel-misp-integration.md
