@@ -27,6 +27,22 @@ assumed — see `attack-detect-writeups/08-sam-dump-credential-cracking-t1003.00
 does the actual cracking. Both read the same hash-format conventions (mode `1000`/`--format=NT`
 for a Windows NTLM hash, mode `13100` for a Kerberoast TGS ticket).
 
+## Metasploit Framework
+
+The canonical exploitation/post-exploitation framework — a library of modules (exploits,
+auxiliary scanners, payloads) driven interactively through `msfconsole`, with a Postgres-backed
+database tracking hosts/services/credentials/loot across a whole engagement instead of one
+throwaway command at a time. Ships bundled with Kali's `kali-linux-headless` metapackage (no
+separate install needed on atk-01) — confirmed arm64-native, no emulation: `Framework Version:
+6.5.3-dev` running directly on Kali ARM64. The database backend isn't wired up by default;
+`sudo msfdb init` creates the `msf`/`msf_test` databases and `sudo systemctl enable postgresql`
+makes it survive a reboot/suspend-resume, both one-time setup steps on a fresh atk-01 build.
+Verified end-to-end with `db_nmap` against dc-01 — scan results land directly in `hosts`/
+`services`, the same workspace a later `use exploit/...; set RHOSTS ...` would target. Genuinely
+overlaps with what Impacket/NetExec already do against this lab's Samba AD DC — the value here
+isn't new attack surface, it's fluency with the single most industry-referenced pentesting tool,
+run interactively rather than scripted.
+
 ## NetExec (`nxc`)
 
 The actively-maintained fork of CrackMapExec — a Swiss-army-knife for authenticating against

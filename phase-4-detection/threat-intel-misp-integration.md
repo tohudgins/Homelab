@@ -1,7 +1,7 @@
 # MISP → Wazuh integration — the TIP as the live IOC engine behind the SIEM
 
 The static Wazuh CDB list (`threat-intel-cdb-enrichment.md`) proved the *concept* of reputation enrichment,
-but a flat blocklist isn't what a SOC runs. This is the professional version: **[MISP](misp-01)**, a real
+but a flat blocklist isn't what a SOC runs. This is the professional version: **MISP**, a real
 Threat Intelligence Platform correlating 43k+ IOCs from live feeds, wired to Wazuh so **every alert is checked
 against MISP in real time**. It supersedes the CDB rules (100210/100211) with a platform that can correlate,
 share, expire, and warninglist indicators.

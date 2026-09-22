@@ -107,8 +107,9 @@ writable") until `LocalAccountTokenFilterPolicy=1` was set — the standard Micr
 token-filtering of local (non-`Administrator`) accounts; `localadmin` is exactly that. All four fixes were
 applied live over SSH that night; **now codified into the `windows` Ansible role** (`roles/windows/tasks/main.yml`)
 so a rebuild doesn't silently lose them — idempotent check-then-fix tasks for the firewall rule groups, the
-network profile, the SMB-In scope, and the registry value. Syntax-checked and lint-clean; not yet re-converged
-against a live ws-01 (the lab was down when this was written) — that's the remaining step to actually call it done.
+network profile, the SMB-In scope, and the registry value. **Re-converged against a live ws-01 and confirmed
+(2026-09-22)**: `ansible-playbook site.yml --limit windows` returns `changed=0` — all four fixes are already
+correctly in place and the check-then-fix tasks are genuinely idempotent, not just syntax-checked.
 
 With the path and privilege both fixed:
 
