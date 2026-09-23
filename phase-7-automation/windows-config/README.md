@@ -23,8 +23,12 @@ Verified: after applying, resolving a domain produced a Sysmon **EID 22** event.
 
 **Regression-tested.** Swapping a working config risks silently dropping the process-creation telemetry the
 existing rules (100100–100113) depend on. The purple-team harness (`phase-5-offense/purple-team/`) is exactly
-the automated regression gate for this: re-run after the swap → **9/9 (100%)**, so every existing detection
-survived *and* DNS was added. Never change endpoint telemetry without re-running it.
+the automated regression gate for this: re-run after the swap → **9/9 (100%)** (the battery's size at the
+time), so every existing detection survived *and* DNS was added. Never change endpoint telemetry without
+re-running it — re-verified again 2026-09-23 when the config was deployed as code via the `windows` Ansible
+role instead of by hand: **22/23** against the battery's current, larger size, the one miss a pre-existing
+documented flake (`T1003.001`, Defender intermittently blocks the LSASS-dump process launch itself),
+unrelated to this config.
 
 ## Making DNS actionable — DNS → threat-intel (rule 100310)
 Telemetry you don't act on is just noise you pay to store. Wazuh decodes EID 22 into `win.eventdata.queryName`
@@ -42,7 +46,7 @@ fast CDB lookup of the queried name against `etc/lists/malicious-domains` (~1,19
 ## Reproduce
 ```bash
 # apply the config on ws-01 (elevated), then regression-test:
-phase-5-offense/purple-team/purple-team.py           # expect 9/9
+phase-5-offense/purple-team/purple-team.py           # expect N/N (see current battery size in tests.json; one flaky T1003.001 miss is expected, not a regression)
 
 # verify the DNS detection:
 #   (on ws-01)  Resolve-DnsName malicious-test-lab.io

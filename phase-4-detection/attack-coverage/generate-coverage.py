@@ -9,6 +9,9 @@
 #   - the Wazuh custom rules (each <mitre><id> tag = a covered technique)
 #   - the Suricata custom rules (metadata mitre_technique)
 #   - the purple-team battery (tests.json) = techniques VALIDATED end-to-end
+#   - ad-validate.py's SCENARIOS = techniques validated via a live AD attack
+#   - osquery/README.md's own "Verified live" differential-promotion table =
+#     techniques hand-verified once against a real host, outside both harnesses
 #
 # Scoring:  50 = a detection rule exists for the technique
 #          100 = additionally proven by the purple-team harness (run->detect->PASS)
@@ -31,6 +34,7 @@ SURICATA_RULES = os.path.join(REPO, "phase-7-automation/ansible/roles/router/fil
 PT_TESTS = os.path.join(REPO, "phase-5-offense/purple-team/tests.json")
 AD_VALIDATE = os.path.join(REPO, "phase-5-offense/purple-team/ad-validate.py")
 WRITEUPS_DIR = os.path.join(REPO, "phase-5-offense/attack-detect-writeups")
+OSQUERY_README = os.path.join(REPO, "phase-4-detection/osquery/README.md")
 
 OUT = os.path.join(HERE, "attack-navigator-layer.json")
 INDEX_OUT = os.path.join(HERE, "technique-index.md")
@@ -107,6 +111,36 @@ def validated_techniques(cov):
             v.add(norm(tech))
             for rid in s.get("rules", []):
                 v |= rule_to_techs.get(rid, set())
+    v |= osquery_readme_verified_techniques()
+    return v
+
+
+def osquery_readme_verified_techniques():
+    # osquery/README.md §4 has its own "differentials promoted to real alerts"
+    # table (| Rule | Fires on | Level | MITRE | Verified live (DATE) |) — each
+    # row was hand-fired and confirmed against a real host (a real
+    # `python3 -m http.server`, `crontab` addition, or `useradd`), but that
+    # verification isn't wired through tests.json or ad-validate.py's
+    # SCENARIOS, so it was invisible to validated_techniques() below and those
+    # techniques silently under-reported as "detection only" even though
+    # they're genuinely proven. Only rows with a non-empty evidence cell in
+    # the last column count — a row with no "Verified live" text (or "—")
+    # is deliberately NOT counted, same honesty bar as everywhere else here.
+    v = set()
+    if not os.path.exists(OSQUERY_README):
+        return v
+    for line in open(OSQUERY_README):
+        line = line.strip()
+        if not line.startswith("| **"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 5:
+            continue
+        mitre_cell, evidence_cell = cells[3], cells[4]
+        if not evidence_cell or evidence_cell == "—":
+            continue
+        for t in re.findall(r"T[0-9]{4}(?:\.[0-9]{3})?", mitre_cell):
+            v.add(norm(t))
     return v
 
 

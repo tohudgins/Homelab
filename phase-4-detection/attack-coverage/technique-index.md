@@ -53,7 +53,7 @@ oversight; see `phase-5-offense/attack-detect-writeups/` to add one.
 | T1486 | validated | 100430, 100431 | [phase-4-detection/deception/README.md](../deception/README.md) |
 | T1490 | validated | 100520, 100521, 100522, 100523, 100524 | [phase-5-offense/attack-detect-writeups/06-inhibit-system-recovery-t1490.md](../../phase-5-offense/attack-detect-writeups/06-inhibit-system-recovery-t1490.md) |
 | T1518.001 | validated | 100104, 100105 | [phase-4-detection/detection-catalog.md](../detection-catalog.md) |
-| T1543.002 | detection only | 100550 | [phase-4-detection/osquery/README.md](../osquery/README.md) |
+| T1543.002 | validated | 100550 | [README.md](../../README.md) |
 | T1547.001 | validated | 100070 | [phase-5-offense/attack-detect-writeups/07-registry-run-keys-t1547.001.md](../../phase-5-offense/attack-detect-writeups/07-registry-run-keys-t1547.001.md) |
 | T1548.002 | validated | 100117, 100118 | [phase-5-offense/purple-team/README.md](../../phase-5-offense/purple-team/README.md) |
 | T1548.003 | validated | 100540 | [phase-5-offense/attack-detect-writeups/05-linux-sudo-privesc-t1548.003.md](../../phase-5-offense/attack-detect-writeups/05-linux-sudo-privesc-t1548.003.md) |
