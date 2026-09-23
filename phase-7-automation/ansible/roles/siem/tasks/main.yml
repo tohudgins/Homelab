@@ -4,6 +4,9 @@
 # and prove the manager still parses its ruleset afterward. Idempotent.
 # ============================================================================
 
+- name: Install Wazuh if this is a genuinely blank host (guarded, one-shot)
+  ansible.builtin.import_tasks: provision.yml
+
 - name: Ensure Wazuh core services are enabled and running
   ansible.builtin.systemd:
     name: "{{ item }}"

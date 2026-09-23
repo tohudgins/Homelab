@@ -7,19 +7,8 @@
 # provisioned DC.
 # ============================================================================
 
-- name: Confirm the AD DC is already provisioned
-  ansible.builtin.stat:
-    path: "{{ samba_private_db }}"
-  register: sam_db
-
-- name: Fail clearly if the domain has not been provisioned
-  ansible.builtin.assert:
-    that: sam_db.stat.exists
-    fail_msg: >-
-      dc-01 is not provisioned ({{ samba_private_db }} missing). Domain
-      provisioning is a one-shot prerequisite — run `samba-tool domain provision`
-      (see the phase-7 role README) before converging this role.
-    success_msg: "AD DC is provisioned; converging config + weaknesses."
+- name: Provision the AD domain if this is a genuinely blank host (guarded, one-shot)
+  ansible.builtin.import_tasks: provision.yml
 
 # --- smb.conf (carries the Phase 4 audit logging that makes attacks visible) ---
 - name: Deploy Samba AD DC smb.conf

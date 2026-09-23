@@ -1,0 +1,39 @@
+---
+# ============================================================================
+# siem-01 — one-shot Wazuh all-in-one install, guarded so it only ever runs
+# against a genuinely blank host. wazuh-install.sh is destructive (it generates
+# its own indexer/dashboard/API passwords, written ONCE to
+# wazuh-install-files.tar next to where it runs) — `creates:` on
+# /var/ossec/bin/wazuh-control is both the safety guard and the correctness
+# check for "is Wazuh already installed."
+#
+# UNVERIFIED POSITIVE PATH: siem-01 in this lab was always installed
+# interactively before this task existed, so this has never actually been
+# exercised end-to-end. It's written from Wazuh's own documented all-in-one
+# quickstart and the version already pinned in this role's header comment
+# (v4.14.x). Proving it for real needs a genuinely blank host; see
+# phase-7-automation/README.md.
+# ============================================================================
+
+- name: Check whether Wazuh is already installed
+  ansible.builtin.stat:
+    path: /var/ossec/bin/wazuh-control
+  register: wazuh_precheck
+
+- name: Download the official Wazuh all-in-one installer
+  ansible.builtin.get_url:
+    url: https://packages.wazuh.com/4.14/wazuh-install.sh
+    dest: /root/wazuh-install.sh
+    mode: "0750"
+  when: not wazuh_precheck.stat.exists
+
+# -a = all-in-one (manager + indexer + dashboard on this single host, matching
+# how siem-01 already runs). no_log so the passwords the script prints to
+# stdout on completion never land in Ansible's own output/log — they're
+# retrievable from /root/wazuh-install-files.tar on the host itself afterward.
+- name: Run the Wazuh all-in-one installer (one-shot, destructive — guarded by wazuh-control)
+  ansible.builtin.command: bash /root/wazuh-install.sh -a
+  args:
+    chdir: /root
+    creates: /var/ossec/bin/wazuh-control
+  no_log: true

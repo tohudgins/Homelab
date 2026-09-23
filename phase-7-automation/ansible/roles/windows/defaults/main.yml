@@ -7,6 +7,9 @@ wazuh_agent_conf: 'C:\Program Files (x86)\ossec-agent\ossec.conf'
 # Sysmon's main service (the ARM64 build registers as "Sysmon64a"); the SysmonDrv
 # kernel driver comes up with it.
 sysmon_service: Sysmon64a
+sysmon_exe: 'C:\Windows\Sysmon64a.exe'
+sysmon_config_dir: 'C:\ProgramData\Sysmon'
+sysmon_config_dest: 'C:\ProgramData\Sysmon\sysmonconfig.xml'
 
 # Internal NTP server for w32time discipline — rtr-01's CORP address (chrony,
 # serves every segment; also the per-segment NTP server dnsmasq advertises).

@@ -1,8 +1,9 @@
 ---
 # siem-01 — Wazuh all-in-one (manager + indexer + dashboard, v4.14.x).
 # The Wazuh *install* is a one-shot destructive step (wazuh-install.sh, generates
-# its own passwords) and is treated as a prerequisite — see the role README.
-# This role owns the part that is genuine detection engineering and must live in
+# its own passwords, see tasks/provision.yml) — guarded so it only ever runs
+# against a genuinely blank host. This role owns the part that is genuine
+# detection engineering and must live in
 # version control: the custom rules and decoders, deployed as code.
 wazuh_services:
   - wazuh-manager

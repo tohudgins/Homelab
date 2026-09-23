@@ -11,9 +11,15 @@ working role without hand-editing config files from memory.
 > **`scan`** (scan-01, Greenbone CE vuln scanner). `ansible-playbook site.yml`
 > converges the entire lab at `changed=0`, and **dmz-01** and **scan-01** were both
 > stood up from a blank disk via headless Ubuntu autoinstall — the full "rebuild
-> the lab from a repo" deliverable. *Optional future depth: automate the one-shot
-> provisioners (`samba-tool domain provision`, `wazuh-install.sh`) so dc-01/siem-01
-> can also rebuild from truly blank — dmz-01/scan-01 already prove the pattern.*
+> the lab from a repo" deliverable. The `dc` and `siem` roles now also carry a
+> guarded, one-shot `provision.yml` (`samba-tool domain provision`,
+> `wazuh-install.sh -a`, both fired only via `creates:` on a not-yet-provisioned
+> host) so those two hosts are *written* to rebuild from truly blank the same
+> way — proven safe against the live, already-provisioned dc-01/siem-01
+> (`changed=0`, the guard skips cleanly), but the positive from-blank path
+> itself is unverified until run against a real blank VM, same as dmz-01/scan-01
+> were before they got built. `windows-config/sysmonconfig.xml` is likewise now
+> deployed as code (`windows` role) instead of only being applied by hand.
 
 ## Scope — what "IaC" honestly means here
 
@@ -26,11 +32,15 @@ between them:
   **Ansible owns all of it**, idempotently.
 - **One-shot destructive installs** — `wazuh-install.sh` (generates its own
   passwords), `samba-tool domain provision`, the Zeek OBS package install. These
-  run once against a blank host and are captured as guarded/prerequisite steps,
-  not re-run on every converge. Where a role can make them safely idempotent
-  (Zeek's apt repo + package, guarded `creates=` provisioning) it does; where it
-  can't without risking a working host, the role manages the *config on top* and
-  the install is documented.
+  run once against a blank host and are captured as guarded steps (`creates:` on
+  a file that only exists post-install), not re-run on every converge —
+  Zeek's apt repo + package install, the `dc` role's `samba-tool domain
+  provision`, and the `siem` role's `wazuh-install.sh -a` all follow this same
+  pattern now (`roles/dc/tasks/provision.yml`, `roles/siem/tasks/provision.yml`).
+  The guard is proven safe against the live, already-provisioned hosts
+  (`changed=0`); the install itself is only proven where a from-blank build
+  actually happened (`dmz`, `scan`) — for `dc`/`siem` it's written from the
+  vendor's documented flags but not yet exercised against a real blank host.
 
 This split is the real-world pattern — config management converges continuously,
 provisioning happens once — and it keeps every playbook safe to run against the

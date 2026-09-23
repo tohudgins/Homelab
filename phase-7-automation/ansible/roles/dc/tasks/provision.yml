@@ -1,0 +1,84 @@
+---
+# ============================================================================
+# dc-01 — one-shot domain provisioning, guarded so it only ever runs against a
+# genuinely blank host. `samba-tool domain provision` is destructive (it
+# initializes the domain database) and Samba refuses to re-run it once
+# {{ samba_private_db }} exists, so `creates:` on the provision command is both
+# the safety guard and the correctness check — this must never fire against a
+# live, already-provisioned DC.
+#
+# UNVERIFIED POSITIVE PATH: dc-01 in this lab was always provisioned
+# interactively before this task existed, so the provision command below has
+# never actually been exercised end-to-end. It's written from Samba's own
+# documented flags plus the lab facts already established elsewhere in this
+# repo (docs/00-ip-plan.md — dc-01 IS the domain's DNS server — and
+# group_vars/all.yml's lab_realm). Proving it for real needs a genuinely blank
+# host; see phase-7-automation/README.md.
+# ============================================================================
+
+- name: Check whether the domain has already been provisioned
+  ansible.builtin.stat:
+    path: "{{ samba_private_db }}"
+  register: sam_db_precheck
+
+- name: Install Samba AD DC packages
+  ansible.builtin.apt:
+    name:
+      - samba
+      - samba-common-bin
+      - krb5-user
+      - winbind
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: not sam_db_precheck.stat.exists
+
+# The Ubuntu samba package starts smbd/nmbd/winbind as standalone-server
+# services by default; the AD DC runs its own built-in SMB/NMB/winbind inside
+# samba-ad-dc and the standalone units fight it for the same ports. Mask them
+# before provisioning so they never come up in the first place.
+- name: Stop and mask the standalone smbd/nmbd/winbind services (conflict with samba-ad-dc)
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    masked: true
+  loop:
+    - smbd
+    - nmbd
+    - winbind
+  when: not sam_db_precheck.stat.exists
+
+- name: Provision the AD domain (one-shot, destructive — guarded by samba_private_db)
+  ansible.builtin.command: >-
+    samba-tool domain provision
+    --use-rfc2307
+    --domain=LAB
+    --realm={{ lab_realm }}
+    --server-role=dc
+    --dns-backend=SAMBA_INTERNAL
+    --adminpass={{ dc_domain_admin_password }}
+  args:
+    creates: "{{ samba_private_db }}"
+  no_log: true
+
+- name: Enable and start samba-ad-dc
+  ansible.builtin.systemd:
+    name: "{{ samba_service }}"
+    enabled: true
+    state: started
+  when: not sam_db_precheck.stat.exists
+
+- name: Re-check the domain database after provisioning
+  ansible.builtin.stat:
+    path: "{{ samba_private_db }}"
+  register: sam_db
+
+- name: Confirm the AD DC is provisioned before converging config + weaknesses
+  ansible.builtin.assert:
+    that: sam_db.stat.exists
+    fail_msg: >-
+      dc-01 is still not provisioned ({{ samba_private_db }} missing) after the
+      provisioning step above. Check the samba-tool domain provision output —
+      this exact invocation has never actually run against a real blank host
+      before; see the role README / phase-7-automation/README.md.
+    success_msg: "AD DC is provisioned; converging config + weaknesses."

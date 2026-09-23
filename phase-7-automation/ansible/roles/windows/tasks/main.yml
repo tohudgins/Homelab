@@ -35,6 +35,28 @@
     start_mode: auto
     state: started
 
+# --- Sysmon config as code (SwiftOnSecurity, see windows-config/README.md) ----
+# The config itself is already live + regression-tested (purple-team.py 9/9,
+# including the Sysmon EID 22 DNS telemetry it added) — this closes the
+# "applied manually, not reproducible from the repo" gap, not a behavior
+# change. Sysmon has no diff/dry-run of its own, so win_copy's checksum
+# comparison (gating the reconfigure on its changed result) is what makes this
+# idempotent: an unchanged config is a true no-op on the next converge.
+- name: Ensure the Sysmon config directory exists
+  ansible.windows.win_file:
+    path: "{{ sysmon_config_dir }}"
+    state: directory
+
+- name: Deploy the Sysmon config (SwiftOnSecurity, incl. EID 22 DNS telemetry)
+  ansible.windows.win_copy:
+    src: "{{ playbook_dir }}/../windows-config/sysmonconfig.xml"
+    dest: "{{ sysmon_config_dest }}"
+  register: sysmon_config_copy
+
+- name: Apply the Sysmon config (only when it actually changed)
+  ansible.windows.win_shell: '& "{{ sysmon_exe }}" -c "{{ sysmon_config_dest }}"'
+  when: sysmon_config_copy.changed
+
 # --- Time: correct timezone + discipline w32time to the lab's internal NTP -----
 # ws-01 shipped set to Pacific while the host/domain are US Eastern; combined with
 # Windows reading the VM RTC as local time, that put its computed UTC ~3h fast,

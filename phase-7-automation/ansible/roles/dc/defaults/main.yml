@@ -1,11 +1,17 @@
 ---
 # dc-01 — Samba AD DC (lab.internal). The domain *provision* is a one-shot
-# destructive prerequisite (`samba-tool domain provision`) — this role assumes an
-# already-provisioned DC and manages its config + the deliberate, documented
-# weaknesses on top, idempotently. See the role README.
+# destructive step (`samba-tool domain provision`, see tasks/provision.yml) —
+# guarded so it only ever runs against a genuinely blank host. Either way, this
+# role manages config + the deliberate, documented weaknesses on top,
+# idempotently. See the role README.
 samba_private_db: /var/lib/samba/private/sam.ldb
 samba_domain_dn: "DC=lab,DC=internal"
 samba_service: samba-ad-dc
+
+# dc_domain_admin_password (used only by tasks/provision.yml's samba-tool
+# domain provision --adminpass) is a genuine secret, not a lab target like the
+# weak service-account passwords below — it lives vaulted in
+# host_vars/dc-01/vault.yml, never here.
 
 # ---------------------------------------------------------------------------
 # Deliberate, DOCUMENTED lab weaknesses — see phase-2-identity/known-weaknesses.md.
