@@ -54,6 +54,28 @@
     enabled: true
     state: started
 
+# logged_in_users reads the legacy binary utmp file (glibc getutxent()) — verified
+# live (2026-09-23) that nothing on this Ubuntu 26.04 image writes it at all, even
+# across a held-open session spanning a full osquery polling interval: no
+# pam_lastlog.so exists anywhere on the system (Ubuntu has fully retired it),
+# there's no sysvinit boot script to create /run/utmp under systemd, and the two
+# real successors Ubuntu now ships (libpam-lastlog2, libpam-wtmpdb) both record to
+# their own SQLite database, not the legacy file — installing either does NOT
+# make /run/utmp reappear, confirmed by testing wtmpdb specifically. This is a
+# genuine osquery/OS version gap (its Linux table implementation predates the
+# lastlog2/wtmpdb transition), not a misconfiguration — left open in
+# phase-4-detection/osquery/README.md. wtmpdb is still installed here because
+# real, modern, persistent login auditing (`wtmpdb last`) is a genuine capability
+# this lab didn't have at all before, independent of osquery.
+- name: Install libpam-wtmpdb for real login auditing (does not restore osquery's logged_in_users — see above)
+  ansible.builtin.apt:
+    name: libpam-wtmpdb
+    state: present
+  # Debian's pam-auth-update auto-enables this profile on install (its
+  # /usr/share/pam-configs/wtmpdb ships "Default: yes") — confirmed live,
+  # /etc/pam.d/common-session picked up "session optional pam_wtmpdb.so" with no
+  # further action needed. No explicit pam-auth-update task required.
+
 # Wazuh's osquery wodle in "monitor an externally-run osqueryd" mode: run_daemon:no
 # means the agent never spawns/manages the osqueryd process itself (that's this
 # role's systemd service, above) — it only tails log_path and forwards each result

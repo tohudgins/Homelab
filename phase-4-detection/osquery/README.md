@@ -100,11 +100,20 @@ visibility-only under 24010, but "real baselining" turned out to mean a **hunt**
 [`../threat-hunting/README.md`](../threat-hunting/README.md)'s Hunt D (`hunt-rare-osquery.py`), which
 stack-counts both by rarity the same way Hunt B already does for Windows Sysmon telemetry. Verified live: a
 planted `python3 -m http.server` on dc-01 correctly ranked as a fresh singleton among 175 legitimate boot-time
-processes. Checking `logged_in_users` the same way surfaced a genuinely different, deeper finding: the query
-returns **zero rows on dc-01 regardless of active sessions**, because `/run/utmp` doesn't exist on this
-host at all — `systemd-logind` tracks sessions fine (`loginctl list-sessions`), but osquery's table reads the
-legacy utmp file specifically, which nothing here writes. That's a PAM/utmp wiring gap, not a baselining one,
-and it's left open as real follow-up work rather than papered over.
+processes. Checking `logged_in_users` the same way surfaced a genuinely different, deeper finding, root-caused
+2026-09-23: the query returns **zero rows regardless of active sessions**, because `/run/utmp` doesn't exist on
+either Linux host at all — and it never will again on this OS. `systemd-logind` tracks sessions correctly
+(`loginctl list-sessions`), but osquery's Linux `logged_in_users` implementation reads the legacy binary utmp
+file via glibc's `getutxent()`, and Ubuntu 26.04 has fully retired that mechanism: no `pam_lastlog.so` exists
+anywhere on the system, there's no sysvinit boot script to create `/run/utmp` under systemd, and Ubuntu's two
+real successors — `libpam-lastlog2` and `libpam-wtmpdb` — both record to their own SQLite database, not the
+legacy file (confirmed by installing `libpam-wtmpdb` and testing: real logins immediately show up in
+`wtmpdb last`, and `/run/utmp` still never appears). This is a genuine osquery-vs-OS version gap — the table's
+implementation predates the lastlog2/wtmpdb transition — not a misconfiguration a PAM tweak can close.
+**`libpam-wtmpdb` is now installed on dc-01/fs-01 anyway** (`osquery` role, `pam-auth-update` auto-enables its
+profile on install, no manual PAM editing) — real, modern, persistent login auditing this lab didn't have at
+all before, independent of osquery. Querying it (`wtmpdb last`) or wiring it into Wazuh is real, separate
+follow-up work, left open rather than folded into this already-larger-than-expected finding.
 
 **A real noise source found before any of this could work**: `listening_ports`' own "added" stream was 76%
 garbage (194 of 256 events on dc-01) — every AF_UNIX socket (`family=1`) the table returns comes back with

@@ -288,10 +288,15 @@ instrument here, not a threshold rule. That closes the practical gap `osquery/RE
 `processes`. **`logged_in_users` turned out not to be a baselining problem at all** — verified with a
 long-lived SSH session held open across a full 5-minute osquery interval, the query still returned `[]`
 because `/run/utmp` doesn't exist on `dc-01`; `systemd-logind` tracks the same sessions correctly via
-`loginctl list-sessions`, but osquery's table reads the legacy utmp file specifically, which nothing on this
-image writes. Wiring that up (a PAM/utmp configuration change, not a detection-engineering one) is real,
-separate follow-up work — left honestly open rather than declared done, the same way Hunt A's evasion
-follow-ups stay open above.
+`loginctl list-sessions`, but osquery's table reads the legacy utmp file specifically. **Root-caused
+2026-09-23, and it's bigger than a config gap**: Ubuntu 26.04 has fully retired legacy utmp — no
+`pam_lastlog.so` exists on the system, and Ubuntu's real successors (`libpam-lastlog2`/`libpam-wtmpdb`) record
+to their own SQLite database, not the legacy file (confirmed by installing `libpam-wtmpdb` — real logins
+immediately appear in `wtmpdb last`, `/run/utmp` still never appears). Genuinely a osquery-vs-OS version
+mismatch, not fixable by any PAM change. `libpam-wtmpdb` is installed anyway (`osquery` role) as real, modern
+login auditing independent of osquery — see [`osquery/README.md`](../osquery/README.md) for the full
+writeup. Querying `wtmpdb` from Wazuh is real, separate follow-up work, left honestly open rather than
+declared done, the same way Hunt A's evasion follow-ups stay open above.
 
 ---
 
