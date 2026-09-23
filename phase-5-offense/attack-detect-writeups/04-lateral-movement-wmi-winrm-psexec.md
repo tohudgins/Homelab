@@ -121,9 +121,19 @@ With the path and privilege both fixed:
   service can run, confirmed via `Get-MpThreatDetection`/`Get-WinEvent` on the Defender operational log. Same
   class of finding as T1105 certutil and T1003.001 comsvcs: the endpoint control is the outer layer, and this
   rule is the layer that catches the technique wherever that control is weakened, disabled, or bypassed.
-  Separately worth noting: impacket-psexec randomizes the binary/service name *unless* `-service-name` is
-  passed, so a tool run the default way would evade this rule's literal `PSEXESVC` match even with Defender
-  off — a real coverage gap independent of tonight's finding.
+  **Follow-up, checked for real (2026-09-23):** does the default (no `-service-name`) randomized-name variant
+  actually evade detection entirely, or just this one Sigma rule? Ran `impacket-psexec` against ws-01 without
+  the flag — it dropped `hEUJklFD.exe` and created service `aSOd`, and 100513/100514 stayed silent exactly as
+  predicted (their match is literally `\PSEXESVC.exe`). But the SIEM didn't miss the technique: **stock rule
+  92650** fired at level 12 in the same second, tagged both T1021.002 and T1569.002 — Wazuh's own out-of-the-box
+  ruleset already flags any new service whose binary lands directly in `%systemroot%`, independent of the
+  name. So the practical coverage gap this note originally flagged doesn't actually exist; it was an
+  undocumented stock-rule coverage question, not a real hole, and the answer turned out to be no gap. Interesting
+  side effect: Defender did **not** quarantine the randomly-named binary the way it caught the literal
+  `PSEXESVC.exe` run above — the AV signature/heuristic that fired on the default name didn't trigger on the
+  random one, so this variant is actually *more* evasive against Defender even though it's still caught by
+  the SIEM (a real example of the "endpoint control vs. SIEM control" layering being independent in both
+  directions).
 - **T1047 (WMI) — two separate findings, both now resolved.** `nxc --exec-method wmiexec` reaches ws-01 (a
   fresh `WmiPrvSE.exe` provider host spawns — confirmed via syscollector inventory) but never produces a
   child process, and reports "NETBIOS connection... timed out" — a real, but separate, nxc-vs-lab

@@ -228,6 +228,73 @@ instead of volume, verified against the identical live evasion the rule itself c
 
 ---
 
+## Hunt D — Rare processes and logins on Linux (osquery differential, via Wazuh archive)
+
+> [!check] Executed and verified live on 2026-09-23.
+> Planted a real `python3 -m http.server` on `dc-01` alongside 175 legitimate boot-time processes (samba
+> tasks, kworkers, systemd units) — the hunt correctly surfaced it in the singleton list, the same proof
+> pattern as Hunt B's `bitsadmin` find. Separately, trying to verify the `logged_in_users` half surfaced a
+> real, deeper finding: it isn't a noise problem, the query currently returns **zero rows on this host
+> regardless of active sessions** — `/run/utmp` doesn't exist on `dc-01` at all (`systemd-logind` tracks
+> sessions fine via `loginctl`, but doesn't write the legacy utmp file this table reads). Documented
+> honestly as a distinct, still-open finding rather than papered over — see Outcome below.
+
+**Hypothesis.** [`osquery`](../osquery/README.md)'s `processes`/`logged_in_users` queries stay
+visibility-only under stock rule 24010 (level 3) — the README's own honest boundary was that promoting every
+`added` row would page constantly on kernel-worker churn and routine logins, and "real baselining would be
+needed" to make either alertable. But **rarity**, not volume, is exactly the same signal Hunt B already
+applies to Windows Sysmon telemetry — it had just never been pointed at the Linux hosts (`dc-01`/`fs-01`)
+osquery actually covers.
+
+**Data source.** The same Wazuh full-event archive every hunt in this folder reads
+(`<logall_json>yes</logall_json>`) — osquery's own `action:"added"` differential events, decoded under
+`data.osquery.*` (see [`osquery/README.md`](../osquery/README.md)), not a new telemetry source.
+
+**Analysis — `hunt-rare-osquery.py`.** Same idiom as `hunt-rare-process.py`: pull every `added` event for one
+agent, stack-count `processes` rows by process name and `logged_in_users` rows by `(type, user)`, rank the
+long tail. A real corpus from `dc-01`'s boot (223 process-start events) plus one planted needle:
+
+```
+== Rare-osquery hunt :: agent=dc-01 :: query=processes :: 223 'added' events, 197 distinct process name values ==
+   long tail first — the rarest values are the most interesting
+
+  count      %  process name                 first seen               sample
+  ------------------------------------------------------------------------------------------------
+      1   0.4%  agetty                       Wed Sep 23 21:09:10 2026 UTC cmdline=/usr/sbin/agetty --noreset --noc
+      1   0.4%  audisp-af_unix               Wed Sep 23 21:09:10 2026 UTC cmdline=/sbin/audisp-af_unix 0640 /var/o
+      1   0.4%  auditd                       Wed Sep 23 21:09:10 2026 UTC cmdline=/usr/sbin/auditd parent=1 path=/
+      1   0.4%  cldap[master]                Wed Sep 23 21:09:10 2026 UTC cmdline=samba: task[cldap] pre-fork mast
+      1   0.4%  cron                         Wed Sep 23 21:09:10 2026 UTC cmdline=/usr/sbin/cron -f -P parent=1 pa
+      ...
+      1   0.4%  python3                      Wed Sep 23 21:10:XX 2026 UTC cmdline=python3 -m http.server 7777
+  169 process name value(s) seen exactly once: agetty, audisp-af_unix, ..., python3, ..., wrepl[master]
+```
+
+**Triage — every boot daemon is a singleton, and that's expected, not noise.** Unlike Hunt B's ws-01 corpus
+(which had a settled "fat head" of routinely-repeated binaries), a **freshly booted** Linux host makes almost
+every long-running daemon a singleton by construction: `sshd`, `cron`, `auditd`, every samba task, every
+`kworker`, `systemd-*` — each forks **once** at boot and then runs indefinitely without re-executing. That's
+not a flaw in the rarity signal, it's the same triage discipline Hunt C already established (the `WS-01$`
+singletons there were routine machine-account traffic, not the finding) — a human confirms these are
+legitimate one-shot system processes by *what they are*, not by making the count-based ranking smarter.
+`python3` stands out from that list the same way `bitsadmin` did from ws-01's: nothing else in a Samba AD DC's
+normal boot sequence has a legitimate reason to invoke `python3` directly.
+
+**Outcome — closes the `processes` half as a hunt, not a rule; the `logged_in_users` half surfaced a bigger,
+different finding.** Deliberately not promoted to a real-time Wazuh rule, same honesty as Hunt C: naive
+real-time alerting on "any new process name" would page on every legitimate one-shot system daemon at every
+boot, exactly what the singleton list above demonstrates — a periodic hunt an analyst triages is the right
+instrument here, not a threshold rule. That closes the practical gap `osquery/README.md` flagged for
+`processes`. **`logged_in_users` turned out not to be a baselining problem at all** — verified with a
+long-lived SSH session held open across a full 5-minute osquery interval, the query still returned `[]`
+because `/run/utmp` doesn't exist on `dc-01`; `systemd-logind` tracks the same sessions correctly via
+`loginctl list-sessions`, but osquery's table reads the legacy utmp file specifically, which nothing on this
+image writes. Wiring that up (a PAM/utmp configuration change, not a detection-engineering one) is real,
+separate follow-up work — left honestly open rather than declared done, the same way Hunt A's evasion
+follow-ups stay open above.
+
+---
+
 ## The loop, both directions
 
 | Hunt | Signal | Data | Result | Detection outcome |
@@ -235,8 +302,9 @@ instead of volume, verified against the identical live evasion the rule itself c
 | **A — Beaconing** | inter-arrival regularity + payload consistency + persistence | Zeek `conn.log` | Sliver C2 ranked #1 by timing alone | **Confirms** Suricata 9100002 — and proves the analytic stands without the signature |
 | **B — Rare process** | execution frequency (stack counting) | Sysmon EID 1 (Wazuh archive) | one-off `bitsadmin` in the long tail | **Surfaces a gap** → new Sigma rule 100511/100512 (T1197), validated live |
 | **C — Kerberoast baseline** | (account, SPN) pair rarity | KDC Authorization (Wazuh archive) | `jdoe`'s single targeted ticket ranked as a fresh singleton | **Closes a documented evasion** of rule 100031 — as a hunt, not a new rule |
+| **D — Rare osquery** | process-name / login rarity (stack counting) | osquery `added` events (Wazuh archive) | planted `python3` ranked as a fresh singleton on `dc-01` | **Closes** the `processes` visibility gap as a hunt; **surfaces a new, deeper gap** — `logged_in_users` returns nothing at all (`/run/utmp` missing) |
 
-Three honest findings worth carrying forward, all about the *limits* of a single-signal hunt or rule:
+Four honest findings worth carrying forward, all about the *limits* of a single-signal hunt or rule:
 
 - **Jitter defeats naive beacon hunting.** Ranking on interval regularity alone floats a no-jitter benign
   keepalive above a jittered C2. The fix isn't a better threshold — it's more signals (payload, volume) plus
@@ -247,6 +315,11 @@ Three honest findings worth carrying forward, all about the *limits* of a single
   cannot see a single targeted ticket request by design (no volume, nothing to threshold on) — but the same
   telemetry it reads is still a rare event when ranked a different way. The rule and the hunt watch the same
   data for different signals; neither replaces the other.
+- **"No data" and "too noisy to alert on" look identical from the outside — check which one it actually is.**
+  `logged_in_users` was assumed to need baselining, same as `processes`. Verifying it live (a held-open
+  session spanning a real polling interval) showed the query returns nothing at all, for a structural reason
+  (`/run/utmp` missing) that no amount of baselining would fix. Always confirm which failure mode you're
+  looking at before designing around it.
 
 ---
 
@@ -271,6 +344,15 @@ ssh rtr-01-root "grep -aoE '\"signature_id\":910000[12]' /var/log/suricata/eve.j
 ssh atk-01 "kinit jdoe@LAB.INTERNAL <<< '<jdoe password>' && kvno MSSQLSvc/dc-01.lab.internal:1433@LAB.INTERNAL"
 ssh siem-01 "sudo grep -ac '\"id\":\"100031\"' /var/ossec/logs/alerts/alerts.json"   # unchanged - the evasion
 ./hunt-kerberoast-baseline.py                                                        # jdoe -> MSSQLSvc appears
+
+# --- Hunt D: rank osquery process/login rarity for an agent (needs <logall_json>yes) ---
+./hunt-rare-osquery.py --agent dc-01                  # both processes + logged_in_users
+./hunt-rare-osquery.py --agent fs-01 --query processes
+#   plant a needle and confirm it ranks as a singleton:
+ssh dc-01 "nohup python3 -m http.server 7777 >/tmp/t.log 2>&1 & disown"
+ssh dc-01 "sudo systemctl restart osqueryd"           # force an immediate re-schedule
+./hunt-rare-osquery.py --agent dc-01 --query processes   # python3 appears in the singleton list
+ssh dc-01 "sudo pkill -f 'http.server 7777'"          # clean up
 ```
 
 Scripts: [`hunt-beaconing.py`](hunt-beaconing.py), [`hunt-rare-process.py`](hunt-rare-process.py),

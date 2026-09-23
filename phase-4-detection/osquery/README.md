@@ -93,10 +93,18 @@ security-relevant `action: "added"` rows:
 | **100551** | new `crontab` row | 6 | T1053.003 | a real `crontab` addition on dc-01 → fired with the real command + schedule interpolated |
 | **100552** | new `users` row | 10 | T1136.001, T1098 | a real `useradd` on dc-01 → fired with the real username/uid/shell interpolated |
 
-`processes` and `logged_in_users` are deliberately **not** promoted: `processes` churns constantly by design
-(see the table above), and `logged_in_users` adds a row on every ordinary SSH login in a lab where that
-happens all the time — neither is a discriminating signal without real baselining. Both stay visibility-only
-under 24010.
+`processes` and `logged_in_users` are deliberately **not** promoted to real-time alerts: `processes` churns
+constantly by design (see the table above), and `logged_in_users` adds a row on every ordinary SSH login in a
+lab where that happens all the time — a naive real-time rule on either would page constantly. Both stay
+visibility-only under 24010, but "real baselining" turned out to mean a **hunt**, not a rule — see
+[`../threat-hunting/README.md`](../threat-hunting/README.md)'s Hunt D (`hunt-rare-osquery.py`), which
+stack-counts both by rarity the same way Hunt B already does for Windows Sysmon telemetry. Verified live: a
+planted `python3 -m http.server` on dc-01 correctly ranked as a fresh singleton among 175 legitimate boot-time
+processes. Checking `logged_in_users` the same way surfaced a genuinely different, deeper finding: the query
+returns **zero rows on dc-01 regardless of active sessions**, because `/run/utmp` doesn't exist on this
+host at all — `systemd-logind` tracks sessions fine (`loginctl list-sessions`), but osquery's table reads the
+legacy utmp file specifically, which nothing here writes. That's a PAM/utmp wiring gap, not a baselining one,
+and it's left open as real follow-up work rather than papered over.
 
 **A real noise source found before any of this could work**: `listening_ports`' own "added" stream was 76%
 garbage (194 of 256 events on dc-01) — every AF_UNIX socket (`family=1`) the table returns comes back with
