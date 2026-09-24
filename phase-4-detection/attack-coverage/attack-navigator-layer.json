@@ -180,14 +180,14 @@
       "techniqueID": "T1098",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100015, 100051, 100552 | learn: phase-4-detection/osquery/README.md",
+      "comment": "VALIDATED (purple-team) \u2014 100015, 100051, 100552 | learn: phase-5-offense/attack-detect-writeups/12-ad-group-membership-t1098.007.md",
       "enabled": true
     },
     {
       "techniqueID": "T1098.007",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100015 | learn: README.md",
+      "comment": "VALIDATED (purple-team) \u2014 100015 | learn: phase-5-offense/attack-detect-writeups/12-ad-group-membership-t1098.007.md",
       "enabled": true
     },
     {
@@ -362,14 +362,14 @@
       "techniqueID": "T1560.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100517, 100518, 100519 | learn: phase-4-detection/sigma/README.md",
+      "comment": "VALIDATED (purple-team) \u2014 100517, 100518, 100519 | learn: phase-5-offense/attack-detect-writeups/14-archive-data-staging-t1560.001.md",
       "enabled": true
     },
     {
       "techniqueID": "T1562.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100060, 100506 | learn: phase-4-detection/sigma/README.md",
+      "comment": "VALIDATED (purple-team) \u2014 100060, 100506 | learn: phase-5-offense/attack-detect-writeups/13-security-tooling-disruption-t1562.001.md",
       "enabled": true
     },
     {

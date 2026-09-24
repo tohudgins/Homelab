@@ -34,8 +34,8 @@ oversight; see `phase-5-offense/attack-detect-writeups/` to add one.
 | T1078 | validated | 100421 | [phase-4-detection/deception/README.md](../deception/README.md) |
 | T1082 | validated | 100509, 100510 | [phase-5-offense/sliver-c2/README.md](../../phase-5-offense/sliver-c2/README.md) |
 | T1087.002 | validated | 100108, 100112 | [phase-5-offense/apt-scenario/README.md](../../phase-5-offense/apt-scenario/README.md) |
-| T1098 | validated | 100015, 100051, 100552 | [phase-4-detection/osquery/README.md](../osquery/README.md) |
-| T1098.007 | validated | 100015 | [README.md](../../README.md) |
+| T1098 | validated | 100015, 100051, 100552 | [phase-5-offense/attack-detect-writeups/12-ad-group-membership-t1098.007.md](../../phase-5-offense/attack-detect-writeups/12-ad-group-membership-t1098.007.md) |
+| T1098.007 | validated | 100015 | [phase-5-offense/attack-detect-writeups/12-ad-group-membership-t1098.007.md](../../phase-5-offense/attack-detect-writeups/12-ad-group-membership-t1098.007.md) |
 | T1105 | detection only | 100500, 100501 | [phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md](../../phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md) |
 | T1110 | validated | 100010, 100011, 100012, 100013, 100041, 100401 | [phase-5-offense/attack-detect-writeups/02-password-spray-smb.md](../../phase-5-offense/attack-detect-writeups/02-password-spray-smb.md) |
 | T1110.001 | validated | 100010, 100011, 100012, 100013, 100040, 100041, 100400, 100530 | [phase-5-offense/attack-detect-writeups/02-password-spray-smb.md](../../phase-5-offense/attack-detect-writeups/02-password-spray-smb.md) |
@@ -60,7 +60,7 @@ oversight; see `phase-5-offense/attack-detect-writeups/` to add one.
 | T1548.003 | validated | 100540 | [phase-5-offense/attack-detect-writeups/05-linux-sudo-privesc-t1548.003.md](../../phase-5-offense/attack-detect-writeups/05-linux-sudo-privesc-t1548.003.md) |
 | T1552.001 | validated | 100090 | [phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md](../../phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md) |
 | T1558.003 | validated | 100031, 100420 | [phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md](../../phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md) |
-| T1560.001 | validated | 100517, 100518, 100519 | [phase-4-detection/sigma/README.md](../sigma/README.md) |
-| T1562.001 | validated | 100060, 100506 | [phase-4-detection/sigma/README.md](../sigma/README.md) |
+| T1560.001 | validated | 100517, 100518, 100519 | [phase-5-offense/attack-detect-writeups/14-archive-data-staging-t1560.001.md](../../phase-5-offense/attack-detect-writeups/14-archive-data-staging-t1560.001.md) |
+| T1562.001 | validated | 100060, 100506 | [phase-5-offense/attack-detect-writeups/13-security-tooling-disruption-t1562.001.md](../../phase-5-offense/attack-detect-writeups/13-security-tooling-disruption-t1562.001.md) |
 | T1569.002 | detection only | 100513, 100514 | [phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md](../../phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md) |
 | T1595.002 | validated | 100441, suricata:9100024 | [phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md](../../phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md) |

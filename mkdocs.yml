@@ -94,6 +94,9 @@ nav:
           - "09 · SYSVOL/GPO Integrity (T1484.001)": phase-5-offense/attack-detect-writeups/09-sysvol-gpo-integrity-t1484.001.md
           - "10 · Discovery Tactics (T1049/T1069.001/T1518.001)": phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md
           - "11 · LOLBin Proxy Execution (T1218.005/T1218.010)": phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md
+          - "12 · AD Group Membership (T1098.007)": phase-5-offense/attack-detect-writeups/12-ad-group-membership-t1098.007.md
+          - "13 · Security Tooling Disruption (T1562.001)": phase-5-offense/attack-detect-writeups/13-security-tooling-disruption-t1562.001.md
+          - "14 · Archive Data Staging (T1560.001)": phase-5-offense/attack-detect-writeups/14-archive-data-staging-t1560.001.md
       - BloodHound (AD Attack Paths): phase-5-offense/bloodhound-ce/README.md
       - Purple-Team Validation: phase-5-offense/purple-team/README.md
       - Atomic Red Team: phase-5-offense/atomic-red-team/README.md
