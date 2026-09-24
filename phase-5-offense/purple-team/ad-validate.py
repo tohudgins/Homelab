@@ -134,6 +134,24 @@ SCENARIOS = [
         "technique": "T1021.006",
         "desc": "wsmprovhost/winrshost spawns a shell on ws-01 (T1021.006)",
     },
+    {
+        # T1003.002 (2026-09-24) — closes the one real gap a full-repo coverage audit
+        # found: 08-sam-dump-credential-cracking-t1003.002.md dumped and cracked a real
+        # SAM hash but shipped with no detection ("left as the natural next step").
+        # secretsdump's default run (no flags) is the SAME command the writeup verified —
+        # enables RemoteRegistry, reads SAM/SECURITY/LSA/DPAPI, disables it again on the
+        # way out. Two independent rules both confirmed live before this scenario was
+        # written (100560: System EventID 7040 service-enable, 100561: Sysmon EID13
+        # registry value-set on the service's own Start key) — either one alone proves
+        # the technique fired, so no `-sam`-only flag is needed here.
+        "name": "SAM Dump (RemoteRegistry)",
+        "host": "atk-01",
+        "requires_env": ["ADMIN_USER", "ADMIN_PW"],
+        "cmd": f"impacket-secretsdump '{ADMIN_USER}:{ADMIN_PW}@{WS_IP}'",
+        "rules": ["100560", "100561"],
+        "technique": "T1003.002",
+        "desc": "RemoteRegistry enabled to read the SAM/SECURITY hives (T1003.002)",
+    },
     # PsExec Lateral Movement (T1569.002, rules 100513/100514) is NOT in the active
     # battery, same reasoning as tests.json's wmic/comsvcs exclusions: confirmed
     # 2026-09-07 via `impacket-psexec -service-name PSEXESVC 'user:pw@host' whoami`
@@ -460,6 +478,7 @@ SCENARIOS = [
         # correlation window like the Kerberos scenario above.
         "name": "Sudo find GTFOBins Privesc",
         "host": "fs-01",
+        "requires": "fs-01",
         "cmd": "sudo -u ops-logview sudo find /var/log -maxdepth 0 -exec /bin/sh -c 'whoami' \\;",
         "rules": ["100540"],
         "technique": "T1548.003",

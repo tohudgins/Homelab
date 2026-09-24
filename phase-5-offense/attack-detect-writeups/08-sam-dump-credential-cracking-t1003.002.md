@@ -121,21 +121,41 @@ ws-01's local admin credential is marked "deliberately obscured," a stricter pri
 this one specifically. This writeup keeps that line rather than overriding it for the sake of a complete
 example.
 
-## 4. Detection — left as a real, honest gap, not claimed
+## 4. Detection — closed (2026-09-24)
 
-Wazuh wasn't running during this session (siem-01 stayed suspended to keep the boot footprint under the 24GB
-ceiling), so **no telemetry was checked and no detection is claimed here.** What's true either way: enabling
-`RemoteRegistry` and reading the SAM/SECURITY hives through it is real, loggable Windows activity (Security
-Event ID 4657/4688-adjacent registry access, a service-state-change event for `RemoteRegistry` itself, and
-Sysmon Event ID 13 if the hive keys are watched) — a plausible, cheap detection surface, structurally similar
-to the Registry Run Key rule ([07](07-registry-run-keys-t1547.001.md)) this lab already has, just pointed at
-a different key. Left as the natural next step rather than built here, honestly: it's new coverage-breadth
-work (a new Sigma rule, a `purple-team.py`/`ad-validate.py` scenario, a real live-fire verification pass), and
-this session's actual ask was completing the capture-and-crack story, not adding a new ATT&CK technique.
+Built as the natural next step this section originally deferred, after a full-repo coverage audit confirmed
+it was the one technique in the lab with a writeup and zero detection. Two independent rules, both confirmed
+against a real, freshly-run `secretsdump` attack (not assumed from documentation) before either was written:
+
+- **100560** — Windows System log EventID 7040 (Service Control Manager: "the start type of the X service was
+  changed"). Wazuh already ships a generic, untagged stock rule for this (61104, level 3, fires on ANY
+  service's start-type change); 100560 is a level-12 escalation child of it, keyed on
+  `win.eventdata.param4 == RemoteRegistry` and the transition landing on an enabled state — RemoteRegistry is
+  disabled by default and has essentially no legitimate reason to be toggled ad hoc, so this is a rare,
+  high-fidelity signal, the same idiom as the rest of this lab's rules.
+- **100561** — Sysmon Event ID 13 (RegistryEvent, Value Set) on the service's own `Start` value under
+  `HKLM\System\CurrentControlSet\Services\RemoteRegistry`. Genuinely unexpected: this section originally
+  speculated Sysmon EID13 might help "if the hive keys are watched" (meaning SAM/SECURITY themselves, which
+  nothing audits by design) — it turned out the *service config* key was already in scope of the existing
+  SwiftOnSecurity config, no new Sysmon config change needed.
+
+**Two real gotchas building it, both the kind this repo documents rather than glosses over** (full detail in
+`local_rules.xml`'s comment above rule 100560): a top-level custom rule matching decoded JSON fields needs to
+chain via `<if_group>` from the right stock Sysmon classifier group — the naming isn't uniform
+(`sysmon_event1`...`sysmon_event9`, no underscore, vs `sysmon_event_10`+, underscored) — `decoded_as>json`
+looked like the right lever (it's what the MISP-integration rule uses) but silently matched nothing for
+Windows/Sysmon events specifically. And `win.eventdata.targetObject` decodes with a **literal doubled
+backslash** between path segments, not the single backslash a normal Windows path would suggest — confirmed
+by dumping a fired alert's actual parsed JSON, not assumed. `wazuh-logtest` was not useful for this diagnosis:
+it hung after the decoding phase for every input tried in this environment, Windows or not.
+
+Wired into the automated battery as `ad-validate.py`'s "SAM Dump (RemoteRegistry)" scenario — `impacket-secretsdump`
+run from atk-01 against ws-01, the exact same default (no-flag) command this writeup's §1 already verified.
+Passed cleanly through the standard harness: `rules 100560,100561 hits=3`.
 
 ## Related
 
 `04-lateral-movement-wmi-winrm-psexec.md` (the admin access this reuses) ·
 `01-fs01-credential-theft-to-dcsync.md` §2b/§2c (why Kerberoast/DCSync never produced a hash to crack in the
-first place) · `phase-4-detection/attack-coverage/technique-index.md` (T1003.002 is not yet in the coverage
-map — this writeup is offense-only, see §4) · [`../TOOLS.md`](../TOOLS.md)
+first place) · `phase-4-detection/attack-coverage/technique-index.md` (T1003.002 now validated, rules
+100560/100561 — see §4) · [`../TOOLS.md`](../TOOLS.md)
