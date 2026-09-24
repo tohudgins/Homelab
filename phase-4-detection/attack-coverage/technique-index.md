@@ -14,7 +14,7 @@ oversight; see `phase-5-offense/attack-detect-writeups/` to add one.
 | T1003.002 | validated | 100560, 100561 | [phase-5-offense/attack-detect-writeups/08-sam-dump-credential-cracking-t1003.002.md](../../phase-5-offense/attack-detect-writeups/08-sam-dump-credential-cracking-t1003.002.md) |
 | T1003.006 | validated | 100080 | [phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md](../../phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md) |
 | T1007 | validated | 100507, 100508 | [phase-4-detection/sigma/README.md](../sigma/README.md) |
-| T1016 | validated | 100100, 100101 | [phase-5-offense/sliver-c2/README.md](../../phase-5-offense/sliver-c2/README.md) |
+| T1016 | validated | 100100, 100101 | [phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md](../../phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md) |
 | T1018 | validated | 100110 | [phase-5-offense/purple-team/README.md](../../phase-5-offense/purple-team/README.md) |
 | T1021.002 | validated | 100119, 100120 | [phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md](../../phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md) |
 | T1021.006 | validated | 100516 | [phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md](../../phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md) |
@@ -22,11 +22,11 @@ oversight; see `phase-5-offense/attack-detect-writeups/` to add one.
 | T1033 | validated | 100504, 100505 | [phase-5-offense/atomic-red-team/README.md](../../phase-5-offense/atomic-red-team/README.md) |
 | T1047 | validated | 100515, 100527 | [phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md](../../phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md) |
 | T1048.003 | validated | 100443, suricata:9100010 | [phase-6-nsm/dns-tunneling.md](../../phase-6-nsm/dns-tunneling.md) |
-| T1049 | validated | 100102, 100103 | [phase-4-detection/detection-catalog.md](../detection-catalog.md) |
+| T1049 | validated | 100102, 100103 | [phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md](../../phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md) |
 | T1053.003 | validated | 100050, 100551 | [phase-4-detection/osquery/README.md](../osquery/README.md) |
 | T1057 | validated | 100502, 100503 | [phase-4-detection/sigma/README.md](../sigma/README.md) |
 | T1059.004 | validated | 100200, 100550 | [phase-4-detection/osquery/README.md](../osquery/README.md) |
-| T1069.001 | validated | 100106, 100107 | [phase-4-detection/detection-catalog.md](../detection-catalog.md) |
+| T1069.001 | validated | 100106, 100107 | [phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md](../../phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md) |
 | T1069.002 | validated | 100109 | [phase-5-offense/purple-team/README.md](../../phase-5-offense/purple-team/README.md) |
 | T1071 | validated | 100210, 100211, 100301, suricata:9100002 | [phase-5-offense/sliver-c2/README.md](../../phase-5-offense/sliver-c2/README.md) |
 | T1071.001 | validated | 100200, suricata:9100001 | [phase-5-offense/sliver-c2/README.md](../../phase-5-offense/sliver-c2/README.md) |
@@ -46,15 +46,15 @@ oversight; see `phase-5-offense/attack-detect-writeups/` to add one.
 | T1197 | validated | 100511, 100512 | [phase-4-detection/threat-hunting/README.md](../threat-hunting/README.md) |
 | T1201 | validated | 100113 | [phase-5-offense/purple-team/README.md](../../phase-5-offense/purple-team/README.md) |
 | T1204.002 | validated | 100200, 100460 | [phase-4-detection/yara-fim/README.md](../yara-fim/README.md) |
-| T1218.005 | validated | 100116 | [phase-4-detection/detection-catalog.md](../detection-catalog.md) |
-| T1218.010 | validated | 100114 | [phase-4-detection/detection-catalog.md](../detection-catalog.md) |
-| T1218.011 | validated | 100115 | [phase-5-offense/purple-team/README.md](../../phase-5-offense/purple-team/README.md) |
+| T1218.005 | validated | 100116 | [phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md](../../phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md) |
+| T1218.010 | validated | 100114 | [phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md](../../phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md) |
+| T1218.011 | validated | 100115 | [phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md](../../phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md) |
 | T1482 | validated | 100111 | [phase-5-offense/purple-team/README.md](../../phase-5-offense/purple-team/README.md) |
-| T1484.001 | validated | 100020 | [phase-4-detection/detection-catalog.md](../detection-catalog.md) |
+| T1484.001 | validated | 100020 | [phase-5-offense/attack-detect-writeups/09-sysvol-gpo-integrity-t1484.001.md](../../phase-5-offense/attack-detect-writeups/09-sysvol-gpo-integrity-t1484.001.md) |
 | T1486 | validated | 100430, 100431 | [phase-4-detection/deception/README.md](../deception/README.md) |
 | T1490 | validated | 100520, 100521, 100522, 100523, 100524 | [phase-5-offense/attack-detect-writeups/06-inhibit-system-recovery-t1490.md](../../phase-5-offense/attack-detect-writeups/06-inhibit-system-recovery-t1490.md) |
-| T1518.001 | validated | 100104, 100105 | [phase-4-detection/detection-catalog.md](../detection-catalog.md) |
-| T1543.002 | validated | 100550 | [README.md](../../README.md) |
+| T1518.001 | validated | 100104, 100105 | [phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md](../../phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md) |
+| T1543.002 | validated | 100550 | [phase-4-detection/osquery/README.md](../osquery/README.md) |
 | T1547.001 | validated | 100070 | [phase-5-offense/attack-detect-writeups/07-registry-run-keys-t1547.001.md](../../phase-5-offense/attack-detect-writeups/07-registry-run-keys-t1547.001.md) |
 | T1548.002 | validated | 100117, 100118 | [phase-5-offense/purple-team/README.md](../../phase-5-offense/purple-team/README.md) |
 | T1548.003 | validated | 100540 | [phase-5-offense/attack-detect-writeups/05-linux-sudo-privesc-t1548.003.md](../../phase-5-offense/attack-detect-writeups/05-linux-sudo-privesc-t1548.003.md) |

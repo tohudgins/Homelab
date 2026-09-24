@@ -91,6 +91,9 @@ nav:
           - "06 · Inhibit System Recovery (T1490)": phase-5-offense/attack-detect-writeups/06-inhibit-system-recovery-t1490.md
           - "07 · Registry Run Keys (T1547.001)": phase-5-offense/attack-detect-writeups/07-registry-run-keys-t1547.001.md
           - "08 · SAM Dump + Cracking (T1003.002)": phase-5-offense/attack-detect-writeups/08-sam-dump-credential-cracking-t1003.002.md
+          - "09 · SYSVOL/GPO Integrity (T1484.001)": phase-5-offense/attack-detect-writeups/09-sysvol-gpo-integrity-t1484.001.md
+          - "10 · Discovery Tactics (T1049/T1069.001/T1518.001)": phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md
+          - "11 · LOLBin Proxy Execution (T1218.005/T1218.010)": phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md
       - BloodHound (AD Attack Paths): phase-5-offense/bloodhound-ce/README.md
       - Purple-Team Validation: phase-5-offense/purple-team/README.md
       - Atomic Red Team: phase-5-offense/atomic-red-team/README.md

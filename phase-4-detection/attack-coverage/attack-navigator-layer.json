@@ -40,7 +40,7 @@
       "techniqueID": "T1016",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100100, 100101 | learn: phase-5-offense/sliver-c2/README.md",
+      "comment": "VALIDATED (purple-team) \u2014 100100, 100101 | learn: phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md",
       "enabled": true
     },
     {
@@ -96,7 +96,7 @@
       "techniqueID": "T1049",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100102, 100103 | learn: phase-4-detection/detection-catalog.md",
+      "comment": "VALIDATED (purple-team) \u2014 100102, 100103 | learn: phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md",
       "enabled": true
     },
     {
@@ -124,7 +124,7 @@
       "techniqueID": "T1069.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100106, 100107 | learn: phase-4-detection/detection-catalog.md",
+      "comment": "VALIDATED (purple-team) \u2014 100106, 100107 | learn: phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md",
       "enabled": true
     },
     {
@@ -264,21 +264,21 @@
       "techniqueID": "T1218.005",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100116 | learn: phase-4-detection/detection-catalog.md",
+      "comment": "VALIDATED (purple-team) \u2014 100116 | learn: phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md",
       "enabled": true
     },
     {
       "techniqueID": "T1218.010",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100114 | learn: phase-4-detection/detection-catalog.md",
+      "comment": "VALIDATED (purple-team) \u2014 100114 | learn: phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md",
       "enabled": true
     },
     {
       "techniqueID": "T1218.011",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100115 | learn: phase-5-offense/purple-team/README.md",
+      "comment": "VALIDATED (purple-team) \u2014 100115 | learn: phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md",
       "enabled": true
     },
     {
@@ -292,7 +292,7 @@
       "techniqueID": "T1484.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100020 | learn: phase-4-detection/detection-catalog.md",
+      "comment": "VALIDATED (purple-team) \u2014 100020 | learn: phase-5-offense/attack-detect-writeups/09-sysvol-gpo-integrity-t1484.001.md",
       "enabled": true
     },
     {
@@ -313,14 +313,14 @@
       "techniqueID": "T1518.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100104, 100105 | learn: phase-4-detection/detection-catalog.md",
+      "comment": "VALIDATED (purple-team) \u2014 100104, 100105 | learn: phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md",
       "enabled": true
     },
     {
       "techniqueID": "T1543.002",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100550 | learn: README.md",
+      "comment": "VALIDATED (purple-team) \u2014 100550 | learn: phase-4-detection/osquery/README.md",
       "enabled": true
     },
     {
