@@ -13,7 +13,7 @@
 | Segment | vmnet | Subnet | Gateway | DHCP owner |
 |---|---|---|---|---|
 | WAN uplink | vmnet8 (NAT) | Fusion-assigned | — | Fusion |
-| CORP | vmnet3 | `10.10.10.0/24` | `10.10.10.1` (rtr-01) | dc-01 |
+| CORP | vmnet3 | `10.10.10.0/24` | `10.10.10.1` (rtr-01) | none — confirmed 2026-09-24 (dc-01 runs no DHCP server, nothing listens on :67); every CORP host is static, "DHCP reservation" elsewhere in this doc is stale |
 | SOC / MGMT | vmnet5 | `10.10.30.0/24` | `10.10.30.1` (rtr-01) | rtr-01 |
 | DMZ *(optional)* | vmnet4 | `10.10.20.0/24` | `10.10.20.1` (rtr-01) | rtr-01 |
 | REDTEAM *(on-demand)* | vmnet6 | `10.10.40.0/24` | `10.10.40.1` (rtr-01) | rtr-01 |
@@ -32,7 +32,7 @@
 | siem-01 | SOC/MGMT | `10.10.30.10` | Wazuh all-in-one |
 | misp-01 | SOC/MGMT | `10.10.30.20` | MISP threat-intel platform (Docker); pulls feeds via SOC→WAN, feeds IOCs to Wazuh |
 | dmz-01 | DMZ | `10.10.20.10` | OWASP Juice Shop (Docker), Wazuh agent 005 — built headless via Ubuntu autoinstall, configured by the `dmz` Ansible role |
-| atk-01 | REDTEAM | `10.10.40.10` (DHCP — rebuilt often) | Attack tooling, BloodHound collector |
+| atk-01 | REDTEAM + CORP (dual-homed, 2026-09-24) | REDTEAM: DHCP, varies per boot (was `10.10.40.119` — the `.10` this row used to claim was stale, never actually confirmed) · CORP: `10.10.10.99` (static, second NIC on `vmnet3`, `ipv4.never-default` so the REDTEAM route stays the default) | Attack tooling, BloodHound collector. The CORP NIC exists only for tools that need same-L2-segment presence (Responder/LLMNR poisoning doesn't route — see `phase-5-offense/TOOLS.md`) — the "attacker as external/adjacent, not already on the segment" story stays intact for everything else via the REDTEAM interface. |
 | scan-01 | REDTEAM | `10.10.40.20` (static, below the `.100–.200` DHCP pool) | Greenbone CE / OpenVAS active vuln scanner — built headless via Ubuntu autoinstall, configured by the `scan` Ansible role |
 
 ## Ports crossing segment boundaries

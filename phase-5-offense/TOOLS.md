@@ -89,6 +89,34 @@ Used here as `Custom.Hunt.ImplantIOC`, a single hunt that found the Sliver beaco
 persistence entry across both Linux hosts and ws-01 in one query. See
 `phase-4-detection/velociraptor/README.md`.
 
+## Responder
+
+An LLMNR/NBT-NS/mDNS poisoner — it answers name-resolution broadcasts a Windows host sends when a DNS
+lookup fails (a typo'd share name, a mistyped hostname), impersonating whatever was asked for and harvesting
+the NTLMv2 challenge-response the victim sends back trying to authenticate to it. Arguably the single most
+common real-world internal-network initial-access technique (MITRE
+[T1557.001](https://attack.mitre.org/techniques/T1557/001/) — Adversary-in-the-Middle: LLMNR/NBT-NS
+Poisoning and SMB Relay), and not in this lab's coverage map at all before this. Already shipped with
+`kali-linux-headless` on atk-01, unused until now — same "already installed, never exercised" story as
+Metasploit. **Real infrastructure gap it exposed:** LLMNR/NBT-NS/mDNS are link-local broadcast protocols —
+`rtr-01` never forwards them across segments — so atk-01's original single REDTEAM-only NIC could never have
+seen this traffic no matter how it was configured. Gave atk-01 a second NIC directly on CORP (`vmnet3`,
+`10.10.10.99` static) specifically so Responder has a real broadcast domain to listen on, the same way a
+real attacker needs an actual foothold on the target segment (not just adjacency to it) before this
+technique works at all. `sudo responder -I eth1` on atk-01.
+
+## Burp Suite (Community Edition) / OWASP ZAP
+
+The two standard intercepting-proxy web application testing tools — sit between a browser and the target,
+letting you see, pause, and hand-edit every HTTP request before it's sent (Burp's Repeater/Intruder, ZAP's
+equivalent), rather than only running an automated scanner like `sqlmap`/`nikto` against a fixed target URL.
+This is the actual day-to-day tool for manual web app pentesting and bug-bounty work — parameter tampering,
+auth/session testing, business-logic flaws a scanner can't reason about. Both installed on atk-01 (`apt
+install burpsuite zaproxy`, both arm64-native, confirmed via `--version`/`-version`); both are GUI
+applications, reached by opening the atk-01 VM's own window in VMware Fusion (it already runs a full Xfce
+desktop via `lightdm` — no VNC/X11-forwarding setup needed) rather than over SSH. Point either at the
+existing DMZ Juice Shop target (`10.10.20.10:3000`) for practice.
+
 ## Related
 
 [`README.md`](README.md) (which script to reach for) ·
