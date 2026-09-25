@@ -117,6 +117,32 @@ applications, reached by opening the atk-01 VM's own window in VMware Fusion (it
 desktop via `lightdm` — no VNC/X11-forwarding setup needed) rather than over SSH. Point either at the
 existing DMZ Juice Shop target (`10.10.20.10:3000`) for practice.
 
+## Nuclei / ffuf / gobuster
+
+Web-recon and vulnerability-scanning tools, more central to real bug-bounty work day-to-day than
+`sqlmap`/`nikto` above: `ffuf`/`gobuster` brute-force directories, files, parameters, and vhosts against a
+target (finding the endpoints a scanner never guesses on its own); `nuclei` runs thousands of
+community-maintained YAML templates (CVE checks, misconfig detection, exposed panels) against a target in
+one pass, the same "detection-as-code" idea as this lab's own Sigma rules, applied to offense instead of
+defense. All three ship in `kali-linux-default` and were already installed on atk-01 — unexercised until
+now, same story as Metasploit and Responder. `nuclei` upgraded 3.8.0→3.11.1 for current templates. Point any
+of them at the existing DMZ Juice Shop target (`10.10.20.10:3000`).
+
+## Ghidra / radare2 / GEF / pwntools
+
+The binary-exploitation and reverse-engineering toolchain — a genuinely different skill category from
+everything else in this lab (network/AD/web), and relevant specifically because CTFs commonly run pwn/rev
+as their own category alongside web and AD challenges. **Ghidra** (NSA's open-source disassembler/decompiler,
+GUI) and **radare2** (CLI/scriptable disassembler, already installed) cover static analysis — reading a
+binary without running it. **GEF** (`GDB Enhanced Features`) turns plain `gdb` into a real exploit-dev
+debugger (register/stack visualization, heap-chunk inspection, one-command pattern generation for offset
+finding) — invoke it with the `gef` wrapper instead of bare `gdb`. **pwntools** (`python3-pwntools`) is the
+actual exploit-writing library — crafts payloads, talks to a remote CTF challenge over a socket, wraps
+`ROP`/format-string/shellcode helpers. Unlike the rest of this lab, this toolchain doesn't need a network
+target at all — practice comes from downloading standalone CTF/wargame binaries (`pwn.college`, "Protostar",
+picoCTF archives), not from anything in this repo's own VMs. Ghidra is a GUI app, reached the same way as
+Burp/ZAP (atk-01's VM window in Fusion); everything else is CLI, straight over SSH.
+
 ## Related
 
 [`README.md`](README.md) (which script to reach for) ·
