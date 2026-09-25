@@ -143,6 +143,28 @@ target at all — practice comes from downloading standalone CTF/wargame binarie
 picoCTF archives), not from anything in this repo's own VMs. Ghidra is a GUI app, reached the same way as
 Burp/ZAP (atk-01's VM window in Fusion); everything else is CLI, straight over SSH.
 
+## SecLists
+
+The standard wordlist collection for exactly the tools above — usernames, passwords, discovery paths, and
+fuzzing payloads, maintained by the security community and referenced by name in most real bug-bounty
+writeups and methodology guides. Installing `ffuf`/`gobuster`/`nuclei` without it is a real handicap: those
+tools are only as good as the wordlist behind them, and Kali's own bundled defaults are thin compared to
+this. `apt install seclists` on atk-01 (~1.9 GB, `/usr/share/seclists/`) — a genuine gap in the previous pass
+that installed the tools themselves but not what makes them useful for real work.
+
+## jadx / apktool / Frida
+
+Android application security tooling — a real, self-contained bug-bounty category (many programs are
+mobile-first) that doesn't need a live network target any more than the binary-exploitation toolchain does:
+practice comes from a deliberately vulnerable APK (DIVA, InsecureBankv2, OWASP MASTG's crackmes), downloaded
+and analyzed locally. **jadx** decompiles an APK's Dalvik bytecode back to readable Java — the first step in
+almost any Android app assessment (installed from its GitHub release, `/opt/jadx`, since it isn't in Kali's
+apt repos). **apktool** disassembles/rebuilds an APK's resources and Smali bytecode, letting you patch and
+re-sign an app to test client-side logic. **Frida** is dynamic instrumentation — hooks into a *running* app
+to bypass root/SSL-pinning checks or intercept calls at runtime, the piece static analysis alone can't do
+(installed via `pipx install frida-tools`, since it isn't packaged for Kali either; needed `pipx ensurepath`
+to actually land its CLI tools — `frida`, `frida-trace`, `frida-ps`, etc. — on `$PATH`).
+
 ## Related
 
 [`README.md`](README.md) (which script to reach for) ·
