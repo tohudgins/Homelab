@@ -135,10 +135,10 @@ ws-01). Full writeup: [`velociraptor/README.md`](velociraptor/README.md).
   build plan (ET Open tuning, Suricata+Zeek correlation). Started drifting into that scope mid-session and
   pulled back deliberately rather than half-finish Phase 6 under the Phase 4 banner.
 - **12 techniques is the top of the build plan's target range, not a hard stop.** Real candidates for a
-  future pass: T1055 (process injection, stock rule 92910 already covers explorer.exe access — untested),
-  T1218 (LOLBin abuse — stock coverage exists, untested), T1087 (account/group discovery), and revisiting
-  T1003.001 with a proper PPL-bypass methodology if that's ever genuinely warranted (it wasn't here — see
-  below for why that line wasn't crossed).
+  future pass: T1218 (LOLBin abuse — stock coverage exists, untested), T1087 (account/group discovery), and
+  revisiting T1003.001 with a proper PPL-bypass methodology if that's ever genuinely warranted (it wasn't
+  here — see below for why that line wasn't crossed). T1055 (process injection) was on this list too — closed
+  2026-09-25, see below.
 
 ---
 
@@ -1490,4 +1490,72 @@ Full writeup, converter design, and honest limitations: [`sigma/README.md`](sigm
   spawns** — no process, no telemetry: the endpoint control *is* the outer detection layer, and the Sigma
   rule is the layer that catches it wherever that control is absent or bypassed. Its logic (true-positive +
   precision, incl. no FP on benign `certutil -hashfile`) is proven by `sigma/sigma-selftest.py` (now **15/15**).
+
+## T1055 — Process Injection (closed 2026-09-25)
+
+**Objective:** detect `CreateRemoteThread`-based process injection — a fresh defense-audit pass (see
+`T1098.007`/`T1003.003` sections' sibling audit, same day) re-flagged this as the one item from the original
+"future pass" list (above) that had sat open since August, never actually closed.
+
+**What was tried and found:** Wazuh ships three T1055-tagged rules off Sysmon EID 8
+(`0870-sysmon_id_8.xml`, rules `92400`/`92401`/`92402`) — but all three key on the *target* process being one
+of exactly three legacy paths: `explorer.exe`, `mstsc.exe`, `svchost.exe`/`synchost.exe`. Confirmed live that
+this misses a real, common attack shape entirely: a self-contained PowerShell P/Invoke `CreateRemoteThread`
+call (`OpenProcess` → `VirtualAllocEx` → `WriteProcessMemory` → `CreateRemoteThread`, the textbook technique,
+no external binary) targeting the modern UWP Notepad app produced a genuine Sysmon EID 8 event that matched
+**zero** rules, stock or custom — `TargetImage` was
+`...\WindowsApps\Microsoft.WindowsNotepad_...\Notepad\Notepad.exe`, nowhere near any of the three stock
+target paths. Enumerating targets is an open-ended list that will always miss something, as just proven.
+
+**Custom rule (closes the gap, the opposite way — keys on the *source*, not the target):**
+
+```xml
+<rule id="100562" level="12">
+  <if_group>sysmon_event8</if_group>
+  <field name="win.eventdata.sourceImage" type="pcre2">(?i)\\(powershell|pwsh|cmd|wscript|cscript|mshta|rundll32)\.exe$</field>
+  <options>no_full_log</options>
+  <description>Possible process injection (CreateRemoteThread) from a scripting/LOLBin process — $(win.eventdata.sourceImage) -> $(win.eventdata.targetImage)</description>
+  <mitre><id>T1055</id></mitre>
+  <group>defense_evasion,attack,</group>
+</rule>
+```
+
+A real scripting/LOLBin interpreter (`powershell.exe`, `cmd.exe`, `wscript.exe`, `mshta.exe`,
+`rundll32.exe`, …) has essentially no legitimate reason to ever call `CreateRemoteThread` into another
+process — the same "rare + specific beats broad + noisy" idiom as the other LOLBin rules in this file
+(`100114`–`100116`). Not mutually exclusive with the stock rules — an injection that hits both (a script
+injecting into `svchost`, say) naturally wins on this rule's higher level (12 vs. the stock rules' 3–12
+spread) under Wazuh's one-rule-per-event resolution, the correct outcome since a scripting-engine source is
+a stronger signal than a legacy target path alone.
+
+**Verification (true positive), confirmed twice:** first live during the original gap-finding session
+(2026-09-25), then reproduced independently for this write-up with a deliberately minimal, non-destructive
+payload — the injected "shellcode" is a single `0xC3` (`RET`) byte, so the remote thread executes one
+instruction and immediately returns, proving the injection primitive and the telemetry path without running
+any actual code in the target:
+
+```
+Rule: 100562 (level 12) -> 'Possible process injection (CreateRemoteThread) from a scripting/LOLBin
+process — C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe ->
+C:\Program Files\WindowsApps\Microsoft.WindowsNotepad_11.2607.14.0_arm64__8wekyb3d8bbwe\Notepad\Notepad.exe'
+mitre.technique: Process Injection (T1055) · tactics: Defense Evasion, Privilege Escalation
+SourceProcessId 3332 -> TargetProcessId 6236, NewThreadId 2116 (matches the injector's own reported values)
+```
+
+**Why this isn't in the automated purple-team battery:** `purple-team.py` only exercises stock Atomic Red
+Team tests, and ART's own T1055 atomics (13 of them, `T1055-1` through `T1055-13`) are compiled Go binaries
+or other non-scripting executors — none of them produce a `powershell.exe`-sourced `CreateRemoteThread`
+event, so none would exercise this specific rule. Tracked in `technique-index.md` as "detection only" (like
+T1027/T1105/T1569.002 above, for a different reason: those are Defender-blocked true-negatives, this one is
+a real true-positive with no matching automatable atomic) rather than misrepresented as continuously
+harness-validated.
+
+**Evasion:** any injection whose source process isn't one of the six named interpreters (a compiled
+implant, a renamed/copied binary, a legitimate signed tool being abused) is outside this rule's scope — it
+narrows the stock rules' target-enumeration blind spot but trades it for a source-enumeration one of the
+same shape, one layer up the call chain.
+
+**False-positive risk:** low but non-zero — any legitimate tooling that scripts remote-thread creation into
+another process from one of these six interpreters (some admin/automation utilities do) would alert here;
+none observed in this lab's normal operation.
 

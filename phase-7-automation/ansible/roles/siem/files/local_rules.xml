@@ -1499,3 +1499,40 @@
     <group>credential_access,attack,</group>
   </rule>
 </group>
+
+<!-- T1055 — Process Injection (2026-09-25). Stock Wazuh already ships three
+     T1055-tagged rules for Sysmon EID8/CreateRemoteThread (0870-sysmon_id_8.xml,
+     rules 92400/92401/92402) — but every one of them keys on the *target*
+     process being one of exactly three legacy paths: explorer.exe, mstsc.exe,
+     svchost.exe/synchost.exe. Confirmed live (2026-09-25) this misses a real,
+     common attack shape entirely: a self-contained PowerShell P/Invoke
+     CreateRemoteThread call (OpenProcess -> VirtualAllocEx -> WriteProcessMemory
+     -> CreateRemoteThread, the textbook technique, no external binary) targeting
+     the modern UWP Notepad app produced a genuine Sysmon EID8 event that matched
+     ZERO rules, stock or custom — `win.eventdata.targetImage` was
+     `...\WindowsApps\Microsoft.WindowsNotepad_...\Notepad\Notepad.exe`, nowhere
+     near any of the three stock target paths. This rule closes that gap the
+     opposite way: instead of trying to enumerate every possible legitimate-vs-
+     malicious *target* (an open-ended list that will always miss something,
+     as just proven), key on the *source* — a scripting/LOLBin interpreter
+     calling CreateRemoteThread into ANY other process. A real `powershell.exe`,
+     `cmd.exe`, `wscript.exe`, `mshta.exe`, or `rundll32.exe` has essentially no
+     legitimate reason to ever do this, the same "rare + specific beats broad +
+     noisy" idiom as every other LOLBin rule in this file (100114-100116). Not
+     mutually exclusive with the stock rules — an injection that hits both (a
+     script injecting into svchost, say) naturally wins on this rule's higher
+     level (12 vs. the stock rules' 3-12 spread) under Wazuh's one-rule-per-event
+     resolution, which is the correct outcome: a scripting-engine source is a
+     stronger signal than a legacy target path alone. -->
+<group name="local,windows,">
+  <rule id="100562" level="12">
+    <if_group>sysmon_event8</if_group>
+    <field name="win.eventdata.sourceImage" type="pcre2">(?i)\\\\(powershell|pwsh|cmd|wscript|cscript|mshta|rundll32)\.exe$</field>
+    <options>no_full_log</options>
+    <description>Possible process injection (CreateRemoteThread) from a scripting/LOLBin process — $(win.eventdata.sourceImage) -> $(win.eventdata.targetImage)</description>
+    <mitre>
+      <id>T1055</id>
+    </mitre>
+    <group>defense_evasion,attack,</group>
+  </rule>
+</group>

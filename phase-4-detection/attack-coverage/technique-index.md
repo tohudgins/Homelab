@@ -25,6 +25,7 @@ oversight; see `phase-5-offense/attack-detect-writeups/` to add one.
 | T1048.003 | validated | 100443, suricata:9100010 | [phase-6-nsm/dns-tunneling.md](../../phase-6-nsm/dns-tunneling.md) |
 | T1049 | validated | 100102, 100103 | [phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md](../../phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md) |
 | T1053.003 | validated | 100050, 100551 | [phase-4-detection/osquery/README.md](../osquery/README.md) |
+| T1055 | detection only | 100562 | [phase-4-detection/detection-catalog.md](../detection-catalog.md) |
 | T1057 | validated | 100502, 100503 | [phase-4-detection/sigma/README.md](../sigma/README.md) |
 | T1059.004 | validated | 100200, 100550 | [phase-4-detection/osquery/README.md](../osquery/README.md) |
 | T1069.001 | validated | 100106, 100107 | [phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md](../../phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md) |
