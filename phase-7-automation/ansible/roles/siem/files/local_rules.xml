@@ -1589,3 +1589,43 @@
     <group>ops_maintenance,</group>
   </rule>
 </group>
+
+<!-- Velociraptor -> Wazuh escalation (2026-09-26 gap audit): closes the
+     "possible next step, noted not built" velociraptor/README.md named —
+     DFIR hunts were on-demand only, so a genuine hit never became a SIEM
+     alert unless an analyst happened to run the hunt and read the output.
+     velociraptor-hunt-escalate.py (cron, siem-01) runs the existing
+     Custom.Hunt.ImplantIOC hunt and injects one event per high-confidence
+     finding via the analysisd queue socket — same idiom as the MISP/IRIS
+     integrations above (100300/100530), a scheduled trigger instead of an
+     inbound alert. Parent rule classifies any injected event generically;
+     two children split by platform/technique, both level 12 (reaches the
+     IRIS integration threshold, >=10, same as a real detection would). -->
+<group name="local,velociraptor,">
+  <rule id="100564" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="integration">^velociraptor$</field>
+    <description>Velociraptor hunt-escalation event</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <rule id="100565" level="12">
+    <if_sid>100564</if_sid>
+    <field name="velociraptor.artifact">LinuxWorldWritableELF</field>
+    <description>Velociraptor fleet hunt: world-writable ELF found on $(velociraptor.hostname) — $(velociraptor.path) (SHA256 $(velociraptor.sha256))</description>
+    <mitre>
+      <id>T1105</id>
+    </mitre>
+    <group>dfir,attack,</group>
+  </rule>
+
+  <rule id="100566" level="12">
+    <if_sid>100564</if_sid>
+    <field name="velociraptor.artifact">WindowsRunKeys</field>
+    <description>Velociraptor fleet hunt: unrecognized autostart entry on $(velociraptor.hostname) — $(velociraptor.name): $(velociraptor.command)</description>
+    <mitre>
+      <id>T1547.001</id>
+    </mitre>
+    <group>dfir,attack,</group>
+  </rule>
+</group>

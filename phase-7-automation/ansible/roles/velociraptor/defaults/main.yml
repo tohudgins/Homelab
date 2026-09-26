@@ -33,3 +33,9 @@ velociraptor_datastore: /opt/velociraptor/datastore
 # Where the server play drops the derived client config on the CONTROLLER, for the
 # client play to pick up (one `ansible-playbook velociraptor.yml` run, server first).
 velociraptor_client_config_fetch: "/tmp/velociraptor-client.config.yaml"
+
+# DFIR->SIEM escalation (closes the "possible next step, noted not built" the
+# README named — 2026-09-26 gap audit): scheduled hunt + escalation of
+# high-confidence findings into Wazuh. See velociraptor-hunt-escalate.py.
+velociraptor_hunt_escalate_hour: "2"
+velociraptor_hunt_escalate_minute: "30"

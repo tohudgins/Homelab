@@ -107,3 +107,56 @@
     src: "{{ velociraptor_config_dir }}/client.config.yaml"
     dest: "{{ velociraptor_client_config_fetch }}"
     flat: true
+
+# api.config.yaml existed live on siem-01 (needed for every `--api_config`
+# query this role's own README documents) but nothing generated it as code —
+# a real gap found closing this role's own "possible next step" TODO, which
+# needs exactly this file to trigger hunts non-interactively. Reuses the
+# existing GUI admin identity (already granted the administrator role by the
+# user-add task above) rather than creating a second principal.
+- name: Check for an existing API client config (generate-once)
+  ansible.builtin.stat:
+    path: "{{ velociraptor_config_dir }}/api.config.yaml"
+  register: velo_api_cfg
+
+- name: Derive the API client config (first install only)
+  ansible.builtin.command:
+    argv:
+      - "{{ velociraptor_bin }}"
+      - --config
+      - "{{ velociraptor_config_dir }}/server.config.yaml"
+      - config
+      - api_client
+      - --name={{ velociraptor_gui_user }}
+      - "{{ velociraptor_config_dir }}/api.config.yaml"
+  when: not velo_api_cfg.stat.exists
+
+- name: Ensure the API client config has the right permissions
+  ansible.builtin.file:
+    path: "{{ velociraptor_config_dir }}/api.config.yaml"
+    mode: "0640"
+
+# --- DFIR -> SIEM escalation: run the existing implant hunt on a schedule
+# and inject high-confidence findings into Wazuh instead of leaving them
+# only visible to an analyst who happens to run the hunt by hand. ---
+- name: Deploy the Velociraptor hunt-escalation script
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../phase-4-detection/velociraptor/velociraptor-hunt-escalate.py"
+    dest: /usr/local/sbin/velociraptor-hunt-escalate.py
+    owner: root
+    group: root
+    mode: "0750"
+
+# Same cron-failure-visibility pattern as the siem role's own maintenance
+# cron jobs (2026-09-26 gap audit) — reuses the identical
+# /var/log/cron-failures.log + rule 100563 self-monitoring path already
+# wired up on this same host, rather than building a second mechanism.
+- name: Schedule the Velociraptor hunt-escalation run
+  ansible.builtin.cron:
+    name: "Velociraptor hunt escalation"
+    user: root
+    minute: "{{ velociraptor_hunt_escalate_minute }}"
+    hour: "{{ velociraptor_hunt_escalate_hour }}"
+    job: >-
+      /usr/local/sbin/velociraptor-hunt-escalate.py
+      || { rc=$?; echo "$(date -u +\%Y-\%m-\%dT\%H:\%M:\%SZ) CRON_JOB_FAILED: velociraptor-hunt-escalate.py exit=$rc" >> /var/log/cron-failures.log; }

@@ -147,9 +147,37 @@ Navigator coverage map — it would overstate the ruleset. The capability it add
 interactive, cross-fleet DFIR that starts *after* a detection or hypothesis points at a host. (The Windows
 hunt does happen to enumerate T1547.001 autostarts, already covered as a real-time rule by 100070.)
 
-**Possible next step (noted, not built):** wire a Velociraptor client-side monitoring artifact to raise into
-Wazuh, so a high-signal endpoint event (e.g. a new world-writable ELF) becomes a SIEM alert too — closing
-the DFIR→SIEM loop the way the MISP and IRIS integrations closed theirs.
+**DFIR→SIEM loop, closed (2026-09-26, gap audit).** [`velociraptor-hunt-escalate.py`](velociraptor-hunt-escalate.py)
+runs on siem-01 (cron, `roles/velociraptor`'s server play) — same host as both the Velociraptor server and
+the Wazuh manager, so no cross-host complexity: trigger `Custom.Hunt.ImplantIOC` via the local `--api_config`,
+wait for the fleet to check in, then inject one event per high-confidence finding into analysisd's queue
+socket — the identical technique `custom-misp.py`/`custom-iris.py` already use, just cron-triggered instead
+of alert-triggered. Two confidence bars, not "escalate everything the hunt returns": every Linux
+world-writable-ELF hit is escalated (nothing legitimate lives there, so there's no allowlist to maintain);
+Windows Run-key hits are escalated only if the entry's `Name` isn't in a small known-good allowlist (this
+lab's own OneDrive/SecurityHealth/VMware entries above) — most of what that hunt returns on any real
+Windows box is legitimate autostart software. New rules 100564–100566 (`local_rules.xml`) classify the
+injected event and split it by platform/technique (T1105 / T1547.001), both level 12 — the same IRIS
+escalation threshold (≥10) a real-time detection reaches.
+
+> [!check] Verified live 2026-09-26.
+> Planted a real ELF at `/tmp/test-implant-marker` on `dc-01`, ran the deployed script by hand: it triggered
+> a fresh hunt, found the file within 15 seconds, and injected a matching event — which fired rule 100565
+> (level 12, correct MITRE T1105 tag, every field populated) within 5 seconds of that. Confirmed the exact
+> same one-hit/one-escalation behavior a scheduled cron run would produce, not just that the script runs
+> without erroring. Also closed a small adjacent gap found while wiring this up: `api.config.yaml` (needed
+> for any non-interactive hunt trigger, including this script) existed live on siem-01 but nothing had ever
+> generated it as code — added a generate-once task reusing the existing GUI admin identity, verified safe
+> against the already-existing live file (`changed=0`).
+>
+> **Honest scope note:** this is a *scheduled* hunt, not genuine client-side event monitoring — the original
+> "wire a client-side monitoring artifact" framing above implied continuous, real-time detection of a new
+> world-writable ELF the moment it's written. What's built instead polls once a day (`velociraptor_hunt_escalate_hour`/`_minute`,
+> default 02:30). That's a real, deliberate scope boundary: continuous client-side event monitoring is a
+> materially bigger lift (Velociraptor's own event-artifact + server-monitoring pipeline, not yet used
+> anywhere in this lab) than reusing the hunt this role already had, verified, and running. A daily sweep
+> closes the "an analyst has to remember to look" gap the README named; it does not close a "found within
+> seconds of being written" gap, which would need the bigger build.
 
 ---
 
