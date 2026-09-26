@@ -1536,3 +1536,56 @@
     <group>defense_evasion,attack,</group>
   </rule>
 </group>
+
+<!-- "Who watches the watchmen" (2026-09-26 gap audit): the log-retention and
+     OpenSearch-snapshot-backup cron jobs (roles/siem/tasks/main.yml) logged
+     their own outcome to their own log files, but nothing watched those
+     files — a silent failure (rotated password, full disk) would go
+     unnoticed indefinitely. Both cron entries now append a single, greppable
+     line to /var/log/cron-failures.log on any non-zero exit; siem-01 already
+     monitors its own local files (it's both manager and its own local agent,
+     ID 000), so this just points that existing mechanism at the one new
+     file. Level 10 — reaches the IRIS integration threshold (>=10, see the
+     custom-iris integration above) the same way a real detection would,
+     because a broken backup of detection history is exactly the kind of
+     thing an analyst should see, not just a line in a file nobody tails.
+
+     Two real things found live while testing this:
+
+     1. `no_full_log` silently blanks $(full_log) in the description too, not
+        just the alert's own full_log field the way its name implies —
+        dropped it so the failing line is actually visible.
+
+     2. Manually simulating the cron job via `sudo bash -c '...CRON_JOB_FAILED...'`
+        made this rule also fire on the resulting sudo/journald audit event
+        (sudo logs the full command line verbatim, so the literal string is
+        right there in an unrelated event). Tried scoping with
+        `<field name="location" type="pcre2">^/var/log/cron-failures\.log$</field>`
+        to fix it — confirmed via wazuh-analysisd's own log that the rule still
+        loaded (no compile error, rule count stable across restarts), but it
+        then matched NEITHER the sudo noise NOR genuine appends to the real
+        file, isolated by testing bare `<match>` alone (worked, confirmed by
+        a fresh alert per fresh write) against the same rule WITH the field
+        constraint added (worked for nothing at all, several restarts, several
+        distinctly-marked test writes). Reverted rather than ship a
+        field-matching mechanism that couldn't be gotten working and verified
+        live — this needs more investigation into Wazuh's field-match
+        internals before trying again, not a guess shipped as fact.
+
+        Left as a real, not a testing-artifact, precision gap: the not-yet-
+        proven fix would have scoped this to genuine cron-failures.log
+        content only. What actually ships here is intentionally broader.
+        In real operation this is lower-risk than it sounds — root's own
+        crontab entries run directly under cron, never through `sudo`, so
+        the false-positive path above is specific to how *this* was tested
+        by hand, not to how it actually runs — but it is not zero-risk: any
+        other future event that happens to contain the literal string
+        "CRON_JOB_FAILED" (another script's log, a copy-pasted command) would
+        still match. -->
+<group name="local,ops,">
+  <rule id="100563" level="10">
+    <match>CRON_JOB_FAILED</match>
+    <description>A siem-01 maintenance cron job failed — $(full_log)</description>
+    <group>ops_maintenance,</group>
+  </rule>
+</group>

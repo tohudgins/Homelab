@@ -196,3 +196,25 @@
   ansible.builtin.systemd:
     name: zeek
     enabled: true
+
+# --- "Who watches the watchmen": external siem-01 availability check --------
+# Found in the 2026-09-26 gap audit: Wazuh's <agents_disconnection_time>
+# tracks agents dropping out, but nothing watches whether the MANAGER itself
+# is even up — if siem-01 dies, nothing can page anyone, since the thing
+# that's down is the thing that would normally do the paging. rtr-01 is the
+# one host every profile keeps running, so it's the only honest place for an
+# external check to live. See monitor-siem-availability.sh's own header.
+- name: Deploy the siem-01 external availability check
+  ansible.builtin.copy:
+    src: monitor-siem-availability.sh
+    dest: /usr/local/sbin/monitor-siem-availability.sh
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Schedule the siem-01 availability check every 5 minutes
+  ansible.builtin.cron:
+    name: "siem-01 external availability check"
+    user: root
+    minute: "*/5"
+    job: "SIEM_HOST={{ siem_monitor_host }} SIEM_PORT={{ siem_monitor_port }} /usr/local/sbin/monitor-siem-availability.sh"

@@ -177,11 +177,22 @@
     mode: "0750"
   become: true
 
+# The `|| echo ... >> cron-failures.log` suffix is local-visibility parity
+# with siem-01's own self-monitoring (2026-09-26 gap audit) — misp-01 has no
+# Wazuh agent (by design; it's a threat-intel/case-management platform Wazuh
+# pushes alerts INTO, not a monitored endpoint), so this can't reach Wazuh's
+# alerting the way siem-01's own cron jobs now do. A real fix would need a
+# Wazuh agent on misp-01, a separate architectural decision not made here —
+# this at least means a login to misp-01 shows a failure clearly instead of
+# it being buried in misp-backup.sh's own log.
 - name: Schedule daily MISP backup
   ansible.builtin.cron:
     name: "MISP backup"
     user: root
     minute: "15"
     hour: "4"
-    job: "MISP_BACKUP_RETENTION_DAYS={{ misp_backup_retention_days }} /usr/local/sbin/misp-backup.sh"
+    job: >-
+      MISP_BACKUP_RETENTION_DAYS={{ misp_backup_retention_days }}
+      /usr/local/sbin/misp-backup.sh
+      || { rc=$?; echo "$(date -u +\%Y-\%m-\%dT\%H:\%M:\%SZ) CRON_JOB_FAILED: misp-backup.sh exit=$rc" >> /var/log/cron-failures.log; }
   become: true

@@ -168,6 +168,8 @@ stanza to the `router` role, converge rtr-01.
 | NSM / PCAP analysis | `phase-6-nsm/` |
 | Archive/alert log retention (siem-01, cron 03:30 daily) | `roles/siem/files/wazuh-log-retention.sh` (90-day default, `wazuh_log_retention_days`) |
 | App-level backup/restore (Wazuh/MISP/IRIS, daily cron) | [`docs/backup-restore.md`](backup-restore.md) |
+| "Who watches the watchmen" — siem-01 external availability check (rtr-01, cron every 5 min) | `roles/router/files/monitor-siem-availability.sh` → `/var/log/siem-monitor.log` on rtr-01 (state-transition only, no spam) |
+| siem-01's own cron-job failure alerting (retention + snapshot-backup) | `/var/log/cron-failures.log` on siem-01, fed into Wazuh's own pipeline — rule 100563, reaches IRIS |
 | **Credentials, per-VM config** | the second-brain `Virtual Machines` note (not in git) |
 
 ### Environment variables / secrets

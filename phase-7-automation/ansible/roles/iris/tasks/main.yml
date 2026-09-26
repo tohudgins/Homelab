@@ -129,11 +129,16 @@
     mode: "0750"
   become: true
 
+# Same local-visibility-only parity as the misp role's identical guard — see
+# its comment for why this can't reach Wazuh's alerting on misp-01 today.
 - name: Schedule daily IRIS backup
   ansible.builtin.cron:
     name: "IRIS backup"
     user: root
     minute: "30"
     hour: "4"
-    job: "IRIS_BACKUP_RETENTION_DAYS={{ iris_backup_retention_days }} /usr/local/sbin/iris-backup.sh"
+    job: >-
+      IRIS_BACKUP_RETENTION_DAYS={{ iris_backup_retention_days }}
+      /usr/local/sbin/iris-backup.sh
+      || { rc=$?; echo "$(date -u +\%Y-\%m-\%dT\%H:\%M:\%SZ) CRON_JOB_FAILED: iris-backup.sh exit=$rc" >> /var/log/cron-failures.log; }
   become: true

@@ -32,8 +32,10 @@ result=$(curl -sk "${AUTH[@]}" -X PUT \
 state=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin).get('snapshot',{}).get('state','UNKNOWN'))" 2>/dev/null || echo "PARSE_ERROR")
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) snapshot=${SNAP} state=${state}" >> "$LOG"
 
+snapshot_failed=0
 if [[ "$state" != "SUCCESS" ]]; then
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) WARNING: snapshot ${SNAP} did not report SUCCESS: $result" >> "$LOG"
+    snapshot_failed=1
 fi
 
 # Retention: delete snapshots older than RETENTION_DAYS, by the date encoded in
@@ -57,3 +59,10 @@ for s in $old_snapshots; do
     curl -sk "${AUTH[@]}" -X DELETE "${BASE_URL}/_snapshot/${REPO}/${s}" -o /dev/null
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) deleted old snapshot=${s}" >> "$LOG"
 done
+
+# Exit non-zero (after retention cleanup still ran) so a caller — the cron
+# entry's own `|| echo ... CRON_JOB_FAILED` — can tell the run genuinely
+# failed. curl's own exit code doesn't help here: a 401/500 response is still
+# a successful HTTP round-trip as far as curl (without -f) is concerned, so
+# the *content* of the response is the only real signal, not curl's exit code.
+exit "$snapshot_failed"

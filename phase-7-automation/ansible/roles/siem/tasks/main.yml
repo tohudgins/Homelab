@@ -290,13 +290,35 @@
     group: root
     mode: "0750"
 
+# The `|| { rc=$?; echo ...; }` suffix (also on the snapshot-backup cron
+# below, and the misp/iris roles' backup crons) is the fix for a 2026-09-26
+# gap-audit finding: these scripts logged their OWN outcome to their OWN log
+# files, but nothing watched those files, so a silent failure (rotated
+# password, full disk) would go unnoticed indefinitely. siem-01 already
+# monitors its own local files (it's both manager and its own local agent,
+# ID 000) — feeding failures through that existing pipeline reuses Wazuh's
+# own alerting rather than building a parallel notification system. See
+# local_rules.xml rule 100563.
+#
+# The `rc=$?` capture is not stylistic — found live, the obvious-looking
+# `|| echo "$(date ...) ... exit=$?"` is a real bug: evaluating `$(date ...)`
+# to build the echo's argument runs a command in between the failure and the
+# `$?` read, so by the time `$?` is interpolated it holds `date`'s own exit
+# status (always 0), not the failed command's. Confirmed live: an
+# intentionally-broken wazuh-snapshot-backup.sh run correctly triggered the
+# `||` branch (proving detection works) but logged "exit=0" (proving the
+# reported code was wrong) until this fix. Capturing `$?` into a variable
+# before running anything else is the actual fix, not just tidier code.
 - name: Schedule daily archive/alert log retention
   ansible.builtin.cron:
     name: "Wazuh archive/alert log retention"
     user: root
     minute: "30"
     hour: "3"
-    job: "WAZUH_LOG_RETENTION_DAYS={{ wazuh_log_retention_days }} /usr/local/sbin/wazuh-log-retention.sh"
+    job: >-
+      WAZUH_LOG_RETENTION_DAYS={{ wazuh_log_retention_days }}
+      /usr/local/sbin/wazuh-log-retention.sh
+      || { rc=$?; echo "$(date -u +\%Y-\%m-\%dT\%H:\%M:\%SZ) CRON_JOB_FAILED: wazuh-log-retention.sh exit=$rc" >> /var/log/cron-failures.log; }
 
 # --- App-level backup: real OpenSearch snapshots of the alert/statistics/
 # vulnerability data, closing the "only VM-snapshot-level DR exists" gap named
@@ -390,4 +412,21 @@
       WAZUH_SNAPSHOT_RETENTION_DAYS={{ wazuh_snapshot_retention_days }}
       WAZUH_SNAPSHOTRESTORE_PASSWORD='{{ wazuh_snapshotrestore_password_extracted.stdout }}'
       /usr/local/sbin/wazuh-snapshot-backup.sh
+      || { rc=$?; echo "$(date -u +\%Y-\%m-\%dT\%H:\%M:\%SZ) CRON_JOB_FAILED: wazuh-snapshot-backup.sh exit=$rc" >> /var/log/cron-failures.log; }
   no_log: true
+
+# siem-01 is both the manager and its own local agent (ID 000) — it already
+# monitors its own local files. This is that same mechanism pointed at the
+# one new file both cron jobs above can write to on failure.
+- name: Monitor this host's own cron-failures.log (self-monitoring for the retention/backup cron jobs)
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: "<!-- {mark} ANSIBLE MANAGED: siem-01 self-monitoring (cron-failures.log) -->"
+    block: |
+      <ossec_config>
+        <localfile>
+          <log_format>syslog</log_format>
+          <location>/var/log/cron-failures.log</location>
+        </localfile>
+      </ossec_config>
+  notify: Restart wazuh-manager

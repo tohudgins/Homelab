@@ -20,3 +20,9 @@ zeek_prefix: /opt/zeek
 zeek_apt_repo: "deb http://download.opensuse.org/repositories/security:/zeek/Debian_13/ /"
 zeek_apt_key_url: "https://download.opensuse.org/repositories/security:zeek/Debian_13/Release.key"
 zeek_capture_interface: enp26s0   # CORP — sees all AD traffic routed through rtr-01
+
+# "Who watches the watchmen": rtr-01 is the only host always up in every run
+# profile, so it's where the external check on siem-01's own availability
+# lives — see monitor-siem-availability.sh's own header for the full why.
+siem_monitor_host: "10.10.30.10"
+siem_monitor_port: 1514
