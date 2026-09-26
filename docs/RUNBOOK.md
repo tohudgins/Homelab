@@ -166,6 +166,7 @@ stanza to the `router` role, converge rtr-01.
 | Detection rules/decoders | `roles/siem/` + `phase-4-detection/` |
 | Attack writeups + BloodHound | `phase-5-offense/` |
 | NSM / PCAP analysis | `phase-6-nsm/` |
+| Archive/alert log retention (siem-01, cron 03:30 daily) | `roles/siem/files/wazuh-log-retention.sh` (90-day default, `wazuh_log_retention_days`) |
 | **Credentials, per-VM config** | the second-brain `Virtual Machines` note (not in git) |
 
 ### Environment variables / secrets

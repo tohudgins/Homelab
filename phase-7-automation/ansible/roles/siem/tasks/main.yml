@@ -276,3 +276,24 @@
   register: wazuh_status
   changed_when: false
   failed_when: "'wazuh-analysisd is running' not in wazuh_status.stdout"
+
+# --- Archive/alert log retention (closes the gap flagged in this file's own
+# "production deployment pairs this with rotation/retention" comment above) ---
+# Wazuh already rotates archives/alerts daily and auto-gzips old days on its own;
+# what's missing is deletion, so this grows unbounded otherwise. See the script's
+# own header for the full rationale and the 2026-09-26 defense-audit finding.
+- name: Deploy the log-retention script
+  ansible.builtin.copy:
+    src: wazuh-log-retention.sh
+    dest: /usr/local/sbin/wazuh-log-retention.sh
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Schedule daily archive/alert log retention
+  ansible.builtin.cron:
+    name: "Wazuh archive/alert log retention"
+    user: root
+    minute: "30"
+    hour: "3"
+    job: "WAZUH_LOG_RETENTION_DAYS={{ wazuh_log_retention_days }} /usr/local/sbin/wazuh-log-retention.sh"

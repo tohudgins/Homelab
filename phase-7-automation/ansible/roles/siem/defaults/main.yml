@@ -25,3 +25,10 @@ misp_api_key: "XUFMa9Bs4xf0r8rDUHtq6eWfhF08aqlLfusVaxNz"
 # user API key (regenerate in the IRIS UI: profile -> Renew API key, update here).
 iris_hook_url: "https://10.10.30.20:8443"
 iris_api_key: "7fvj6kV3Bmwf0fTtrA9D7P1u77eZwYPFrbgWVJmyENRVbzGyMWLdlZuPf8-lzUB_s1eFvrXuZTmslJc0ySMCcA"
+
+# Archive/alert log retention (closes the gap this role's own comment predicted,
+# above): how many days of full-event archives.json + alerts.json history to keep
+# before wazuh-log-retention.sh deletes them. 90 days comfortably covers this lab's
+# threat-hunting use case while staying well inside a homelab-sized disk (32G free
+# observed 2026-09-26, ~10MB/day compressed observed growth).
+wazuh_log_retention_days: 90
