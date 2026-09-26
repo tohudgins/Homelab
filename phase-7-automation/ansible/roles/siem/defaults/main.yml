@@ -40,7 +40,12 @@ wazuh_log_retention_days: 90
 # snapshotrestore is a dedicated least-privilege indexer user Wazuh's own
 # installer provisions for exactly this — see wazuh-backup.sh for why it's used
 # over admin. Repo path must live outside path.data (OpenSearch requirement).
+#
+# No password variable here on purpose (real bug, found and fixed 2026-09-26):
+# wazuh-install.sh generates a fresh random snapshotrestore password on every
+# install, so a static default here can only ever be right on the one host it
+# was copied from — every other host 401s. tasks/main.yml reads it live from
+# each host's own wazuh-install-files.tar instead.
 wazuh_snapshot_repo_path: /var/lib/wazuh-indexer-snapshots
 wazuh_snapshot_repo_name: lab_backup
 wazuh_snapshot_retention_days: 30
-wazuh_snapshotrestore_password: "rWZdowq*+PqUOv1Sf2wbvxkthCXy0mqi"

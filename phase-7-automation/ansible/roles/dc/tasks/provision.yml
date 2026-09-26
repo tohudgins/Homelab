@@ -7,13 +7,27 @@
 # the safety guard and the correctness check — this must never fire against a
 # live, already-provisioned DC.
 #
-# UNVERIFIED POSITIVE PATH: dc-01 in this lab was always provisioned
-# interactively before this task existed, so the provision command below has
-# never actually been exercised end-to-end. It's written from Samba's own
-# documented flags plus the lab facts already established elsewhere in this
-# repo (docs/00-ip-plan.md — dc-01 IS the domain's DNS server — and
-# group_vars/all.yml's lab_realm). Proving it for real needs a genuinely blank
-# host; see phase-7-automation/README.md.
+# VERIFIED against a genuinely blank host (2026-09-26, disposable dc-01-verify
+# VM on CORP, torn down after). Three real bugs found and fixed here, none
+# visible against the live already-provisioned dc-01 (the guard skips the
+# whole block): (1) the package-default smb.conf fight (see below); (2) this
+# Ubuntu release splitting the AD schema LDIFs into samba-ad-provision, which
+# samba-tool needs but the original package list didn't install ("File
+# [.../AD_DS_Attributes_Windows_Server_v1903.ldf] not found. Please install
+# samba-ad-provision package"); (3) the samba_secrets/samba_dsdb LDB modules
+# provision itself loads are shipped in a THIRD package, samba-dsdb-modules,
+# without which provision fails with the misleading "Module [samba_secrets]
+# not found - do you need to set LDB_MODULES_PATH?" (the real fix is the
+# package, not the env var — the module .so simply isn't on disk without it).
+# A fourth finding lives in main.yml: the active-response/telemetry tasks
+# after this file assumed a Wazuh agent was already installed, which nothing
+# in this repo's IaC actually automates for any host but siem-01. Also
+# surfaced a real, separate architectural finding one level up: a genuinely
+# blank CORP host has no DNS resolver to apt-get with at all — dc-01 *is*
+# CORP's only DNS provider, so a real disaster-recovery rebuild is a
+# chicken-and-egg problem this role alone doesn't solve (worked around here
+# only because the live dc-01 was still up to resolve against) — see
+# phase-7-automation/README.md.
 # ============================================================================
 
 - name: Check whether the domain has already been provisioned
@@ -21,11 +35,25 @@
     path: "{{ samba_private_db }}"
   register: sam_db_precheck
 
+# This Ubuntu release splits AD-DC support into several packages beyond the
+# base `samba` (found verifying this from-blank, one failure at a time — each
+# missing package produces a distinct, otherwise-inscrutable error):
+#   samba-ad-provision  — AD schema LDIFs (AD_DS_Attributes_*.ldf etc.)
+#   samba-ad-dc         — AD DC control files
+#   samba-dsdb-modules  — the samba_secrets/samba_dsdb LDB modules provision
+#                          actually loads; without it: "WARNING: Module
+#                          [samba_secrets] not found - do you need to set
+#                          LDB_MODULES_PATH?" (a red herring — the real fix is
+#                          this package, not the env var; the module .so
+#                          simply isn't installed anywhere on disk without it)
 - name: Install Samba AD DC packages
   ansible.builtin.apt:
     name:
       - samba
       - samba-common-bin
+      - samba-ad-provision
+      - samba-ad-dc
+      - samba-dsdb-modules
       - krb5-user
       - winbind
     state: present
@@ -46,6 +74,20 @@
     - smbd
     - nmbd
     - winbind
+  when: not sam_db_precheck.stat.exists
+
+# Real bug found verifying this against a genuinely blank host (2026-09-26):
+# the samba package installs a default /etc/samba/smb.conf with
+# `server role = standalone server` already set, and `samba-tool domain
+# provision` refuses outright — "must match chosen server role ... Please
+# remove the smb.conf file and let provision generate it" — it's not merged
+# or overwritten, provisioning just hard-fails. Guarded the same way as the
+# provisioning step itself so this is never a no-op-turned-destructive-op
+# against an already-provisioned DC.
+- name: Remove the package-default smb.conf so samba-tool can generate its own
+  ansible.builtin.file:
+    path: /etc/samba/smb.conf
+    state: absent
   when: not sam_db_precheck.stat.exists
 
 - name: Provision the AD domain (one-shot, destructive — guarded by samba_private_db)

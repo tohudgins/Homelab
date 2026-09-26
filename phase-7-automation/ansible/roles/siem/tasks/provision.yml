@@ -7,12 +7,16 @@
 # /var/ossec/bin/wazuh-control is both the safety guard and the correctness
 # check for "is Wazuh already installed."
 #
-# UNVERIFIED POSITIVE PATH: siem-01 in this lab was always installed
-# interactively before this task existed, so this has never actually been
-# exercised end-to-end. It's written from Wazuh's own documented all-in-one
-# quickstart and the version already pinned in this role's header comment
-# (v4.14.x). Proving it for real needs a genuinely blank host; see
-# phase-7-automation/README.md.
+# VERIFIED against a genuinely blank host (2026-09-26, disposable siem-01-verify
+# VM on SOC, torn down after) — the installer itself (this file) worked
+# correctly first try, no bugs found here. The real finding was one level up,
+# in tasks/main.yml: wazuh-install.sh generates a FRESH RANDOM snapshotrestore
+# password on every install (this file's own comment above already knew that,
+# for the indexer/dashboard/API passwords generally), so the snapshot-backup
+# registration task hardcoding one host's password as a static Ansible default
+# could only ever work on that one host — it silently 401'd against this
+# genuinely fresh install. Fixed by reading the password live from each host's
+# own wazuh-install-files.tar instead of a variable; see tasks/main.yml.
 # ============================================================================
 
 - name: Check whether Wazuh is already installed

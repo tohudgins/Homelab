@@ -320,12 +320,43 @@
 - name: Apply the indexer restart now (a repo can't be registered until it can see path.repo)
   ansible.builtin.meta: flush_handlers
 
+# Real bug found verifying this against a genuinely blank host (2026-09-26):
+# wazuh-install.sh generates a FRESH RANDOM snapshotrestore password on every
+# install — it is never the same twice — so a static Ansible variable copied
+# from one host's wazuh-install-files.tar can only ever be right on that one
+# host, and silently 401s everywhere else. Read it from wherever this host's
+# own tar actually landed instead: /root (a from-blank IaC install, chdir:
+# /root in provision.yml) or a user's home directory (the live siem-01, and
+# any other host installed interactively before this role existed).
+- name: Locate this host's own Wazuh install-files tar
+  ansible.builtin.shell: |
+    set -o pipefail
+    for f in /root/wazuh-install-files.tar /home/*/wazuh-install-files.tar; do
+      [ -f "$f" ] && echo "$f" && break
+    done
+  args:
+    executable: /bin/bash
+  register: wazuh_install_files_tar
+  changed_when: false
+  failed_when: wazuh_install_files_tar.stdout == ""
+
+- name: Extract the snapshotrestore password from this host's own install-files tar
+  ansible.builtin.shell: |
+    set -o pipefail
+    tar -xOf "{{ wazuh_install_files_tar.stdout }}" wazuh-install-files/wazuh-passwords.txt \
+      | grep -A1 "'snapshotrestore'" | grep indexer_password | sed -E "s/.*'([^']+)'.*/\1/"
+  args:
+    executable: /bin/bash
+  register: wazuh_snapshotrestore_password_extracted
+  changed_when: false
+  no_log: true
+
 - name: Register the fs snapshot repository with the indexer
   ansible.builtin.uri:
     url: "https://127.0.0.1:9200/_snapshot/{{ wazuh_snapshot_repo_name }}"
     method: PUT
     user: snapshotrestore
-    password: "{{ wazuh_snapshotrestore_password }}"
+    password: "{{ wazuh_snapshotrestore_password_extracted.stdout }}"
     force_basic_auth: true
     validate_certs: false
     body_format: json
@@ -338,6 +369,7 @@
   until: snapshot_repo_registered is success
   retries: 12
   delay: 10
+  no_log: true
 
 - name: Deploy the OpenSearch snapshot backup script
   ansible.builtin.copy:
@@ -356,5 +388,6 @@
     job: >-
       WAZUH_SNAPSHOT_REPO={{ wazuh_snapshot_repo_name }}
       WAZUH_SNAPSHOT_RETENTION_DAYS={{ wazuh_snapshot_retention_days }}
-      WAZUH_SNAPSHOTRESTORE_PASSWORD='{{ wazuh_snapshotrestore_password }}'
+      WAZUH_SNAPSHOTRESTORE_PASSWORD='{{ wazuh_snapshotrestore_password_extracted.stdout }}'
       /usr/local/sbin/wazuh-snapshot-backup.sh
+  no_log: true

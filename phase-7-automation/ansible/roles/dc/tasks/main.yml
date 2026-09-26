@@ -10,6 +10,32 @@
 - name: Provision the AD domain if this is a genuinely blank host (guarded, one-shot)
   ansible.builtin.import_tasks: provision.yml
 
+# Found verifying provision.yml against a genuinely blank host (2026-09-26):
+# three tasks below (active-response script + two ossec.conf blocks) assume a
+# Wazuh AGENT is already installed on this host — real on the live dc-01, but
+# agent installation itself is a manual step nothing in this repo's IaC
+# automates yet, for any host (dc-01, fs-01, rtr-01, ws-01 alike; only
+# siem-01's manager+indexer install is automated, see the siem role). A truly
+# blank rebuild would silently lose active response + the two telemetry
+# feeds this role's later tasks configure without ever being told why. Fail
+# loudly and specifically instead — same "manual pre-step, documented, not
+# hidden" pattern as scripts/bootstrap-sudo.sh.
+- name: Confirm a Wazuh agent is installed before configuring its active-response/telemetry
+  ansible.builtin.stat:
+    path: /var/ossec/active-response/bin
+  register: wazuh_agent_ar_dir
+
+- name: Fail with a clear message if the Wazuh agent prerequisite is missing
+  ansible.builtin.assert:
+    that: wazuh_agent_ar_dir.stat.exists
+    fail_msg: >-
+      /var/ossec/active-response/bin doesn't exist — this host has no Wazuh
+      agent installed yet. Install and enroll the Wazuh agent first (see
+      Tools/Wazuh.md's "Enrolling a Linux agent" — apt repo, version-pinned
+      install, WAZUH_MANAGER=<siem-ip>), then re-run this role. Agent
+      installation isn't part of this or any other role's IaC yet.
+    success_msg: "Wazuh agent present; configuring active response + telemetry."
+
 # --- smb.conf (carries the Phase 4 audit logging that makes attacks visible) ---
 - name: Deploy Samba AD DC smb.conf
   ansible.builtin.copy:

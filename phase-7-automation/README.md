@@ -5,21 +5,41 @@ The goal the build plan sets is the "infrastructure as code" bullet: a repo that
 provisions the lab, so a host can be rebuilt from a base OS install to its
 working role without hand-editing config files from memory.
 
-> **Status: complete.** All seven hosts are covered by idempotent roles —
-> **`router`** (rtr-01), **`dc`** (dc-01), **`siem`** (siem-01), **`dmz`**
-> (dmz-01), **`fileserver`** (fs-01), **`windows`** (ws-01, managed over SSH), and
-> **`scan`** (scan-01, Greenbone CE vuln scanner). `ansible-playbook site.yml`
-> converges the entire lab at `changed=0`, and **dmz-01** and **scan-01** were both
-> stood up from a blank disk via headless Ubuntu autoinstall — the full "rebuild
-> the lab from a repo" deliverable. The `dc` and `siem` roles now also carry a
-> guarded, one-shot `provision.yml` (`samba-tool domain provision`,
-> `wazuh-install.sh -a`, both fired only via `creates:` on a not-yet-provisioned
-> host) so those two hosts are *written* to rebuild from truly blank the same
-> way — proven safe against the live, already-provisioned dc-01/siem-01
-> (`changed=0`, the guard skips cleanly), but the positive from-blank path
-> itself is unverified until run against a real blank VM, same as dmz-01/scan-01
-> were before they got built. `windows-config/sysmonconfig.xml` is likewise now
-> deployed as code (`windows` role) instead of only being applied by hand.
+> **Status: complete and fully verified.** All seven hosts are covered by
+> idempotent roles — **`router`** (rtr-01), **`dc`** (dc-01), **`siem`**
+> (siem-01), **`dmz`** (dmz-01), **`fileserver`** (fs-01), **`windows`** (ws-01,
+> managed over SSH), and **`scan`** (scan-01, Greenbone CE vuln scanner).
+> `ansible-playbook site.yml` converges the entire lab at `changed=0`, and every
+> host has now actually been stood up from a blank disk: **dmz-01** and
+> **scan-01** via headless Ubuntu autoinstall, and — closing the one real gap a
+> 2026-09-26 audit found — **dc-01 and siem-01's from-blank path**, previously
+> only proven safe (`changed=0`, the guard skips cleanly) against the *already*-
+> provisioned live hosts, not proven to actually *work* from genuinely nothing.
+>
+> Built disposable verification VMs for both (`dc-01-verify` on CORP,
+> `siem-01-verify` on SOC — never merged into the real inventory, torn down
+> after) and found real bugs neither host's live, already-provisioned state
+> could ever have surfaced: `samba-tool domain provision` refused to run
+> against the package-default `smb.conf` (must be removed first, not merged);
+> this Ubuntu release splits the AD schema files and the `samba_secrets` LDB
+> module into `samba-ad-provision`/`samba-ad-dc`/`samba-dsdb-modules`, none of
+> which the role installed; the `dc` role's active-response/telemetry tasks
+> silently assumed a Wazuh agent was already present (now a loud, actionable
+> failure instead of a cryptic one); and `wazuh-install.sh` generates a fresh
+> random `snapshotrestore` password on every install, so the snapshot-backup
+> registration (added the day before, in the same audit) had a hardcoded
+> password that could only ever be right on the one host it was copied from —
+> now read live from each host's own `wazuh-install-files.tar`. All four fixed,
+> both roles re-verified end-to-end from blank, and both regression-checked
+> `changed=0` against the live dc-01/siem-01 afterward. A real, previously
+> undocumented prerequisite also surfaced along the way: CORP has no DNS
+> resolver reachable until dc-01 exists (dc-01 *is* CORP's only DNS provider),
+> so a genuine disaster-recovery rebuild needs a working resolver pointed
+> somewhere before `apt-get` can run at all — worked around here only because
+> the live dc-01 was still up to resolve against; see the `dc` role's
+> `provision.yml` for the full detail.
+> `windows-config/sysmonconfig.xml` is likewise deployed as code (`windows`
+> role) instead of only being applied by hand.
 
 ## Scope — what "IaC" honestly means here
 
@@ -38,9 +58,9 @@ between them:
   provision`, and the `siem` role's `wazuh-install.sh -a` all follow this same
   pattern now (`roles/dc/tasks/provision.yml`, `roles/siem/tasks/provision.yml`).
   The guard is proven safe against the live, already-provisioned hosts
-  (`changed=0`); the install itself is only proven where a from-blank build
-  actually happened (`dmz`, `scan`) — for `dc`/`siem` it's written from the
-  vendor's documented flags but not yet exercised against a real blank host.
+  (`changed=0`), and — as of 2026-09-26 — the install itself is now proven
+  from a real blank host for every one of `dmz`, `scan`, `dc`, and `siem`; see
+  the status note above for what verifying `dc`/`siem` actually found.
 
 This split is the real-world pattern — config management converges continuously,
 provisioning happens once — and it keeps every playbook safe to run against the
