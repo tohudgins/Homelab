@@ -24,6 +24,14 @@ servers live; inter-segment attack traffic is routed through rtr-01, so it appea
   query names to REDTEAM at volume — fired 100×) and a quantitative Zeek `dns.log` hunt
   ([`hunt-dns-tunnel.py`](hunt-dns-tunnel.py)) that scored the tunnel zone 94 (360 queries, 100% unique, mean
   127c/max 681c) against normal DNS in single digits. **Verified live 2026-09-05.**
+- [`dns-anomaly-hunting.md`](dns-anomaly-hunting.md) — two hunts beyond the tunneling shape: **DGA**
+  (T1568.002 — many short, statistically-random candidate domains from one host, mostly NXDOMAIN;
+  [`hunt-dns-dga.py`](hunt-dns-dga.py)) and **DNS beaconing** (T1071.004 — periodic lookups of one name,
+  grouped by *domain* rather than resolver IP so one host's other DNS traffic doesn't drown the signal;
+  [`hunt-dns-beacon.py`](hunt-dns-beacon.py)). Both verified live against real ws-01-generated traffic
+  2026-09-26; also surfaced and corrected a stale claim in the atomic-red-team README about dc-01 having no
+  external DNS forwarder (it does, and it's what makes these hunts able to see anything at all — see the
+  write-up for why).
 - [`captures/phase5-attacks.pcap`](captures/phase5-attacks.pcap) · [`captures/recon-scan.pcap`](captures/recon-scan.pcap) — the raw captures.
 
 ## The headline finding

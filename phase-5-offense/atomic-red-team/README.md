@@ -24,6 +24,29 @@ CORP *does* have WAN egress at L3/L4 — `ping 8.8.8.8` and TCP/443 to a GitHub 
 succeed from ws-01 — so this isolation is at name resolution, which is what the
 lab's operations actually traverse.)
 
+> [!warning] Correction found 2026-09-26 — the forwarder claim above is stale.
+> Building the DNS-anomaly hunts (`phase-6-nsm/hunt-dns-dga.py` /
+> `hunt-dns-beacon.py`) required generating real DNS traffic from ws-01, which
+> surfaced that `roles/dc/files/smb.conf` sets `dns forwarder = 1.1.1.1` — live,
+> confirmed by watching dc-01 itself query `1.1.1.1` on the wire and return real
+> answers (NXDOMAIN for nonexistent names, not a lab-internal refusal) for names
+> ws-01 asked it to resolve. **Public names do resolve from ws-01 now**, through
+> dc-01 — this README's "public names deliberately don't" claim was already
+> inaccurate by the time it was checked here, not a recent regression (the
+> forwarder line predates this finding; nothing in this repo's history added it
+> reactively). The offline install approach itself is still the right call for
+> an unrelated, still-true reason — reproducibility shouldn't depend on GitHub
+> being reachable at rebuild time — it just isn't *forced* by DNS isolation the
+> way this doc previously claimed.
+
+Practical upshot for anyone hunting DNS anomalies in this lab (see
+[`phase-6-nsm/`](../../phase-6-nsm/)): a CORP host's queries to its own resolver
+(dc-01) never cross the wire Zeek watches — dc-01 and its clients share the CORP
+L2 segment, and `rtr-01`'s sensor only sees traffic *routed through* it. What
+**does** cross that interface is dc-01's own re-origination of any name it can't
+answer locally, out to `1.1.1.1` — which is exactly the leg a DGA/beacon hunt
+needs to see, and exactly why it works here despite the sensor's placement.
+
 ## Install / reinstall
 
 From the Mac (has DNS + the SSH path to ws-01 via `ProxyJump rtr-01`):

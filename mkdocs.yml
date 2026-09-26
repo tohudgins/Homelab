@@ -106,6 +106,7 @@ nav:
   - Phase 6 · Network Security Monitoring:
       - Overview: phase-6-nsm/README.md
       - DNS Tunneling Detection: phase-6-nsm/dns-tunneling.md
+      - DNS Anomaly Hunting (DGA/Beaconing): phase-6-nsm/dns-anomaly-hunting.md
       - "PCAP Report · AD Attack Chain": phase-6-nsm/pcap-reports/01-attack-chain-nsm.md
       - "PCAP Report · Recon Scan": phase-6-nsm/pcap-reports/02-recon-scanning-nsm.md
   - Phase 7 · Automation (IaC):
