@@ -26,10 +26,28 @@ Samba AD DC sidesteps all of it — a real, open-source implementation of the Ac
 
 Standing up Suricata + Zeek together from the start — even before rule-tuning begins — means every later phase generates real historical NSM data, instead of Phase 6 needing to backfill weeks of context in a rush.
 
-## Why CORP resolves only internal names, and tooling is installed offline
+## Why tooling is installed offline (not, as originally claimed here, DNS isolation)
 
-The lab is internal and self-contained by design: it must not depend on anything outside itself to operate or to be rebuilt. `ws-01` — like every CORP host — resolves through `dc-01`'s Samba AD DNS, which is authoritative for `lab.internal` and has **no external forwarder**, so internal names resolve and public names (`github.com`, …) deliberately do not. Tooling such as Atomic Red Team is therefore staged **offline** — pulled once on the admin/management host and pushed to the target over the existing SSH path — rather than fetched from the internet by the endpoint itself. That mirrors how real segmented enterprises actually distribute software into isolated zones (internal package repos / WSUS / SCCM), where a workstation in a secured segment has no direct line to the public internet.
+> [!warning] Correction (2026-09-26) — this section's original claim was already stale.
+> It said `dc-01` has "no external forwarder." It does: `roles/dc/files/smb.conf` sets
+> `dns forwarder = 1.1.1.1`, live and working — confirmed by watching `dc-01` itself query
+> `1.1.1.1` on the wire and return real answers (genuine NXDOMAIN for nonexistent names, not
+> a lab-internal refusal) for names a CORP host asked it to resolve. **Public names do
+> resolve from CORP now, through dc-01.** Found building `phase-6-nsm/hunt-dns-dga.py` /
+> `hunt-dns-beacon.py`, which needed real DNS traffic to test against.
 
-The obvious alternative — adding a DNS forwarder on `dc-01` so `ws-01` could reach GitHub and the stock `Install-AtomicRedTeam` one-liner would "just work" — was rejected precisely because it makes the lab reach outside itself for a routine operation, which is the opposite of the property we want. (`rtr-01` still permits CORP→WAN at L3/L4; the isolation that matters for how the lab operates is at name resolution. Enforcing it at the firewall as well is a stricter variant, not required for the self-contained property, and left open keeps a workstation's latent internet path realistic.)
+The lab is internal and self-contained by design: it must not depend on anything outside
+itself to operate or to be rebuilt. Tooling such as Atomic Red Team is therefore staged
+**offline** — pulled once on the admin/management host and pushed to the target over the
+existing SSH path — rather than fetched from the internet by the endpoint itself. That
+mirrors how real segmented enterprises actually distribute software into isolated zones
+(internal package repos / WSUS / SCCM), where a workstation in a secured segment has no
+direct line to the public internet. That reason stands on its own — reproducibility
+shouldn't depend on GitHub being reachable at rebuild time — independent of whether DNS
+happens to resolve public names, which (per the correction above) it now does.
+
+`rtr-01` still permits CORP→WAN at L3/L4, and DNS resolution now also crosses that boundary
+via dc-01's forwarder. The offline-install choice for endpoint tooling isn't enforced by
+isolation at any layer — it's a deliberate reproducibility practice, not a technical control.
 
 These decisions get revisited as the build progresses — see the phase writeups linked from the [README](../README.md).
