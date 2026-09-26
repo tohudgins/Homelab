@@ -10,3 +10,7 @@ misp_admin_email: "admin@misp.lab.internal"
 misp_admin_password: "MispAdmin2026@Lab"
 misp_admin_org: "LAB"
 misp_gpg_passphrase: "MispGpg2026Lab"
+
+# App-level backup (DB dump + GPG keyring/config/attachments) — see
+# misp-backup.sh's own header for why this exists beyond VM-snapshot DR.
+misp_backup_retention_days: 30

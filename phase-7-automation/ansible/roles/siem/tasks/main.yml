@@ -297,3 +297,64 @@
     minute: "30"
     hour: "3"
     job: "WAZUH_LOG_RETENTION_DAYS={{ wazuh_log_retention_days }} /usr/local/sbin/wazuh-log-retention.sh"
+
+# --- App-level backup: real OpenSearch snapshots of the alert/statistics/
+# vulnerability data, closing the "only VM-snapshot-level DR exists" gap named
+# in the 2026-09-26 defense audit. See wazuh-snapshot-backup.sh's own header.
+- name: Create the snapshot repository directory (must live outside path.data)
+  ansible.builtin.file:
+    path: "{{ wazuh_snapshot_repo_path }}"
+    state: directory
+    owner: wazuh-indexer
+    group: wazuh-indexer
+    mode: "0750"
+
+- name: Register the snapshot repo path in opensearch.yml
+  ansible.builtin.lineinfile:
+    path: /etc/wazuh-indexer/opensearch.yml
+    regexp: "^path.repo:"
+    line: 'path.repo: ["{{ wazuh_snapshot_repo_path }}"]'
+    insertafter: "^path.data:"
+  notify: Restart wazuh-indexer
+
+- name: Apply the indexer restart now (a repo can't be registered until it can see path.repo)
+  ansible.builtin.meta: flush_handlers
+
+- name: Register the fs snapshot repository with the indexer
+  ansible.builtin.uri:
+    url: "https://127.0.0.1:9200/_snapshot/{{ wazuh_snapshot_repo_name }}"
+    method: PUT
+    user: snapshotrestore
+    password: "{{ wazuh_snapshotrestore_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    body_format: json
+    body:
+      type: fs
+      settings:
+        location: "{{ wazuh_snapshot_repo_path }}"
+    status_code: [200]
+  register: snapshot_repo_registered
+  until: snapshot_repo_registered is success
+  retries: 12
+  delay: 10
+
+- name: Deploy the OpenSearch snapshot backup script
+  ansible.builtin.copy:
+    src: wazuh-snapshot-backup.sh
+    dest: /usr/local/sbin/wazuh-snapshot-backup.sh
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Schedule daily Wazuh data snapshot
+  ansible.builtin.cron:
+    name: "Wazuh indexer snapshot backup"
+    user: root
+    minute: "0"
+    hour: "4"
+    job: >-
+      WAZUH_SNAPSHOT_REPO={{ wazuh_snapshot_repo_name }}
+      WAZUH_SNAPSHOT_RETENTION_DAYS={{ wazuh_snapshot_retention_days }}
+      WAZUH_SNAPSHOTRESTORE_PASSWORD='{{ wazuh_snapshotrestore_password }}'
+      /usr/local/sbin/wazuh-snapshot-backup.sh

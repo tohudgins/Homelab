@@ -5,3 +5,8 @@
   ansible.builtin.systemd:
     name: wazuh-manager
     state: restarted
+
+- name: Restart wazuh-indexer
+  ansible.builtin.systemd:
+    name: wazuh-indexer
+    state: restarted

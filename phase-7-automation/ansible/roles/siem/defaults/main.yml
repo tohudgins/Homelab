@@ -32,3 +32,15 @@ iris_api_key: "7fvj6kV3Bmwf0fTtrA9D7P1u77eZwYPFrbgWVJmyENRVbzGyMWLdlZuPf8-lzUB_s
 # threat-hunting use case while staying well inside a homelab-sized disk (32G free
 # observed 2026-09-26, ~10MB/day compressed observed growth).
 wazuh_log_retention_days: 90
+
+# App-level backup: real OpenSearch snapshots of the wazuh-alerts/statistics/
+# vulnerability indices (the actual detection history — VM-snapshot-level DR
+# doesn't capture point-in-time data recovery the way this does), not just a
+# config tar (config is already reproducible from this repo via Ansible).
+# snapshotrestore is a dedicated least-privilege indexer user Wazuh's own
+# installer provisions for exactly this — see wazuh-backup.sh for why it's used
+# over admin. Repo path must live outside path.data (OpenSearch requirement).
+wazuh_snapshot_repo_path: /var/lib/wazuh-indexer-snapshots
+wazuh_snapshot_repo_name: lab_backup
+wazuh_snapshot_retention_days: 30
+wazuh_snapshotrestore_password: "rWZdowq*+PqUOv1Sf2wbvxkthCXy0mqi"

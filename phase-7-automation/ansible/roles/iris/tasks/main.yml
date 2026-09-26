@@ -118,3 +118,22 @@
   delay: 20
   changed_when: false
   when: iris_web is failed
+
+# --- App-level backup: Postgres dump + case-evidence/template volumes -------
+- name: Deploy the IRIS backup script
+  ansible.builtin.copy:
+    src: iris-backup.sh
+    dest: /usr/local/sbin/iris-backup.sh
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+
+- name: Schedule daily IRIS backup
+  ansible.builtin.cron:
+    name: "IRIS backup"
+    user: root
+    minute: "30"
+    hour: "4"
+    job: "IRIS_BACKUP_RETENTION_DAYS={{ iris_backup_retention_days }} /usr/local/sbin/iris-backup.sh"
+  become: true

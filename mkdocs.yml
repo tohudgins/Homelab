@@ -61,6 +61,7 @@ nav:
       - Network Diagram: 01-network-diagram.md
       - Design Decisions: design-decisions.md
       - Runbook: RUNBOOK.md
+      - Backup & Restore: backup-restore.md
   - Phase 2 · Identity:
       - Known Weaknesses Register: phase-2-identity/known-weaknesses.md
   - Phase 4 · Detection Engineering:

@@ -166,3 +166,22 @@
 # Feeds (CIRCL OSINT, abuse.ch Feodo/URLhaus) are enabled + fetched once via the
 # API/CLI after first boot — a stateful, one-time action, documented in the
 # writeup rather than run on every converge. See phase-8-threat-intel/.
+
+# --- App-level backup: DB dump + GPG keyring/config/attachments -------------
+- name: Deploy the MISP backup script
+  ansible.builtin.copy:
+    src: misp-backup.sh
+    dest: /usr/local/sbin/misp-backup.sh
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+
+- name: Schedule daily MISP backup
+  ansible.builtin.cron:
+    name: "MISP backup"
+    user: root
+    minute: "15"
+    hour: "4"
+    job: "MISP_BACKUP_RETENTION_DAYS={{ misp_backup_retention_days }} /usr/local/sbin/misp-backup.sh"
+  become: true
