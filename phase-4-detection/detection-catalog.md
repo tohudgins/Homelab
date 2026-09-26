@@ -134,11 +134,15 @@ ws-01). Full writeup: [`velociraptor/README.md`](velociraptor/README.md).
   flowing) as prep, but building actual detections on top of it is explicitly **Phase 6** scope in the
   build plan (ET Open tuning, Suricata+Zeek correlation). Started drifting into that scope mid-session and
   pulled back deliberately rather than half-finish Phase 6 under the Phase 4 banner.
-- **12 techniques is the top of the build plan's target range, not a hard stop.** Real candidates for a
-  future pass: T1218 (LOLBin abuse — stock coverage exists, untested), T1087 (account/group discovery), and
-  revisiting T1003.001 with a proper PPL-bypass methodology if that's ever genuinely warranted (it wasn't
-  here — see below for why that line wasn't crossed). T1055 (process injection) was on this list too — closed
-  2026-09-25, see below.
+- **12 techniques is the top of the build plan's target range, not a hard stop.** A real candidate still
+  open: revisiting T1003.001 with a proper PPL-bypass methodology if that's ever genuinely warranted (it
+  wasn't here — see below for why that line wasn't crossed). T1055 (process injection) was on this list too
+  — closed 2026-09-25, see below. **Correction (2026-09-26): T1218 and T1087 were also still marked open
+  here, stale since 2026-08-27** — this bullet predates the batch-3/discovery-tactic work that closed
+  T1218.005/.010/.011 (Mshta/Regsvr32/Rundll32, rules 100114–100116) and T1087.002 (Domain Account Discovery,
+  rules 100108/100112), both `validated` in `attack-coverage/technique-index.md` for a month before this
+  text was corrected. No new detection work was actually needed — the gap was in this paragraph, not the
+  ruleset.
 
 ---
 
