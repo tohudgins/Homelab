@@ -74,6 +74,7 @@ nav:
       - osquery Fleet Visibility: phase-4-detection/osquery/README.md
       - YARA-on-FIM: phase-4-detection/yara-fim/README.md
       - SOC Ops — DFIR-IRIS: phase-4-detection/soc-ops-iris.md
+      - Analyst Triage Playbooks: phase-4-detection/triage-playbooks.md
       - Threat Intel — MISP Integration: phase-4-detection/threat-intel-misp-integration.md
       - Threat Intel — CDB Enrichment: phase-4-detection/threat-intel-cdb-enrichment.md
       - Vulnerability Management: phase-4-detection/vulnerability-management-active-vs-passive.md

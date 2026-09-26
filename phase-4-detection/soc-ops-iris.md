@@ -177,3 +177,13 @@ project has already leaned on for exactly this class of problem:
 never known it existed. Fixed by adding it to `ALL_VMS` and a new `soc-ops` profile (`rtr-01 dc-01 siem-01
 misp-01`, swapping `ws-01` for `misp-01` to stay inside the same 24 GB ceiling `soc` already sits at) — see
 `docs/RUNBOOK.md`'s profile table.
+
+Everything above is the *mechanical* half — Wazuh detects, `integratord` opens or merges a case, zero manual
+steps. It deliberately stops there: getting a case in front of an analyst isn't the same as knowing what to
+do with it. That judgment layer — is this alert real, what to check first, when to escalate, what
+containment actually applies — lives in `triage-playbooks.md`.
+
+## Related
+
+`phase-4-detection/triage-playbooks.md` (the analyst-judgment layer on top of this automated pipeline) ·
+`docs/RUNBOOK.md`
