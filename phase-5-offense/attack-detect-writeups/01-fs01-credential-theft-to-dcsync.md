@@ -85,7 +85,8 @@ interface, which is the detectable event.
 |---|---|---|---|---|
 | Read the bait credential file on fs-01 | **100090** | 12 | T1552.001 | ✅ |
 | Kerberoast (3 TGS-REQs in <60s) | 100031 (Phase 4) | 12 | T1558.003 | ✅ *(fixed on re-verify — see §3c)* |
-| DCSync (`DsGetNCChanges` from a non-DC) | **100080** | 12 | T1003.006 | ✅ |
+| DCSync, scoped to one principal (`DsGetNCChanges` from a non-DC) | **100080** | 12 | T1003.006 | ✅ |
+| NTDS dump, unscoped replication (every account at once) | **100080** (same rule) | 12 | T1003.003 | ✅ *(see §3b)* |
 
 *All three re-confirmed firing live 2026-08-24 in one consolidated chain run (`data.timestamp` 01:06:46Z).*
 
@@ -112,6 +113,19 @@ unambiguously an attack. The rule matches Samba's replication-handler log line f
 non-buggy client, raise `log level drsuapi:5` in `smb.conf` so every `DsGetNCChanges` is logged, then key
 on the same handler string. In a multi-DC domain the rule must additionally exclude requests whose source
 is a real DC (by IP / machine account).
+
+**Also covers T1003.003 (NTDS dump) — confirmed 2026-09-25, not assumed.** A real Windows DC's ntds.dit
+theft (local `ntdsutil`/VSS, or a remote *unscoped* replication pull requesting every account instead of
+one) is MITRE's separate T1003.003 sub-technique. Samba has no ntds.dit at all — its AD database is
+`sam.ldb`, a completely different LDB/tdb format — so the local-file half of T1003.003 can't be reproduced
+on this DC. The remote-replication half can: running the exact command above **without** `-just-dc-ntlm`
+(`secretsdump.py lab.internal/svc-backup:Backup2026@dc-01.lab.internal`, requesting the whole domain
+instead of one account) hits the identical `dcesrv_drsuapi_DsGetNCChanges` handler and the identical rule
+100080 — confirmed live, `hits=2` in `alerts.json`, despite impacket again reporting client-side failure.
+Samba's replication audit doesn't distinguish "sync one principal" from "sync everything" at the log-line
+level it's keyed on, so **one rule honestly covers both techniques** here — writing a second,
+functionally-identical rule just to have two rule IDs would be theater, not a real second detection. Now a
+real `ad-validate.py` scenario ("NTDS Dump (unscoped replication)"), not just a manual one-off.
 
 ### 3c. Kerberoasting — rule 100031 (re-verification found and fixed a real gap)
 
@@ -170,8 +184,9 @@ itself a useful thing to understand and document rather than paper over.
 
 ## Reproduce
 
-- Rules: `phase-4-detection/local_rules.xml` (100080, 100090) + `phase-4-detection/local_decoder.xml`
-  (`samba-full-audit`, child of the stock `smbd` decoder).
+- Rules: `phase-7-automation/ansible/roles/siem/files/local_rules.xml` (100080, 100090) +
+  `phase-7-automation/ansible/roles/siem/files/local_decoder.xml` (`samba-full-audit`, child of the stock
+  `smbd` decoder).
 - fs-01 `[public]` share carries `vfs objects = full_audit` (`full_audit:success = openat`, facility
   `local7`).
 - The deliberate misconfigs (svc-backup in Backup Operators + DCSync ACEs) and their revert commands are

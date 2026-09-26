@@ -6,7 +6,7 @@
     "layer": "4.5"
   },
   "domain": "enterprise-attack",
-  "description": "Detection coverage generated from the homelab ruleset: 54 techniques with a custom detection, 51 validated end-to-end by the purple-team harness. Dark green = validated, light green = detection exists. Regenerate with generate-coverage.py.",
+  "description": "Detection coverage generated from the homelab ruleset: 55 techniques with a custom detection, 52 validated end-to-end by the purple-team harness. Dark green = validated, light green = detection exists. Regenerate with generate-coverage.py.",
   "techniques": [
     {
       "techniqueID": "T1003.001",
@@ -20,6 +20,13 @@
       "score": 100,
       "color": "#2e7d32",
       "comment": "VALIDATED (purple-team) \u2014 100560, 100561 | learn: phase-5-offense/attack-detect-writeups/08-sam-dump-credential-cracking-t1003.002.md",
+      "enabled": true
+    },
+    {
+      "techniqueID": "T1003.003",
+      "score": 100,
+      "color": "#2e7d32",
+      "comment": "VALIDATED (purple-team) \u2014 100080 | learn: phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md",
       "enabled": true
     },
     {

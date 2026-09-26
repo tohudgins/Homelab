@@ -497,11 +497,36 @@
 -->
 <group name="local,dcsync,">
 
+  <!-- Tagged with BOTH T1003.006 (DCSync, a scoped replication request for one
+       principal's secrets) and T1003.003 (OS Credential Dumping: NTDS — on a
+       real Windows DC, usually a local ntdsutil/VSS dump of the actual
+       ntds.dit file) — confirmed honest, not a guess: Samba has no ntds.dit
+       at all (its AD database is sam.ldb, a completely different LDB/tdb
+       format), so a real Windows-style local NTDS.dit theft can't be
+       reproduced here. What CAN be reproduced is the other real-world path to
+       the same outcome — a full, unrestricted DRSUAPI replication pull
+       (impacket-secretsdump with no -just-dc-user/-just-dc-ntlm scoping,
+       i.e. "give me every account", the practical equivalent of exfiltrating
+       the whole NTDS database) — and it hits this exact rule. Verified live
+       (2026-09-25): ran the unscoped dump against dc-01 as svc-backup;
+       impacket itself reported client-side failure ("Something went wrong
+       with the DRSUAPI approach") — a known Samba DRSUAPI response-parsing
+       quirk, the same class of impacket-vs-Samba interop wall already
+       documented for Kerberoast/AS-REP elsewhere in this lab — but the
+       server-side telemetry fired anyway (100080 x2 in alerts.json),
+       confirming the request was genuinely received and processed before
+       impacket's own parsing gave up. Samba's dsdb replication audit doesn't
+       distinguish "sync one principal" from "sync everything" at the
+       dcesrv_drsuapi_DsGetNCChanges level, so one rule honestly and
+       correctly covers both techniques on this specific AD implementation —
+       writing a second, functionally-identical rule just to have two rule
+       IDs would be theater, not a real second detection. -->
   <rule id="100080" level="12">
     <match>dcesrv_drsuapi_DsGetNCChanges</match>
-    <description>DCSync suspected — AD replication (DsGetNCChanges) invoked on the DC; no legitimate DC-to-DC replication exists in this single-DC domain, indicating credential-replication abuse.</description>
+    <description>DCSync/NTDS replication suspected — AD replication (DsGetNCChanges) invoked on the DC; no legitimate DC-to-DC replication exists in this single-DC domain, indicating credential-replication abuse.</description>
     <mitre>
       <id>T1003.006</id>
+      <id>T1003.003</id>
     </mitre>
     <group>dcsync,credential_access,attack,</group>
   </rule>

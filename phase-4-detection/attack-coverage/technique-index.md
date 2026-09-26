@@ -12,6 +12,7 @@ oversight; see `phase-5-offense/attack-detect-writeups/` to add one.
 |---|---|---|---|
 | T1003.001 | validated | 100525, 100526 | [phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md](../../phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md) |
 | T1003.002 | validated | 100560, 100561 | [phase-5-offense/attack-detect-writeups/08-sam-dump-credential-cracking-t1003.002.md](../../phase-5-offense/attack-detect-writeups/08-sam-dump-credential-cracking-t1003.002.md) |
+| T1003.003 | validated | 100080 | [phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md](../../phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md) |
 | T1003.006 | validated | 100080 | [phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md](../../phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md) |
 | T1007 | validated | 100507, 100508 | [phase-4-detection/sigma/README.md](../sigma/README.md) |
 | T1016 | validated | 100100, 100101 | [phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md](../../phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md) |

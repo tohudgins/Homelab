@@ -82,6 +82,24 @@ SCENARIOS = [
         "desc": "DsGetNCChanges from a non-DC (T1003.006)",
     },
     {
+        # T1003.003 (2026-09-25) — Samba has no ntds.dit at all (its AD database
+        # is sam.ldb, not Microsoft's ESE format), so the real Windows
+        # local-VSS/ntdsutil path can't be reproduced here. The unscoped variant
+        # of the SAME DCSync command above (no -just-dc-user/-just-dc-ntlm, i.e.
+        # "dump every account") is the practical equivalent — and hits the
+        # identical rule, confirmed live: impacket itself reports client-side
+        # failure against Samba's DRSUAPI response (a known interop quirk, same
+        # class as the Kerberoast/AS-REP walls elsewhere in this lab), but the
+        # server-side telemetry fires anyway. See local_rules.xml's comment on
+        # rule 100080 for the full finding.
+        "name": "NTDS Dump (unscoped replication)",
+        "host": "atk-01",
+        "cmd": ("impacket-secretsdump lab.internal/svc-backup:Backup2026@dc-01.lab.internal"),
+        "rules": ["100080"],
+        "technique": "T1003.003",
+        "desc": "Unscoped DsGetNCChanges — full-domain dump, not one principal (T1003.003)",
+    },
+    {
         # Requires fs-01 (weak [public] share). SKIPs cleanly when fs-01 is down.
         "name": "Credential Theft",
         "host": "atk-01",
