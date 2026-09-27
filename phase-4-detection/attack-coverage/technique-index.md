@@ -38,7 +38,7 @@ oversight; see `phase-5-offense/attack-detect-writeups/` to add one.
 | T1087.002 | validated | 100108, 100112 | [phase-5-offense/apt-scenario/README.md](../../phase-5-offense/apt-scenario/README.md) |
 | T1098 | validated | 100015, 100051, 100552 | [phase-5-offense/attack-detect-writeups/12-ad-group-membership-t1098.007.md](../../phase-5-offense/attack-detect-writeups/12-ad-group-membership-t1098.007.md) |
 | T1098.007 | validated | 100015 | [phase-5-offense/attack-detect-writeups/12-ad-group-membership-t1098.007.md](../../phase-5-offense/attack-detect-writeups/12-ad-group-membership-t1098.007.md) |
-| T1105 | detection only | 100500, 100501 | [phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md](../../phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md) |
+| T1105 | detection only | 100500, 100501, 100565 | [phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md](../../phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md) |
 | T1110 | validated | 100010, 100011, 100012, 100013, 100041, 100401 | [phase-5-offense/attack-detect-writeups/02-password-spray-smb.md](../../phase-5-offense/attack-detect-writeups/02-password-spray-smb.md) |
 | T1110.001 | validated | 100010, 100011, 100012, 100013, 100040, 100041, 100400, 100530 | [phase-5-offense/attack-detect-writeups/02-password-spray-smb.md](../../phase-5-offense/attack-detect-writeups/02-password-spray-smb.md) |
 | T1110.003 | validated | 100401 | [phase-5-offense/attack-detect-writeups/02-password-spray-smb.md](../../phase-5-offense/attack-detect-writeups/02-password-spray-smb.md) |
@@ -57,7 +57,7 @@ oversight; see `phase-5-offense/attack-detect-writeups/` to add one.
 | T1490 | validated | 100520, 100521, 100522, 100523, 100524 | [phase-5-offense/attack-detect-writeups/06-inhibit-system-recovery-t1490.md](../../phase-5-offense/attack-detect-writeups/06-inhibit-system-recovery-t1490.md) |
 | T1518.001 | validated | 100104, 100105 | [phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md](../../phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md) |
 | T1543.002 | validated | 100550 | [phase-4-detection/osquery/README.md](../osquery/README.md) |
-| T1547.001 | validated | 100070 | [phase-5-offense/attack-detect-writeups/07-registry-run-keys-t1547.001.md](../../phase-5-offense/attack-detect-writeups/07-registry-run-keys-t1547.001.md) |
+| T1547.001 | validated | 100070, 100566 | [phase-5-offense/attack-detect-writeups/07-registry-run-keys-t1547.001.md](../../phase-5-offense/attack-detect-writeups/07-registry-run-keys-t1547.001.md) |
 | T1548.002 | validated | 100117, 100118 | [phase-5-offense/purple-team/README.md](../../phase-5-offense/purple-team/README.md) |
 | T1548.003 | validated | 100540 | [phase-5-offense/attack-detect-writeups/05-linux-sudo-privesc-t1548.003.md](../../phase-5-offense/attack-detect-writeups/05-linux-sudo-privesc-t1548.003.md) |
 | T1552.001 | validated | 100090 | [phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md](../../phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md) |

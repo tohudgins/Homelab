@@ -1572,19 +1572,30 @@
         live — this needs more investigation into Wazuh's field-match
         internals before trying again, not a guess shipped as fact.
 
-        Left as a real, not a testing-artifact, precision gap: the not-yet-
-        proven fix would have scoped this to genuine cron-failures.log
-        content only. What actually ships here is intentionally broader.
-        In real operation this is lower-risk than it sounds — root's own
-        crontab entries run directly under cron, never through `sudo`, so
-        the false-positive path above is specific to how *this* was tested
-        by hand, not to how it actually runs — but it is not zero-risk: any
-        other future event that happens to contain the literal string
-        "CRON_JOB_FAILED" (another script's log, a copy-pasted command) would
-        still match. -->
+     3. Precision fix, closing the gap above (2026-09-27). `<field name="location">`
+        was always going to be a dead end: "location" is a core event attribute
+        (the source file/command), not something a decoder extracts into `data.*`,
+        which is what `<field name="X">` actually matches against — it never had a
+        value to match. The native rule-level `<location>` tag (a real, different
+        mechanism) is ALSO confirmed broken in this stack for agent-forwarded/local-
+        agent logs — see the T1003.006/DCSync rule 100080 above, which hit the exact
+        same silent-no-match failure and dropped it for the same reason. Both source-
+        filtering paths are out. What actually closes the "another script's log
+        would still match" gap is scoping the *content* instead: a `<regex>` on the
+        exact known message shape (script name + exit code) rather than a bare
+        substring. This does NOT fix the sudo-simulation false-positive above — that
+        event contains the literal echo'd string verbatim, script name and all, so
+        content-scoping can't distinguish it from the real thing; that residual risk
+        is unchanged and still lower-risk-than-it-sounds for the same reason (real
+        crontab entries never run through sudo). What it DOES fix: a future script
+        that reuses this "CRON_JOB_FAILED: X exit=N" idiom with a *different* script
+        name, on a source Wazuh already monitors, no longer gets misattributed to
+        this rule's "siem-01 maintenance cron job failed" description. Verified live:
+        a fabricated line naming an unknown script does not fire; genuine appends
+        from both real cron jobs still do. -->
 <group name="local,ops,">
   <rule id="100563" level="10">
-    <match>CRON_JOB_FAILED</match>
+    <regex type="pcre2">CRON_JOB_FAILED: wazuh-(log-retention|snapshot-backup)\.sh exit=\d+</regex>
     <description>A siem-01 maintenance cron job failed — $(full_log)</description>
     <group>ops_maintenance,</group>
   </rule>
@@ -1627,5 +1638,33 @@
       <id>T1547.001</id>
     </mitre>
     <group>dfir,attack,</group>
+  </rule>
+</group>
+
+<!-- wtmpdb -> Wazuh feed (2026-09-27): closes "wiring wtmpdb into Wazuh is real,
+     separate follow-up work" left open when libpam-wtmpdb was installed to work
+     around osquery's logged_in_users being permanently incompatible with this OS's
+     retired legacy utmp (see osquery/README.md, threat-hunting/README.md Hunt D).
+     wtmpdb-wazuh-feed.py (cron, dc-01/fs-01, every 5 min) reads only genuinely new
+     sessions since its own last run and appends one JSON line per session to
+     /var/log/wtmpdb-events.log, tailed as a plain log_format=json localfile — same
+     idiom as the Samba log.samba telemetry above, not the queue-socket technique the
+     manager-side integrations use, since this runs on agent hosts, not siem-01.
+     Level 3, visibility not alerting: a login by itself isn't suspicious, this
+     exists so real session data is queryable at all — Wazuh's own stock full_command
+     "last -n 20" (rule 535) already fires on this OS since `last` now reads wtmpdb
+     transparently too, but only as one opaque text diff per change with no
+     structured fields. Fields live under wtmpdb.* , not top-level: "user" and
+     "hostname" are both Wazuh core/reserved field names — confirmed live that
+     $(user) silently resolves to the unrelated dstuser alias and $(hostname) gets
+     shadowed by the agent's own hostname, so a first version of this rule rendered
+     "wtmpdb session on dc-01:  via ssh" (both fields blank/wrong). Same wtmpdb.*
+     namespacing the Velociraptor rules above use for this identical reason. -->
+<group name="local,wtmpdb,">
+  <rule id="100567" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="source">^wtmpdb$</field>
+    <description>wtmpdb session: $(wtmpdb.user) via $(wtmpdb.tty) from $(wtmpdb.hostname)</description>
+    <options>no_full_log</options>
   </rule>
 </group>

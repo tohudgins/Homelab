@@ -208,7 +208,7 @@
       "techniqueID": "T1105",
       "score": 50,
       "color": "#66bb6a",
-      "comment": "detection \u2014 100500, 100501 | learn: phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md",
+      "comment": "detection \u2014 100500, 100501, 100565 | learn: phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md",
       "enabled": true
     },
     {
@@ -341,7 +341,7 @@
       "techniqueID": "T1547.001",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100070 | learn: phase-5-offense/attack-detect-writeups/07-registry-run-keys-t1547.001.md",
+      "comment": "VALIDATED (purple-team) \u2014 100070, 100566 | learn: phase-5-offense/attack-detect-writeups/07-registry-run-keys-t1547.001.md",
       "enabled": true
     },
     {

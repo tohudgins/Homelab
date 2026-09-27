@@ -112,8 +112,26 @@ legacy file (confirmed by installing `libpam-wtmpdb` and testing: real logins im
 implementation predates the lastlog2/wtmpdb transition — not a misconfiguration a PAM tweak can close.
 **`libpam-wtmpdb` is now installed on dc-01/fs-01 anyway** (`osquery` role, `pam-auth-update` auto-enables its
 profile on install, no manual PAM editing) — real, modern, persistent login auditing this lab didn't have at
-all before, independent of osquery. Querying it (`wtmpdb last`) or wiring it into Wazuh is real, separate
-follow-up work, left open rather than folded into this already-larger-than-expected finding.
+all before, independent of osquery.
+
+**Wired into Wazuh (2026-09-27)**, closing the follow-up work left open above. `wtmpdb-wazuh-feed.py`
+(cron, dc-01/fs-01, every 5 min) reads only genuinely new sessions since its own last run and appends one
+JSON line per session to `/var/log/wtmpdb-events.log`, tailed as a plain `log_format=json` localfile — same
+idiom as the Samba `log.samba` telemetry, not the queue-socket technique the manager-side integrations use,
+since this runs on agent hosts, not siem-01. Rule 100567 (level 3, group `wtmpdb`) surfaces each session as a
+real, queryable event — visibility, not alerting: a login by itself isn't suspicious. Worth naming: Ubuntu's
+own `last` command already reads wtmpdb transparently on this OS (confirmed live), so Wazuh's stock
+`full_command "last -n 20"` localfile (rule 535) already fired on some of this data too — but only as one
+opaque unstructured text diff per change, no user/tty/host fields, nothing to key a rule on. This is the real
+structured version of that same data.
+
+Two real bugs found live building this, not zero: (1) `wtmpdb last -s TIME` only accepts plain
+`"YYYY-MM-DD HH:MM:SS"`, not the `--time-format iso` value entries themselves report — feeding a session's
+own ISO timestamp straight back in as the next run's cursor made every second cron run fail outright. (2)
+`user` and `hostname` are both Wazuh core/reserved field names — `$(user)` silently resolved to the unrelated
+`dstuser` alias and `$(hostname)` got shadowed by the *agent's* own hostname, so a first version of the rule
+rendered "wtmpdb session on dc-01:  via ssh" with both fields blank. Fixed by nesting the payload under
+`wtmpdb.*`, the same namespacing `velociraptor-hunt-escalate.py` already uses for this identical reason.
 
 **A real noise source found before any of this could work**: `listening_ports`' own "added" stream was 76%
 garbage (194 of 256 events on dc-01) — every AF_UNIX socket (`family=1`) the table returns comes back with

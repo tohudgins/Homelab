@@ -96,3 +96,46 @@
         </wodle>
       </ossec_config>
   notify: Restart wazuh-agent
+
+# Wires wtmpdb (installed above) into Wazuh: closes "wiring wtmpdb into Wazuh is
+# real, separate follow-up work" from osquery/README.md and threat-hunting/README.md
+# (Hunt D). See wtmpdb-wazuh-feed.py's own header for why this exists as a dedicated
+# feed rather than relying on Wazuh's stock full_command "last -n 20" localfile
+# (rule 535) — confirmed live that rule already fires on this OS since `last` now
+# reads wtmpdb transparently, but only as one opaque text diff per change, level 1,
+# with no user/tty/host fields to alert on.
+- name: Create the wtmpdb-wazuh-feed state directory
+  ansible.builtin.file:
+    path: /var/lib/wtmpdb-wazuh-feed
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Deploy wtmpdb-wazuh-feed.py
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../phase-4-detection/osquery/wtmpdb-wazuh-feed.py"
+    dest: /usr/local/sbin/wtmpdb-wazuh-feed.py
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Schedule the wtmpdb-wazuh-feed cron job (every 5 minutes)
+  ansible.builtin.cron:
+    name: "wtmpdb -> Wazuh feed"
+    user: root
+    minute: "*/5"
+    job: "/usr/local/sbin/wtmpdb-wazuh-feed.py >> /var/log/wtmpdb-wazuh-feed.log 2>&1"
+
+- name: Feed new wtmpdb sessions to Wazuh (structured JSON, one event per session)
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: "<!-- {mark} ANSIBLE MANAGED: wtmpdb wazuh feed -->"
+    block: |
+      <ossec_config>
+        <localfile>
+          <log_format>json</log_format>
+          <location>/var/log/wtmpdb-events.log</location>
+        </localfile>
+      </ossec_config>
+  notify: Restart wazuh-agent

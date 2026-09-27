@@ -295,8 +295,8 @@ to their own SQLite database, not the legacy file (confirmed by installing `libp
 immediately appear in `wtmpdb last`, `/run/utmp` still never appears). Genuinely a osquery-vs-OS version
 mismatch, not fixable by any PAM change. `libpam-wtmpdb` is installed anyway (`osquery` role) as real, modern
 login auditing independent of osquery — see [`osquery/README.md`](../osquery/README.md) for the full
-writeup. Querying `wtmpdb` from Wazuh is real, separate follow-up work, left honestly open rather than
-declared done, the same way Hunt A's evasion follow-ups stay open above.
+writeup, including the 2026-09-27 follow-up that wired it into Wazuh as real, structured, per-session events
+(rule 100567) rather than leaving it as a `wtmpdb last` CLI-only capability.
 
 ---
 
