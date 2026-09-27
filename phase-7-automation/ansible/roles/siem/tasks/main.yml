@@ -430,3 +430,23 @@
         </localfile>
       </ossec_config>
   notify: Restart wazuh-manager
+
+# Lab-created logs had no rotation at all (2026-09-27 audit) — unbounded growth on
+# a lab meant to run indefinitely. delaycompress keeps the just-rotated file
+# plain text so a Wazuh localfile tailing it can finish reading after rotation.
+- name: Rotate siem-01 maintenance logs
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/homelab-siem
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      /var/log/cron-failures.log
+      /var/log/wazuh-snapshot-backup.log {
+        weekly
+        rotate 8
+        compress
+        delaycompress
+        missingok
+        notifempty
+      }

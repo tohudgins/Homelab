@@ -16,10 +16,20 @@
 # `wtmpdb last --since TIME` is TIMESTAMP-INCLUSIVE (confirmed live: querying
 # with --since set to an entry's own login time re-returns that exact entry),
 # so a naive "since = last cursor" would re-emit the boundary session every
-# run. State therefore tracks not just the cursor but which exact sessions
-# were already emitted AT that cursor timestamp, so only genuinely new
-# sessions are ever emitted -- including the rare case of two sessions
-# starting in the same second.
+# run. Dedup is therefore anchored on a persistent, bounded set of session
+# keys (user, tty, hostname, login) that have already been emitted -- NOT on
+# the cursor alone. This is correct under both readings of --since: whether it
+# returns only sessions whose login >= TIME, or also older sessions still open
+# at TIME, a session is emitted exactly once and never re-emitted while it
+# keeps being returned. (An earlier version tracked only the keys at the
+# cursor's exact second, which would have re-emitted a long-lived login every
+# run if --since turns out to include still-open older sessions -- not retested
+# live yet, so the dedup is made robust to it rather than assuming.)
+#
+# One session -> one event, at first sighting. A session still open when first
+# seen is emitted once with logout="still logged in"; its later logout is not
+# re-emitted. For login-visibility (rule 100567, level 3) the login event is
+# the one that matters; this deliberately avoids duplicate per-session events.
 #
 # First run seeds the cursor at "now" rather than backfilling wtmpdb's full
 # history: this lab's wtmpdb databases already hold weeks of attack-
@@ -49,13 +59,18 @@ def to_since_arg(iso_ts):
     return datetime.strptime(iso_ts, "%Y-%m-%dT%H:%M:%S%z").strftime("%Y-%m-%d %H:%M:%S")
 
 
+# Bounds the persistent dedup set. A 5-min window holds a handful of sessions;
+# 1000 keys is far more than any real backlog and keeps the state file tiny.
+SEEN_MAX = 1000
+
+
 def load_state():
     try:
         with open(STATE_FILE) as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         now = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
-        return {"cursor": now, "seen_at_cursor": []}
+        return {"cursor": now, "seen": []}
 
 
 def save_state(state):
@@ -77,10 +92,12 @@ def entry_key(entry):
 
 def main():
     state = load_state()
+    # Back-compat: older state files used "seen_at_cursor" (only the keys at the
+    # cursor's exact second). Seed the new persistent set from it if present.
+    seen = set(tuple(k) for k in state.get("seen", state.get("seen_at_cursor", [])))
     entries = fetch_since(state["cursor"])
 
-    already_seen = set(tuple(k) for k in state["seen_at_cursor"])
-    new_entries = [e for e in entries if entry_key(e) not in already_seen]
+    new_entries = [e for e in entries if entry_key(e) not in seen]
 
     if new_entries:
         with open(EVENTS_LOG, "a") as f:
@@ -105,8 +122,13 @@ def main():
 
     if entries:
         latest_login = max(e.get("login") for e in entries if e.get("login"))
-        seen_at_new_cursor = [list(entry_key(e)) for e in entries if e.get("login") == latest_login]
-        state = {"cursor": to_since_arg(latest_login), "seen_at_cursor": seen_at_new_cursor}
+        # Dedup is anchored on the persistent `seen` set, NOT the cursor: every key
+        # returned this run is folded back in, so a session that keeps appearing
+        # (e.g. a long-lived login `--since` may re-return under either of its
+        # possible semantics) is never re-emitted, while keys that stop appearing
+        # eventually age out under SEEN_MAX. Order-preserving dedup keeps the newest.
+        merged = list(dict.fromkeys([tuple(k) for k in seen] + [entry_key(e) for e in entries]))
+        state = {"cursor": to_since_arg(latest_login), "seen": [list(k) for k in merged[-SEEN_MAX:]]}
         save_state(state)
 
     print(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} "

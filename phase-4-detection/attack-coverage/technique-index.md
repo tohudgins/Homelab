@@ -10,7 +10,7 @@ oversight; see `phase-5-offense/attack-detect-writeups/` to add one.
 
 | Technique | Status | Rule ID(s) | Learn |
 |---|---|---|---|
-| T1003.001 | validated | 100525, 100526 | [phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md](../../phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md) |
+| T1003.001 | detection only | 100525, 100526 | [phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md](../../phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md) |
 | T1003.002 | validated | 100560, 100561 | [phase-5-offense/attack-detect-writeups/08-sam-dump-credential-cracking-t1003.002.md](../../phase-5-offense/attack-detect-writeups/08-sam-dump-credential-cracking-t1003.002.md) |
 | T1003.003 | validated | 100080 | [phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md](../../phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md) |
 | T1003.006 | validated | 100080 | [phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md](../../phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md) |
@@ -19,7 +19,7 @@ oversight; see `phase-5-offense/attack-detect-writeups/` to add one.
 | T1018 | validated | 100110 | [phase-5-offense/purple-team/README.md](../../phase-5-offense/purple-team/README.md) |
 | T1021.002 | validated | 100119, 100120 | [phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md](../../phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md) |
 | T1021.006 | validated | 100516 | [phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md](../../phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md) |
-| T1027 | detection only | 100500, 100501 | [phase-4-detection/sigma/README.md](../sigma/README.md) |
+| T1027 | detection only | 100500, 100501 | [README.md](../../README.md) |
 | T1033 | validated | 100504, 100505 | [phase-5-offense/atomic-red-team/README.md](../../phase-5-offense/atomic-red-team/README.md) |
 | T1047 | validated | 100515, 100527 | [phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md](../../phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md) |
 | T1048.003 | validated | 100443, suricata:9100010 | [phase-6-nsm/dns-tunneling.md](../../phase-6-nsm/dns-tunneling.md) |

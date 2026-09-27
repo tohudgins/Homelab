@@ -160,3 +160,22 @@
     job: >-
       /usr/local/sbin/velociraptor-hunt-escalate.py
       || { rc=$?; echo "$(date -u +\%Y-\%m-\%dT\%H:\%M:\%SZ) CRON_JOB_FAILED: velociraptor-hunt-escalate.py exit=$rc" >> /var/log/cron-failures.log; }
+
+# Lab-created logs had no rotation at all (2026-09-27 audit) — unbounded growth on
+# a lab meant to run indefinitely. delaycompress keeps the just-rotated file
+# plain text so a Wazuh localfile tailing it can finish reading after rotation.
+- name: Rotate Velociraptor escalation logs
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/homelab-velociraptor
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      /var/log/velociraptor-hunt-escalate.log {
+        weekly
+        rotate 8
+        compress
+        delaycompress
+        missingok
+        notifempty
+      }

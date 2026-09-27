@@ -10,15 +10,19 @@ the ruleset**, not hand-drawn, so it can never quietly drift from what's actuall
 ATT&CK **Navigator layer**:
 
 - **56 techniques** currently have a custom detection.
-- **52** of those are **validated end-to-end** (the purple-team harness runs the atomic and proves the rule
-  fired — not just "a rule exists"). The remaining 4 are deliberately excluded from the automated battery,
-  not gaps, each for its own documented reason in `detection-catalog.md`: T1027/T1105 (certutil download)
-  and T1569.002 (PsExec) because Microsoft Defender blocks all three outright before the technique produces
-  any telemetry (confirmed live — a permanently-red automated test would be worse than none, so they're
-  proven true-negatives instead); T1055 (process injection, closed 2026-09-25) because the gap it closes is
-  specifically a raw scripting-engine `CreateRemoteThread` call that none of Atomic Red Team's stock T1055
-  tests reproduce (they ship as compiled Go binaries, not a scripting-engine source image) — proven instead
-  by a reproducible manual live-fire, confirmed twice.
+- **51** of those are **validated end-to-end** (the purple-team harness runs the atomic and proves the rule
+  fired — not just "a rule exists"). The remaining 5 all have a rule deployed but sit outside the
+  reproducible-pass set, not gaps, each for its own documented reason in `detection-catalog.md`: T1027/T1105
+  (certutil download) and T1569.002 (PsExec) because Microsoft Defender blocks all three outright before the
+  technique produces any telemetry (confirmed live — a permanently-red automated test would be worse than
+  none, so they're proven true-negatives instead); T1055 (process injection, closed 2026-09-25) because the
+  gap it closes is specifically a raw scripting-engine `CreateRemoteThread` call that none of Atomic Red
+  Team's stock T1055 tests reproduce (they ship as compiled Go binaries, not a scripting-engine source image)
+  — proven instead by a reproducible manual live-fire, confirmed twice; and T1003.001 (LSASS comsvcs MiniDump,
+  rule 100525) which is **environment-flaky** — it fired reliably in early Sept, then Defender's real-time
+  heuristics tightened to block the dump at process launch, so it's carried as an XFAIL in the harness
+  (`flaky_env` in `tests.json`) rather than counted as validated. One of the 51 (T1543.002) is proven by a
+  recorded manual live-fire in `osquery/README.md` rather than the ART battery.
 - Two shades encode that difference: **dark green = validated**, **light green = detection exists**.
 
 Coverage now spans **13 of ATT&CK's 14 tactics** — everything except Resource Development — from
@@ -60,7 +64,7 @@ python3 generate-coverage.py     # re-reads the rules + purple-team tests, rewri
 ```
 Run it whenever rules change; because it's derived, the map is always exactly the deployed coverage — and
 the `layerURL` link above always points at whatever's on `main`, so there's no separate "publish" step.
-52 of 56 are validated (see above for the 4 deliberately-excluded exceptions) — extending coverage further
+51 of 56 are validated (see above for the 5 exceptions outside the reproducible-pass set) — extending coverage further
 now means adding a *new* rule and a *new* test together, not chasing the automation gap that used to sit
 between "detected" and "validated" (23 → 48, closed 2026-09-12/13: `phase-5-offense/purple-team/README.md`
 has the full batch-by-batch story, including two real infra bugs the automation itself surfaced).

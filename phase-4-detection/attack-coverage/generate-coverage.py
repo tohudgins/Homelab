@@ -92,6 +92,12 @@ def validated_techniques(cov):
     v = set()
     if os.path.exists(PT_TESTS):
         for t in json.load(open(PT_TESTS)).get("tests", []):
+            # A "flaky_env" entry (e.g. T1003.001, Defender intermittently blocks
+            # LSASS access) is NOT reproducibly validated end-to-end, so it must not
+            # be counted here — otherwise the map claims "validated" for a technique
+            # the harness itself reports as FAIL. It stays "covered" (the rule exists).
+            if t.get("flaky_env"):
+                continue
             v.add(norm(t["technique"]))
             for rid in t.get("expect_rules", []):
                 v |= rule_to_techs.get(rid, set())

@@ -1,6 +1,10 @@
 ---
-# Full-lab convergence. Import per-host plays in dependency order.
-# Each is also runnable on its own (e.g. ansible-playbook router.yml).
+# Core-lab convergence: every host in the everyday run profiles, plus the
+# lightweight detection add-ons that live on those same hosts. Import order is
+# dependency order. Each play is also runnable on its own.
+#
+# The heavy/optional platforms (Velociraptor, MISP, IRIS) are in full.yml, which
+# imports this file first — use that for a genuine from-scratch rebuild.
 - name: Converge rtr-01 — router / firewall / DHCP-DNS-NTP / inline NSM sensor
   import_playbook: router.yml
 - name: Converge dc-01 — Samba AD DC config + deliberate weaknesses
@@ -15,3 +19,10 @@
   import_playbook: scan.yml
 - name: Converge ws-01 — Windows victim (Sysmon + PS logging + Wazuh agent, over SSH)
   import_playbook: windows.yml
+# These two used to be standalone, so a site.yml rebuild silently came back
+# without osquery (rules 100550-100552), the wtmpdb feed (100567), or CIS SCA
+# scanning on the Ubuntu agents. They only touch hosts already converged above.
+- name: Converge dc-01/fs-01 — osquery fleet + wtmpdb login feed
+  import_playbook: osquery.yml
+- name: Converge Ubuntu agents — CIS SCA policy gate fix for Ubuntu 26.04
+  import_playbook: sca-ubuntu2604-fix.yml

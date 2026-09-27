@@ -218,3 +218,27 @@
     user: root
     minute: "*/5"
     job: "SIEM_HOST={{ siem_monitor_host }} SIEM_PORT={{ siem_monitor_port }} /usr/local/sbin/monitor-siem-availability.sh"
+
+- name: Ensure logrotate is installed (minimal Debian doesn't ship it)
+  ansible.builtin.apt:
+    name: logrotate
+    state: present
+
+# Lab-created logs had no rotation at all (2026-09-27 audit) — unbounded growth on
+# a lab meant to run indefinitely. delaycompress keeps the just-rotated file
+# plain text so a Wazuh localfile tailing it can finish reading after rotation.
+- name: Rotate siem-availability monitor logs
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/homelab-router
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      /var/log/siem-monitor.log {
+        weekly
+        rotate 8
+        compress
+        delaycompress
+        missingok
+        notifempty
+      }

@@ -1,0 +1,15 @@
+---
+# Whole-lab convergence: the core lab (site.yml) plus the heavy/optional SOC
+# platforms. This is the from-scratch rebuild path.
+#
+# Prerequisites beyond site.yml's:
+#   - misp-01 powered on (it isn't in most run profiles: `make up PROFILE=soc-ops`)
+#   - Velociraptor binaries staged on the controller (the role's preflight says how)
+- name: Core lab
+  import_playbook: site.yml
+- name: Velociraptor DFIR server (siem-01) + Linux clients (dc-01, fs-01)
+  import_playbook: velociraptor.yml
+- name: MISP threat-intel platform (misp-01)
+  import_playbook: misp.yml
+- name: DFIR-IRIS case management (misp-01)
+  import_playbook: iris.yml

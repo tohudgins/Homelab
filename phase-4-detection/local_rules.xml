@@ -497,11 +497,36 @@
 -->
 <group name="local,dcsync,">
 
+  <!-- Tagged with BOTH T1003.006 (DCSync, a scoped replication request for one
+       principal's secrets) and T1003.003 (OS Credential Dumping: NTDS — on a
+       real Windows DC, usually a local ntdsutil/VSS dump of the actual
+       ntds.dit file) — confirmed honest, not a guess: Samba has no ntds.dit
+       at all (its AD database is sam.ldb, a completely different LDB/tdb
+       format), so a real Windows-style local NTDS.dit theft can't be
+       reproduced here. What CAN be reproduced is the other real-world path to
+       the same outcome — a full, unrestricted DRSUAPI replication pull
+       (impacket-secretsdump with no -just-dc-user/-just-dc-ntlm scoping,
+       i.e. "give me every account", the practical equivalent of exfiltrating
+       the whole NTDS database) — and it hits this exact rule. Verified live
+       (2026-09-25): ran the unscoped dump against dc-01 as svc-backup;
+       impacket itself reported client-side failure ("Something went wrong
+       with the DRSUAPI approach") — a known Samba DRSUAPI response-parsing
+       quirk, the same class of impacket-vs-Samba interop wall already
+       documented for Kerberoast/AS-REP elsewhere in this lab — but the
+       server-side telemetry fired anyway (100080 x2 in alerts.json),
+       confirming the request was genuinely received and processed before
+       impacket's own parsing gave up. Samba's dsdb replication audit doesn't
+       distinguish "sync one principal" from "sync everything" at the
+       dcesrv_drsuapi_DsGetNCChanges level, so one rule honestly and
+       correctly covers both techniques on this specific AD implementation —
+       writing a second, functionally-identical rule just to have two rule
+       IDs would be theater, not a real second detection. -->
   <rule id="100080" level="12">
     <match>dcesrv_drsuapi_DsGetNCChanges</match>
-    <description>DCSync suspected — AD replication (DsGetNCChanges) invoked on the DC; no legitimate DC-to-DC replication exists in this single-DC domain, indicating credential-replication abuse.</description>
+    <description>DCSync/NTDS replication suspected — AD replication (DsGetNCChanges) invoked on the DC; no legitimate DC-to-DC replication exists in this single-DC domain, indicating credential-replication abuse.</description>
     <mitre>
       <id>T1003.006</id>
+      <id>T1003.003</id>
     </mitre>
     <group>dcsync,credential_access,attack,</group>
   </rule>
@@ -1404,4 +1429,249 @@
     <group>persistence,attack,</group>
   </rule>
 
+</group>
+
+<!-- T1003.002 — OS Credential Dumping: Security Account Manager (2026-09-23).
+     See phase-5-offense/attack-detect-writeups/08-sam-dump-credential-cracking-t1003.002.md
+     for the full attack (impacket-secretsdump, a remote SAM/SECURITY hive dump over the
+     RemoteRegistry service) — that writeup shipped without detection on purpose ("left as
+     the natural next step"), closed here. RemoteRegistry is disabled by default and has
+     essentially no legitimate reason to be enabled ad hoc, so its enable/start is a rare,
+     high-fidelity signal — the same "rare + specific beats broad + noisy" idiom as every
+     other rule in this file. Two independent telemetry sources for the exact same action,
+     both confirmed live against a real secretsdump run (2026-09-23) before writing either
+     rule, not assumed from documentation:
+       (1) Windows System log EventID 7040 (Service Control Manager) already has a stock,
+           generic Wazuh rule (61104, "Service startup type was changed", level 3, no MITRE
+           tag) that fires on ANY service's start-type change — too broad and too low a
+           level to be useful on its own. 100560 below is an escalation child of it, the
+           same idiom as 100527's relationship to stock rule 92069.
+       (2) The existing SwiftOnSecurity Sysmon config (deployed as code earlier this
+           session) already watches the registry, and a plain EventID 13 (RegistryEvent,
+           Value Set) fires on the service's own Start value changing under
+           HKLM\System\CurrentControlSet\Services\RemoteRegistry — genuinely unexpected: the
+           writeup only speculated Sysmon EID13 might help "if the hive keys are watched"
+           (meaning SAM/SECURITY themselves, which nothing audits by design), not realizing
+           the *service config* key was already in scope. Chains via
+           `<if_group>sysmon_event_13</if_group>` — note the underscore, which trips up a
+           guess: the stock ruleset's own 0330-sysmon_rules.xml names events 1-9
+           `sysmon_event1`...`sysmon_event9` (no underscore) but 10+ `sysmon_event_10`,
+           `sysmon_event_11`, etc. (underscored) — confirmed by reading the stock rule file
+           directly on siem-01, not assumed. First attempt used `decoded_as>json` plus raw
+           win.system.eventID/win.system.providerName field matches (mirroring rule 100300's
+           MISP-integration pattern) and silently matched nothing — wazuh-logtest itself
+           hung after Phase 2 (decoding) for every input tried, Windows or not (confirmed
+           with a trivial one-word log line too — a genuine tool limitation in this
+           environment, not specific to this rule), making it useless for this diagnosis;
+           the real tell came from `alerts.json` showing zero hits and the stock ruleset
+           file confirming Windows/Sysmon rules chain via if_group/if_sid, never decoded_as.
+           **Second real gotcha, found after fixing the chain**: `win.eventdata.targetObject`
+           decodes with a LITERAL DOUBLE backslash between path segments
+           (`HKLM\\System\\CurrentControlSet\\Services\\RemoteRegistry\\Start`, confirmed by
+           dumping the actual parsed JSON of a fired alert, not assumed from a normal-looking
+           Windows path) — a single-backslash pcre2 pattern matched nothing even with the
+           if_group chain fixed; isolated by first stripping the rule down to bare
+           `if_group` with no field filter to prove the chain itself worked (it did, firing
+           on every EID13 event), then reintroducing the field match with the doubled
+           escaping. Every step verified against a real, freshly-run secretsdump attack —
+           never assumed from a single sample. -->
+<group name="local,windows,">
+  <rule id="100560" level="12">
+    <if_sid>61104</if_sid>
+    <field name="win.eventdata.param4" type="pcre2">(?i)^RemoteRegistry$</field>
+    <field name="win.eventdata.param3" type="pcre2">(?i)start$</field>
+    <options>no_full_log</options>
+    <description>RemoteRegistry service enabled (start type $(win.eventdata.param2) -> $(win.eventdata.param3)) — possible remote SAM/SECURITY hive dump</description>
+    <mitre>
+      <id>T1003.002</id>
+    </mitre>
+    <group>credential_access,attack,</group>
+  </rule>
+
+  <rule id="100561" level="12">
+    <if_group>sysmon_event_13</if_group>
+    <field name="win.eventdata.targetObject" type="pcre2">(?i)\\\\Services\\\\RemoteRegistry\\\\Start$</field>
+    <options>no_full_log</options>
+    <description>Registry: RemoteRegistry service Start value changed by $(win.eventdata.image) — possible remote SAM/SECURITY hive dump</description>
+    <mitre>
+      <id>T1003.002</id>
+    </mitre>
+    <group>credential_access,attack,</group>
+  </rule>
+</group>
+
+<!-- T1055 — Process Injection (2026-09-25). Stock Wazuh already ships three
+     T1055-tagged rules for Sysmon EID8/CreateRemoteThread (0870-sysmon_id_8.xml,
+     rules 92400/92401/92402) — but every one of them keys on the *target*
+     process being one of exactly three legacy paths: explorer.exe, mstsc.exe,
+     svchost.exe/synchost.exe. Confirmed live (2026-09-25) this misses a real,
+     common attack shape entirely: a self-contained PowerShell P/Invoke
+     CreateRemoteThread call (OpenProcess -> VirtualAllocEx -> WriteProcessMemory
+     -> CreateRemoteThread, the textbook technique, no external binary) targeting
+     the modern UWP Notepad app produced a genuine Sysmon EID8 event that matched
+     ZERO rules, stock or custom — `win.eventdata.targetImage` was
+     `...\WindowsApps\Microsoft.WindowsNotepad_...\Notepad\Notepad.exe`, nowhere
+     near any of the three stock target paths. This rule closes that gap the
+     opposite way: instead of trying to enumerate every possible legitimate-vs-
+     malicious *target* (an open-ended list that will always miss something,
+     as just proven), key on the *source* — a scripting/LOLBin interpreter
+     calling CreateRemoteThread into ANY other process. A real `powershell.exe`,
+     `cmd.exe`, `wscript.exe`, `mshta.exe`, or `rundll32.exe` has essentially no
+     legitimate reason to ever do this, the same "rare + specific beats broad +
+     noisy" idiom as every other LOLBin rule in this file (100114-100116). Not
+     mutually exclusive with the stock rules — an injection that hits both (a
+     script injecting into svchost, say) naturally wins on this rule's higher
+     level (12 vs. the stock rules' 3-12 spread) under Wazuh's one-rule-per-event
+     resolution, which is the correct outcome: a scripting-engine source is a
+     stronger signal than a legacy target path alone. -->
+<group name="local,windows,">
+  <rule id="100562" level="12">
+    <if_group>sysmon_event8</if_group>
+    <field name="win.eventdata.sourceImage" type="pcre2">(?i)\\\\(powershell|pwsh|cmd|wscript|cscript|mshta|rundll32)\.exe$</field>
+    <options>no_full_log</options>
+    <description>Possible process injection (CreateRemoteThread) from a scripting/LOLBin process — $(win.eventdata.sourceImage) -> $(win.eventdata.targetImage)</description>
+    <mitre>
+      <id>T1055</id>
+    </mitre>
+    <group>defense_evasion,attack,</group>
+  </rule>
+</group>
+
+<!-- "Who watches the watchmen" (2026-09-26 gap audit): the log-retention and
+     OpenSearch-snapshot-backup cron jobs (roles/siem/tasks/main.yml) logged
+     their own outcome to their own log files, but nothing watched those
+     files — a silent failure (rotated password, full disk) would go
+     unnoticed indefinitely. Both cron entries now append a single, greppable
+     line to /var/log/cron-failures.log on any non-zero exit; siem-01 already
+     monitors its own local files (it's both manager and its own local agent,
+     ID 000), so this just points that existing mechanism at the one new
+     file. Level 10 — reaches the IRIS integration threshold (>=10, see the
+     custom-iris integration above) the same way a real detection would,
+     because a broken backup of detection history is exactly the kind of
+     thing an analyst should see, not just a line in a file nobody tails.
+
+     Two real things found live while testing this:
+
+     1. `no_full_log` silently blanks $(full_log) in the description too, not
+        just the alert's own full_log field the way its name implies —
+        dropped it so the failing line is actually visible.
+
+     2. Manually simulating the cron job via `sudo bash -c '...CRON_JOB_FAILED...'`
+        made this rule also fire on the resulting sudo/journald audit event
+        (sudo logs the full command line verbatim, so the literal string is
+        right there in an unrelated event). Tried scoping with
+        `<field name="location" type="pcre2">^/var/log/cron-failures\.log$</field>`
+        to fix it — confirmed via wazuh-analysisd's own log that the rule still
+        loaded (no compile error, rule count stable across restarts), but it
+        then matched NEITHER the sudo noise NOR genuine appends to the real
+        file, isolated by testing bare `<match>` alone (worked, confirmed by
+        a fresh alert per fresh write) against the same rule WITH the field
+        constraint added (worked for nothing at all, several restarts, several
+        distinctly-marked test writes). Reverted rather than ship a
+        field-matching mechanism that couldn't be gotten working and verified
+        live — this needs more investigation into Wazuh's field-match
+        internals before trying again, not a guess shipped as fact.
+
+     3. Precision fix, closing the gap above (2026-09-27). `<field name="location">`
+        was always going to be a dead end: "location" is a core event attribute
+        (the source file/command), not something a decoder extracts into `data.*`,
+        which is what `<field name="X">` actually matches against — it never had a
+        value to match. The native rule-level `<location>` tag (a real, different
+        mechanism) is ALSO confirmed broken in this stack for agent-forwarded/local-
+        agent logs — see the T1003.006/DCSync rule 100080 above, which hit the exact
+        same silent-no-match failure and dropped it for the same reason. Both source-
+        filtering paths are out. What actually closes the "another script's log
+        would still match" gap is scoping the *content* instead: a `<regex>` on the
+        exact known message shape (script name + exit code) rather than a bare
+        substring. This does NOT fix the sudo-simulation false-positive above — that
+        event contains the literal echo'd string verbatim, script name and all, so
+        content-scoping can't distinguish it from the real thing; that residual risk
+        is unchanged and still lower-risk-than-it-sounds for the same reason (real
+        crontab entries never run through sudo). What it DOES fix: a future script
+        that reuses this "CRON_JOB_FAILED: X exit=N" idiom with a *different* script
+        name, on a source Wazuh already monitors, no longer gets misattributed to
+        this rule's "siem-01 maintenance cron job failed" description. Verified live:
+        a fabricated line naming an unknown script does not fire; genuine appends
+        from both real cron jobs still do.
+
+        The allowlist must name EVERY siem-01 cron job that uses this idiom. The
+        first version of this regex missed velociraptor-hunt-escalate.py (velociraptor
+        role, same host, same file) and silently stopped alerting on its failures —
+        caught by the next audit, not by a test. scripts/check-cron-failure-allowlist.py
+        (CI) now fails the build if a siem-01 cron writes the sentinel under a
+        script name this regex doesn't accept. -->
+<group name="local,ops,">
+  <rule id="100563" level="10">
+    <regex type="pcre2">CRON_JOB_FAILED: (wazuh-log-retention\.sh|wazuh-snapshot-backup\.sh|velociraptor-hunt-escalate\.py) exit=\d+</regex>
+    <description>A siem-01 maintenance cron job failed — $(full_log)</description>
+    <group>ops_maintenance,</group>
+  </rule>
+</group>
+
+<!-- Velociraptor -> Wazuh escalation (2026-09-26 gap audit): closes the
+     "possible next step, noted not built" velociraptor/README.md named —
+     DFIR hunts were on-demand only, so a genuine hit never became a SIEM
+     alert unless an analyst happened to run the hunt and read the output.
+     velociraptor-hunt-escalate.py (cron, siem-01) runs the existing
+     Custom.Hunt.ImplantIOC hunt and injects one event per high-confidence
+     finding via the analysisd queue socket — same idiom as the MISP/IRIS
+     integrations above (100300/100530), a scheduled trigger instead of an
+     inbound alert. Parent rule classifies any injected event generically;
+     two children split by platform/technique, both level 12 (reaches the
+     IRIS integration threshold, >=10, same as a real detection would). -->
+<group name="local,velociraptor,">
+  <rule id="100564" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="integration">^velociraptor$</field>
+    <description>Velociraptor hunt-escalation event</description>
+    <options>no_full_log</options>
+  </rule>
+
+  <rule id="100565" level="12">
+    <if_sid>100564</if_sid>
+    <field name="velociraptor.artifact">LinuxWorldWritableELF</field>
+    <description>Velociraptor fleet hunt: world-writable ELF found on $(velociraptor.hostname) — $(velociraptor.path) (SHA256 $(velociraptor.sha256))</description>
+    <mitre>
+      <id>T1105</id>
+    </mitre>
+    <group>dfir,attack,</group>
+  </rule>
+
+  <rule id="100566" level="12">
+    <if_sid>100564</if_sid>
+    <field name="velociraptor.artifact">WindowsRunKeys</field>
+    <description>Velociraptor fleet hunt: unrecognized autostart entry on $(velociraptor.hostname) — $(velociraptor.name): $(velociraptor.command)</description>
+    <mitre>
+      <id>T1547.001</id>
+    </mitre>
+    <group>dfir,attack,</group>
+  </rule>
+</group>
+
+<!-- wtmpdb -> Wazuh feed (2026-09-27): closes "wiring wtmpdb into Wazuh is real,
+     separate follow-up work" left open when libpam-wtmpdb was installed to work
+     around osquery's logged_in_users being permanently incompatible with this OS's
+     retired legacy utmp (see osquery/README.md, threat-hunting/README.md Hunt D).
+     wtmpdb-wazuh-feed.py (cron, dc-01/fs-01, every 5 min) reads only genuinely new
+     sessions since its own last run and appends one JSON line per session to
+     /var/log/wtmpdb-events.log, tailed as a plain log_format=json localfile — same
+     idiom as the Samba log.samba telemetry above, not the queue-socket technique the
+     manager-side integrations use, since this runs on agent hosts, not siem-01.
+     Level 3, visibility not alerting: a login by itself isn't suspicious, this
+     exists so real session data is queryable at all — Wazuh's own stock full_command
+     "last -n 20" (rule 535) already fires on this OS since `last` now reads wtmpdb
+     transparently too, but only as one opaque text diff per change with no
+     structured fields. Fields live under wtmpdb.* , not top-level: "user" and
+     "hostname" are both Wazuh core/reserved field names — confirmed live that
+     $(user) silently resolves to the unrelated dstuser alias and $(hostname) gets
+     shadowed by the agent's own hostname, so a first version of this rule rendered
+     "wtmpdb session on dc-01:  via ssh" (both fields blank/wrong). Same wtmpdb.*
+     namespacing the Velociraptor rules above use for this identical reason. -->
+<group name="local,wtmpdb,">
+  <rule id="100567" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="source">^wtmpdb$</field>
+    <description>wtmpdb session: $(wtmpdb.user) via $(wtmpdb.tty) from $(wtmpdb.hostname)</description>
+    <options>no_full_log</options>
+  </rule>
 </group>

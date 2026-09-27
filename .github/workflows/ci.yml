@@ -90,6 +90,10 @@ jobs:
           python-version: "3.12"
       - run: pip install "ruff==0.15.14"
       - run: ruff check .
+      - name: Rule 100563 allowlist covers every siem-01 cron-failure writer
+        run: python3 scripts/check-cron-failure-allowlist.py
+      - name: wtmpdb feed dedup logic (offline self-test)
+        run: python3 phase-4-detection/osquery/wtmpdb-feed-selftest.py
 
   sast:
     name: Python SAST (semgrep)
@@ -144,6 +148,26 @@ jobs:
             fi
           done
           exit $fail
+      - name: Detection-catalog rule/decoder mirror is in sync with the deployed copy
+        # detection-catalog.md says phase-4-detection/{local_rules,local_decoder}.xml
+        # mirror what's actually deployed by the siem role. They silently drifted once
+        # (missing 8 rules + the T1003.003 dual-tag) — this fails the build on any drift.
+        run: |
+          for f in local_rules.xml local_decoder.xml; do
+            diff "phase-4-detection/$f" "phase-7-automation/ansible/roles/siem/files/$f" \
+              || { echo "MIRROR DRIFT: phase-4-detection/$f != deployed copy"; exit 1; }
+          done
+          echo "rule/decoder mirror in sync"
+      - name: Phase-1 network configs are in sync with the deployed router role
+        # phase-1-network/*.conf are the browsable "as built" artifacts; the router
+        # role is what actually deploys. nftables.conf silently drifted once (missing
+        # the CORP->REDTEAM C2/DNS egress rules) — fail on any drift.
+        run: |
+          for f in nftables.conf chrony.conf dnsmasq.conf; do
+            diff "phase-1-network/$f" "phase-7-automation/ansible/roles/router/files/$f" \
+              || { echo "MIRROR DRIFT: phase-1-network/$f != deployed copy"; exit 1; }
+          done
+          echo "phase-1 network configs in sync"
 
   secrets:
     name: Secret scan (gitleaks)

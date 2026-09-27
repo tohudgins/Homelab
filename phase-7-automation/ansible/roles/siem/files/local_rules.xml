@@ -1592,10 +1592,17 @@
         name, on a source Wazuh already monitors, no longer gets misattributed to
         this rule's "siem-01 maintenance cron job failed" description. Verified live:
         a fabricated line naming an unknown script does not fire; genuine appends
-        from both real cron jobs still do. -->
+        from both real cron jobs still do.
+
+        The allowlist must name EVERY siem-01 cron job that uses this idiom. The
+        first version of this regex missed velociraptor-hunt-escalate.py (velociraptor
+        role, same host, same file) and silently stopped alerting on its failures —
+        caught by the next audit, not by a test. scripts/check-cron-failure-allowlist.py
+        (CI) now fails the build if a siem-01 cron writes the sentinel under a
+        script name this regex doesn't accept. -->
 <group name="local,ops,">
   <rule id="100563" level="10">
-    <regex type="pcre2">CRON_JOB_FAILED: wazuh-(log-retention|snapshot-backup)\.sh exit=\d+</regex>
+    <regex type="pcre2">CRON_JOB_FAILED: (wazuh-log-retention\.sh|wazuh-snapshot-backup\.sh|velociraptor-hunt-escalate\.py) exit=\d+</regex>
     <description>A siem-01 maintenance cron job failed — $(full_log)</description>
     <group>ops_maintenance,</group>
   </rule>

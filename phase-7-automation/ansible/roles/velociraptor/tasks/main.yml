@@ -1,4 +1,24 @@
 ---
+# The binaries are git-ignored (77MB+) and staged on the controller once — a fresh
+# clone won't have them, and without this the play dies mid-run on the copy task
+# with a generic "could not find src".
+- name: Preflight — Velociraptor binary is staged on the controller
+  ansible.builtin.stat:
+    path: "{{ velociraptor_binary_dir }}/{{ velociraptor_linux_binary }}"
+  register: velociraptor_staged
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Fail with the fix if the binary isn't staged
+  ansible.builtin.assert:
+    that: velociraptor_staged.stat.exists
+    fail_msg: >-
+      {{ velociraptor_linux_binary }} not found in {{ velociraptor_binary_dir }}.
+      Stage it once: gh release download v{{ velociraptor_version }} -R Velocidex/velociraptor
+      -p '{{ velociraptor_linux_binary }}' -D phase-4-detection/velociraptor/binaries/
+  run_once: true
+
 # Dispatch by mode set in the play: 'server' (siem-01) or 'client' (Linux endpoints).
 - name: Include tasks for mode {{ velociraptor_mode }}
   ansible.builtin.include_tasks: "{{ velociraptor_mode }}.yml"

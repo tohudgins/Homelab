@@ -64,6 +64,7 @@ def main():
     results = []
     print(f"\n== Purple-team validation :: target={target} agent={agent} "
           f"siem={siem} ==\n")
+    xfails = []
     for t in cfg["tests"]:
         tech, num = t["technique"], t["test"]
         before = count_matching(siem, agent, t["expect_rules"])
@@ -73,13 +74,24 @@ def main():
         n = count_matching(siem, agent, t["expect_rules"]) - before
         latency = round(time.time() - t0, 1)
         ok = n > 0
+        # A flaky_env technique (Defender intermittently blocks the technique itself,
+        # not the detection) is expected to be environment-dependent — reported as
+        # XFAIL and excluded from the pass/fail gate, so a known Defender block
+        # doesn't turn the whole coverage run red. It still prints its real result.
+        if t.get("flaky_env"):
+            xfails.append((tech, ok, n))
+            print(f"  [XFAIL] {tech:11} rules {','.join(t['expect_rules']):15} "
+                  f"hits={n} {latency}s  {t['desc']} "
+                  f"({'fired this run' if ok else 'blocked/absent — see flaky_env'})")
+            continue
         results.append((tech, ok, n, latency, t["desc"], t["expect_rules"]))
         print(f"  [{'PASS' if ok else 'FAIL'}] {tech:11} "
               f"rules {','.join(t['expect_rules']):15} "
               f"hits={n} {latency}s  {t['desc']}")
     passed = sum(1 for r in results if r[1])
-    print(f"\n== {passed}/{len(results)} techniques detected "
-          f"({round(100*passed/len(results))}% coverage) ==\n")
+    xf = f", {len(xfails)} xfail (env-dependent)" if xfails else ""
+    print(f"\n== {passed}/{len(results)} reproducible techniques detected "
+          f"({round(100*passed/len(results))}% coverage){xf} ==\n")
     sys.exit(0 if passed == len(results) else 1)
 
 
