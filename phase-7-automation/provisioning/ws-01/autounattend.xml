@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ws-01 — Windows 11 (arm64, 25H2) unattended install.
+     Base OS + local admin + OpenSSH so the `windows` Ansible role can take over
+     over SSH. Sysmon / PS logging / Wazuh agent are applied by that role, not here.
+     Placed at the root of the install media (or on a CIDATA-style second CD) as
+     autounattend.xml, which Windows Setup auto-detects. -->
+<unattend xmlns="urn:schemas-microsoft-com:unattend"
+          xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+  <!-- === windowsPE: language, requirement bypass, disk, image === -->
+  <settings pass="windowsPE">
+    <component name="Microsoft-Windows-International-Core-WinPE"
+               processorArchitecture="arm64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS">
+      <SetupUILanguage><UILanguage>en-US</UILanguage></SetupUILanguage>
+      <InputLocale>0409:00000409</InputLocale>
+      <SystemLocale>en-US</SystemLocale>
+      <UILanguage>en-US</UILanguage>
+      <UserLocale>en-US</UserLocale>
+    </component>
+    <component name="Microsoft-Windows-Setup"
+               processorArchitecture="arm64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS">
+      <!-- Win11 requirement bypass (TPM/SecureBoot/RAM) — harmless on a Fusion ARM
+           VM that already provides a vTPM, but keeps the install non-interactive
+           across image variants. -->
+      <RunSynchronous>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>reg add HKLM\System\Setup\LabConfig /v BypassTPMCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Path>reg add HKLM\System\Setup\LabConfig /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>3</Order>
+          <Path>reg add HKLM\System\Setup\LabConfig /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+      </RunSynchronous>
+      <DiskConfiguration>
+        <Disk wcm:action="add">
+          <DiskID>0</DiskID>
+          <WillWipeDisk>true</WillWipeDisk>
+          <CreatePartitions>
+            <CreatePartition wcm:action="add"><Order>1</Order><Type>EFI</Type><Size>260</Size></CreatePartition>
+            <CreatePartition wcm:action="add"><Order>2</Order><Type>MSR</Type><Size>16</Size></CreatePartition>
+            <CreatePartition wcm:action="add"><Order>3</Order><Type>Primary</Type><Extend>true</Extend></CreatePartition>
+          </CreatePartitions>
+          <ModifyPartitions>
+            <ModifyPartition wcm:action="add"><Order>1</Order><PartitionID>1</PartitionID><Format>FAT32</Format><Label>System</Label></ModifyPartition>
+            <ModifyPartition wcm:action="add"><Order>2</Order><PartitionID>2</PartitionID></ModifyPartition>
+            <ModifyPartition wcm:action="add"><Order>3</Order><PartitionID>3</PartitionID><Format>NTFS</Format><Label>Windows</Label><Letter>C</Letter></ModifyPartition>
+          </ModifyPartitions>
+        </Disk>
+      </DiskConfiguration>
+      <ImageInstall>
+        <OSImage>
+          <InstallTo><DiskID>0</DiskID><PartitionID>3</PartitionID></InstallTo>
+          <!-- Adjust to the edition present in this ISO (`dism /Get-WimInfo` on
+               sources/install.wim). "Windows 11 Pro" is the common default. -->
+          <InstallFrom><MetaData wcm:action="add"><Key>/IMAGE/NAME</Key><Value>Windows 11 Pro</Value></MetaData></InstallFrom>
+        </OSImage>
+      </ImageInstall>
+      <UserData>
+        <ProductKey><Key></Key></ProductKey>
+        <AcceptEula>true</AcceptEula>
+      </UserData>
+    </component>
+  </settings>
+
+  <!-- === specialize: computer name === -->
+  <settings pass="specialize">
+    <component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="arm64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS">
+      <ComputerName>ws-01</ComputerName>
+    </component>
+  </settings>
+
+  <!-- === oobeSystem: skip OOBE, local admin, enable OpenSSH === -->
+  <settings pass="oobeSystem">
+    <component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="arm64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS">
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+        <ProtectYourPC>3</ProtectYourPC>
+      </OOBE>
+      <UserAccounts>
+        <LocalAccounts>
+          <LocalAccount wcm:action="add">
+            <Name>localadmin</Name>
+            <Group>Administrators</Group>
+            <DisplayName>Local Admin</DisplayName>
+            <!-- Password: WsLab2026!  (lab-only console/SSH bootstrap; see SECURITY.md).
+                 Must match what the windows role / scripts/.lab-secrets expects, or
+                 update those after a rebuild. PlainText for readability on an
+                 isolated lab host. -->
+            <Password><Value>WsLab2026!</Value><PlainText>true</PlainText></Password>
+          </LocalAccount>
+        </LocalAccounts>
+      </UserAccounts>
+      <FirstLogonCommands>
+        <!-- Install + start the OpenSSH server, then drop the homelab key so the
+             `windows` role can manage ws-01 over SSH (its transport). -->
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0"</CommandLine>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "Set-Service sshd -StartupType Automatic; Start-Service sshd"</CommandLine>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>3</Order>
+          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "New-Item -ItemType Directory -Force -Path C:\ProgramData\ssh; Set-Content -Path C:\ProgramData\ssh\administrators_authorized_keys -Value 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH7GQV6ykcpEB9lPX4PtS48LOUIeL2N/gA4w5biGD+XS tohudgins@mac-homelab-jumphost'; icacls C:\ProgramData\ssh\administrators_authorized_keys /inheritance:r /grant 'Administrators:F' /grant 'SYSTEM:F'"</CommandLine>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+    </component>
+  </settings>
+</unattend>

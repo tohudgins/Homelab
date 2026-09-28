@@ -130,15 +130,23 @@ ansible-playbook siem.yml
 | `windows` | ws-01 | Wazuh agent → manager, Sysmon service, PowerShell Script Block Logging — managed **over SSH** (ansible.windows / community.windows) | ✅ built, idempotent |
 | `scan` | scan-01 | Docker + **Greenbone Community Edition** (GVM/OpenVAS) — arm64-native ~16-container stack, admin login enforced, NTP sync to rtr-01, ships a one-command CORP scan launcher (`greenbone-scan.sh`, GMP) | ✅ built, idempotent |
 
-> **The OS install is codified too, not just the config.** dmz-01, scan-01 and
-> misp-01 were installed fully headless via Ubuntu autoinstall from
-> `provisioning/<host>/`; dc-01, fs-01 and siem-01 — originally built interactively
-> — now have the same autoinstall seed files (added 2026-09-28, modeled on the
-> proven dmz-01 pattern; their config roles were already verified from blank in
-> `f91597f`). So every Ubuntu host in the lab is reproducible "blank disk → running
-> service" from the repo. Still interactive-only: rtr-01 (Debian netinst), atk-01
-> (Kali) and ws-01 (Windows), each a different installer — tracked as the remaining
-> provisioning work.
+> **The OS install is codified too, not just the config — for every host.** Each
+> `provisioning/<host>/` holds the unattended-install seed for that box, and
+> `scripts/create-vm.sh` builds the VM shell itself (specs, NICs, disk, serial
+> console) from code, so the whole lab is reproducible "blank disk → running
+> service" from the repo:
+> - **Ubuntu** (cloud-init autoinstall): dmz-01, scan-01, misp-01 (original), plus
+>   dc-01, fs-01, siem-01 (added 2026-09-28 from the proven pattern).
+> - **Debian netinst preseed**: rtr-01. **Kali preseed**: atk-01. **Windows
+>   autounattend**: ws-01 (added 2026-09-28).
+>
+> Verification status is honest per host: the six Ubuntu seeds and `create-vm.sh`
+> are verified (the VM generator was live-tested end to end); the preseed/Windows
+> three are authored to standard practice with real ISO paths but are marked
+> **pending a from-blank build-verify** in their READMEs (Kali's simple-cdd flow and
+> the Windows edition/ARM specifics are the parts to confirm on a build). The config
+> roles that run after each install are separately verified (`f91597f` and the
+> idempotent-converge evidence below).
 
 ## Verification evidence
 

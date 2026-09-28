@@ -35,9 +35,10 @@ xorriso -as mkisofs -output isos/siem-01-seed.iso -volid CIDATA -joliet -rock se
 xorriso -indev "$ISO" -outdev isos/ubuntu-siem01-auto.iso \
         -boot_image any replay -map grub.cfg /boot/grub/grub.cfg
 
-# 3. Create the VM (4 vCPU / 8 GB / 80 GB nvme, vmxnet3 on vmnet5 = SOC) with BOTH
-#    ISOs attached (installer + CIDATA seed) and a file-backed serial console, then:
-vmrun start siem-01.vmx nogui
+# 3. Create the VM shell + boot it (create-vm.sh writes the vmx/disk/NICs/serial):
+./scripts/create-vm.sh --name siem-01 --os arm-ubuntu-64 --cpus 4 --mem 8192 \
+    --disk 80 --net vmnet5 \
+    --iso isos/ubuntu-siem01-auto.iso --seed isos/siem-01-seed.iso --start
 # autoinstall runs unattended and powers the VM off when finished.
 
 # 4. Detach both CDs (set the CD devices startConnected FALSE) and boot from disk.

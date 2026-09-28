@@ -39,9 +39,10 @@ xorriso -as mkisofs -output isos/dc-01-seed.iso -volid CIDATA -joliet -rock seed
 xorriso -indev "$ISO" -outdev isos/ubuntu-dc01-auto.iso \
         -boot_image any replay -map grub.cfg /boot/grub/grub.cfg
 
-# 3. Create the VM (2 vCPU / 4 GB / 40 GB nvme, vmxnet3 on vmnet3 = CORP) with BOTH
-#    ISOs attached (installer + CIDATA seed) and a file-backed serial console, then:
-vmrun start dc-01.vmx nogui
+# 3. Create the VM shell + boot it (create-vm.sh writes the vmx/disk/NICs/serial):
+./scripts/create-vm.sh --name dc-01 --os arm-ubuntu-64 --cpus 2 --mem 4096 \
+    --disk 40 --net vmnet3 \
+    --iso isos/ubuntu-dc01-auto.iso --seed isos/dc-01-seed.iso --start
 # autoinstall runs unattended and powers the VM off when finished.
 
 # 4. Detach both CDs (set the CD devices startConnected FALSE) and boot from disk.

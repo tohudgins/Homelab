@@ -133,17 +133,22 @@ jobs:
       - name: Install xmllint
         run: sudo apt-get update && sudo apt-get install -y libxml2-utils
       - name: Validate XML
-        # Wazuh rule/decoder files are multi-root XML *fragments* (several <group>/
-        # <decoder> blocks, no single root) — legal for Wazuh, not for a strict XML
-        # parser. Wrap each file in a synthetic root, then check well-formedness.
+        # Two shapes coexist here: (1) proper standalone XML docs (autounattend.xml
+        # has an <?xml?> decl + single root) and (2) Wazuh rule/decoder *fragments*
+        # (several <group>/<decoder> blocks, no single root — legal for Wazuh, not
+        # for a strict parser). Validate each standalone first; only if that fails
+        # (a fragment) wrap it in a synthetic root and re-check. A file that fails
+        # both is genuinely malformed.
         run: |
           fail=0
           for x in $(git ls-files '*.xml'); do
-            if printf '<_ci_root>%s</_ci_root>' "$(cat "$x")" | xmllint --noout - 2>/dev/null; then
-              echo "ok:   $x"
+            if xmllint --noout "$x" 2>/dev/null; then
+              echo "ok (standalone): $x"
+            elif printf '<_ci_root>%s</_ci_root>' "$(cat "$x")" | xmllint --noout - 2>/dev/null; then
+              echo "ok (fragment):   $x"
             else
               echo "FAIL: $x"
-              printf '<_ci_root>%s</_ci_root>' "$(cat "$x")" | xmllint --noout - 2>&1 | head -5
+              xmllint --noout "$x" 2>&1 | head -5
               fail=1
             fi
           done
