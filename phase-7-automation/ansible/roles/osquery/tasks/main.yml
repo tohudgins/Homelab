@@ -143,6 +143,9 @@
 # Lab-created logs had no rotation at all (2026-09-27 audit) — unbounded growth on
 # a lab meant to run indefinitely. delaycompress keeps the just-rotated file
 # plain text so a Wazuh localfile tailing it can finish reading after rotation.
+# su root root is required, not optional: /var/log is 0775 root:syslog on this
+# image, which logrotate treats as an insecure parent and silently REFUSES to
+# rotate into without an explicit rotation identity (verified live 2026-09-28).
 - name: Rotate wtmpdb feed logs
   ansible.builtin.copy:
     dest: /etc/logrotate.d/homelab-wtmpdb
@@ -152,6 +155,7 @@
     content: |
       /var/log/wtmpdb-events.log
       /var/log/wtmpdb-wazuh-feed.log {
+        su root root
         weekly
         rotate 8
         compress

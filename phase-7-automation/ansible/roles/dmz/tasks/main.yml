@@ -19,6 +19,11 @@
     state: started
 
 - name: Check the docker0 bridge state (suspend/resume can silently take it down)
+  # `ip -br addr show docker0` — healthy looks like "docker0 UP 172.17.0.1/16 ...".
+  # A suspend/resume can leave it either link-DOWN *or* UP-but-with-no-IPv4; both
+  # break docker-proxy forwarding while `docker ps` still says "Up". The restart
+  # below keys on either symptom (verified live 2026-09-28: the box came back with
+  # docker0 missing its IPv4 entirely, which a DOWN-only check would have missed).
   ansible.builtin.command: ip -br addr show docker0
   register: docker0_state
   changed_when: false
@@ -48,7 +53,9 @@
   ansible.builtin.systemd:
     name: docker
     state: restarted
-  when: "'DOWN' in docker0_state.stdout"
+  when: >-
+    'DOWN' in docker0_state.stdout
+    or docker0_state.stdout is not search('[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/')
 
 - name: List existing containers
   ansible.builtin.command: docker ps -a --format '{{ "{{" }}.Names{{ "}}" }}'

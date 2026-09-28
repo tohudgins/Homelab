@@ -55,7 +55,16 @@ against the expected value below.
 
 ## Verification status
 Expected values are derived from the enforced ruleset above (the source of truth).
-**Live run: pending** — re-run `segmentation-test.sh` with the lab up (`make up
-PROFILE=services` plus REDTEAM for the RED rows) and record the date here once every
-cell matches. ICMP is intentionally open on the input chain specifically so this
-matrix can be probed.
+**Live run: 2026-09-28 — 9/9 cells match**, including the headline REDTEAM→SOC block
+(1514 and a high random port both filtered) and every allow/drop cell above, probed
+with `segmentation-test.sh` (services profile + atk-01 booted for the RED rows).
+Re-run it after any firewall change. ICMP is intentionally open on the input chain
+specifically so this matrix can be probed.
+
+One gotcha surfaced during that run, unrelated to the firewall: the DMZ Juice Shop
+cell first read as a false DROP because dmz-01's `docker0` bridge had lost its IPv4
+after a VM suspend/resume (docker-proxy still listened on :3000 but couldn't forward).
+That's a container-networking artifact, not a segmentation failure — the dmz role now
+self-heals it on converge (restarts docker when docker0 is link-DOWN *or* missing its
+IPv4). REDTEAM→DMZ reachability at L3/L4 is independently confirmed by the host being
+reachable on :22.
