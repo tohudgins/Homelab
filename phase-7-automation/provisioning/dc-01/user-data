@@ -1,0 +1,43 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  identity:
+    hostname: dc-01
+    username: tohudgins
+    # Password: DcLab2026!  (SHA-512 crypt) — key-based auth is primary; this is a
+    # lab-only console fallback for an isolated RFC1918 host (see SECURITY.md).
+    password: "$6$di3O.I.cmj.1zaDl$wabaIex26Ltyy.R8nbW0bj0v2eHU.42nz4O0bJwZBf3VGW.h2CeNO7HTw51zyw7zHhAmdFoG0T7aYaMEz.XdF/"
+  ssh:
+    install-server: true
+    allow-pw: true
+    authorized-keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH7GQV6ykcpEB9lPX4PtS48LOUIeL2N/gA4w5biGD+XS tohudgins@mac-homelab-jumphost"
+  network:
+    version: 2
+    ethernets:
+      corpnic:
+        match:
+          name: "en*"
+        addresses:
+          - 10.10.10.10/24
+        routes:
+          - to: default
+            via: 10.10.10.1
+        nameservers:
+          # DELIBERATELY an external resolver, not dc-01 itself and not rtr-01:
+          # dc-01 *is* CORP's only DNS provider once built, so a genuinely blank
+          # dc-01 has no internal resolver to install packages with (the documented
+          # CORP-DNS chicken-and-egg). rtr-01 serves DHCP/DNS to DMZ/SOC/RED but NOT
+          # CORP, so it can't help here either. CORP->WAN is permitted by rtr-01's
+          # firewall, so 1.1.1.1 is reachable for the install. Post-build, the samba
+          # AD DC role makes dc-01 CORP's resolver (with 1.1.1.1 as its forwarder).
+          addresses: [1.1.1.1]
+  storage:
+    layout:
+      name: direct
+  # Power off (don't reboot) so the installer can't loop back into the CD;
+  # the CDs are detached before first real boot.
+  shutdown: poweroff

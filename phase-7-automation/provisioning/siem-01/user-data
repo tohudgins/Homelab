@@ -1,0 +1,40 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  identity:
+    hostname: siem-01
+    username: tohudgins
+    # Password: SiemLab2026!  (SHA-512 crypt) — key-based auth is primary; this is a
+    # lab-only console fallback for an isolated RFC1918 host (see SECURITY.md).
+    password: "$6$dEtgFDqxRPAgCTXY$s/ibbYJFas46YKfs.S/A1r5bC4bDUK3qYSfDiKppbrTa.N5913ZM6zT7VGTYqVkpZkqB837XzkYhN/ds2EtrV0"
+  ssh:
+    install-server: true
+    allow-pw: true
+    authorized-keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH7GQV6ykcpEB9lPX4PtS48LOUIeL2N/gA4w5biGD+XS tohudgins@mac-homelab-jumphost"
+  network:
+    version: 2
+    ethernets:
+      socnic:
+        match:
+          name: "en*"
+        addresses:
+          - 10.10.30.10/24
+        routes:
+          - to: default
+            via: 10.10.30.1
+        nameservers:
+          # SOC segment: rtr-01 (10.10.30.1) owns DHCP/DNS here, so unlike CORP a
+          # blank siem-01 has a real internal resolver from the start — rtr-01's
+          # dnsmasq forwards outbound. siem-01 deliberately never joins the domain,
+          # so it never uses dc-01 for DNS (SOC is isolated from the identity plane).
+          addresses: [10.10.30.1]
+  storage:
+    layout:
+      name: direct
+  # Power off (don't reboot) so the installer can't loop back into the CD;
+  # the CDs are detached before first real boot.
+  shutdown: poweroff

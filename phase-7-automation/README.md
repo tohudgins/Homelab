@@ -130,10 +130,15 @@ ansible-playbook siem.yml
 | `windows` | ws-01 | Wazuh agent → manager, Sysmon service, PowerShell Script Block Logging — managed **over SSH** (ansible.windows / community.windows) | ✅ built, idempotent |
 | `scan` | scan-01 | Docker + **Greenbone Community Edition** (GVM/OpenVAS) — arm64-native ~16-container stack, admin login enforced, NTP sync to rtr-01, ships a one-command CORP scan launcher (`greenbone-scan.sh`, GMP) | ✅ built, idempotent |
 
-> **dmz-01 and scan-01 are from-scratch VMs**, not just roles: each was installed
-> fully headless via Ubuntu autoinstall (see `provisioning/dmz-01/`,
-> `provisioning/scan-01/`) and then configured by its role — the build's
-> end-to-end "blank disk → running service" examples.
+> **The OS install is codified too, not just the config.** dmz-01, scan-01 and
+> misp-01 were installed fully headless via Ubuntu autoinstall from
+> `provisioning/<host>/`; dc-01, fs-01 and siem-01 — originally built interactively
+> — now have the same autoinstall seed files (added 2026-09-28, modeled on the
+> proven dmz-01 pattern; their config roles were already verified from blank in
+> `f91597f`). So every Ubuntu host in the lab is reproducible "blank disk → running
+> service" from the repo. Still interactive-only: rtr-01 (Debian netinst), atk-01
+> (Kali) and ws-01 (Windows), each a different installer — tracked as the remaining
+> provisioning work.
 
 ## Verification evidence
 

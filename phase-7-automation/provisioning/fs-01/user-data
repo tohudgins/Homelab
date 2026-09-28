@@ -1,0 +1,40 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  identity:
+    hostname: fs-01
+    username: tohudgins
+    # Password: FsLab2026!  (SHA-512 crypt) — key-based auth is primary; this is a
+    # lab-only console fallback for an isolated RFC1918 host (see SECURITY.md).
+    password: "$6$6Mn1taIMok9Z2/BA$nW8jtuuGxrj8snoRLXzMDmTnMJZ7DDaklN9q35a/5i54vQUQFif7MOOBCGgRBUINOf.xkm6ANyeGA.tQSNBkv/"
+  ssh:
+    install-server: true
+    allow-pw: true
+    authorized-keys:
+      - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH7GQV6ykcpEB9lPX4PtS48LOUIeL2N/gA4w5biGD+XS tohudgins@mac-homelab-jumphost"
+  network:
+    version: 2
+    ethernets:
+      corpnic:
+        match:
+          name: "en*"
+        addresses:
+          - 10.10.10.20/24
+        routes:
+          - to: default
+            via: 10.10.10.1
+        nameservers:
+          # Install-time resolver is 1.1.1.1 (reachable via the permitted CORP->WAN
+          # path) so a blank fs-01 can fetch packages even if dc-01 isn't up yet —
+          # dc-01 is CORP's real DNS but may not exist during a from-scratch rebuild.
+          # The fileserver role points fs-01 at dc-01 (10.10.10.10) when it domain-joins.
+          addresses: [1.1.1.1]
+  storage:
+    layout:
+      name: direct
+  # Power off (don't reboot) so the installer can't loop back into the CD;
+  # the CDs are detached before first real boot.
+  shutdown: poweroff
