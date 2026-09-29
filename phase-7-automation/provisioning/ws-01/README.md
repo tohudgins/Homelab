@@ -6,25 +6,31 @@ OS + a local admin + OpenSSH so the `windows` Ansible role can take over **over 
 (its transport). Sysmon, PowerShell Script-Block Logging and the Wazuh agent are all
 applied by that role, not here.
 
-> Authored + **statically verified** 2026-09-28; one thing remains, and it's an
-> environment limitation, not a defect in this file:
+> Authored + **partially build-verified** 2026-09-28. Where it stands, precisely:
 > - **XML**: well-formed, CI-validated, standard Win11 unattend schema.
 > - **Edition name CONFIRMED**: `wiminfo` on this ISO's `sources/install.wim` lists
 >   index 1 Home / 2 Home SL / **3 Windows 11 Pro** — so `/IMAGE/NAME = "Windows 11 Pro"`
 >   matches exactly and Setup won't stall on edition selection. (The ISO uses
 >   `install.wim`, not `.esd`.)
 > - **create-vm.sh pipeline**: proven end-to-end on the two Linux hosts.
-> - **NOT yet run to completion**, because a *headless* from-blank Windows install on
->   this setup is blocked before Setup even starts: VMware's UEFI shows the Windows
->   **"Press any key to boot from CD or DVD…"** prompt, which times out to no-boot with
->   no way to send that keystroke headlessly (confirmed 2026-09-28: a from-blank VM sat
->   39 min with the vmdk still at 8 MB — Setup never wrote a byte). The usual headless
->   fix — rebuilding the ISO with `efisys_noprompt.bin` — isn't doable with Mac tooling
->   here because this ISO's payload is **UDF**, which `xorriso` can't rewrite (it sees
->   only the ISO9660 stub). **To confirm the last mile**: open this VM once in the Fusion
->   GUI and press a key at that prompt (or rebuild the ISO with Windows `oscdimg
->   -bootdata:...efisys_noprompt.bin`); Setup then runs fully unattended off the answer
->   CD. SSH (from the FirstLogonCommands) coming up is the success signal.
+> - **Boots + applies the image headless — VERIFIED.** The default ISO stalls at
+>   VMware UEFI's un-dismissable "Press any key to boot from CD" prompt (a from-blank
+>   VM sat 39 min, vmdk still 8 MB). Fixed by rebuilding a **no-prompt ISO**: mount the
+>   UDF ISO (`hdiutil`), copy the tree out, split `install.wim` under 4 GB with
+>   `wimlib-imagex split ... install.swm 3800` (so plain ISO9660 works — this xorriso
+>   has no `-udf`), then `xorriso -as mkisofs -iso-level 3 -J -joliet-long -e
+>   efi/microsoft/boot/efisys_noprompt.bin -no-emul-boot`. With that ISO the VM booted
+>   headless with **no keypress** and Windows Setup applied the full image (vmdk grew
+>   8 MB → 13 GB) — confirmed live.
+> - **OOBE completion NOT confirmed headlessly.** After the image applied, the VM ran
+>   ~1 hr with continuous disk writes (not frozen) but never brought networking up, so
+>   SSH never answered. Win11 25H2 OOBE likely needs a step the answer file doesn't
+>   fully suppress, and it can't be seen/dismissed on a truly headless VM
+>   (`captureScreen` needs guest tools that don't exist mid-Setup; Windows has no serial
+>   console). **To confirm the last mile**: run it once in the Fusion GUI (attach the
+>   headless VM in the Fusion library to watch OOBE), or iterate the OOBE section
+>   (e.g. a `BypassNRO`/network-skip tweak) with the screen visible. SSH from the
+>   FirstLogonCommands coming up is the success signal.
 
 ## What's here
 | File | Purpose |

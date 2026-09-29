@@ -146,12 +146,15 @@ ansible-playbook siem.yml
 >   booted disk → SSH as root with the key, hostname/OS/PermitRootLogin correct.
 > - **atk-01 (Kali preseed) — VERIFIED**: custom preseed cleanly overrode Kali's
 >   simple-cdd, installed the full `kali-linux-default` + Xfce, → SSH as the user.
-> - **ws-01 (Windows autounattend) — statically verified, headless run blocked by an
->   env quirk**: XML valid + edition confirmed against the real `install.wim`, but a
->   headless from-blank Windows install is stopped by the un-dismissable "Press any key
->   to boot from CD" prompt (and this UDF ISO can't be remastered no-prompt with Mac
->   tooling). One GUI keypress (or a Windows `oscdimg` no-prompt rebuild) completes it —
->   details in `provisioning/ws-01/README.md`.
+> - **ws-01 (Windows autounattend) — boots + installs headless (verified); OOBE
+>   completion unconfirmed**: XML valid + edition confirmed against the real
+>   `install.wim`. The "Press any key to boot from CD" stall was solved by rebuilding a
+>   **no-prompt ISO** (mount UDF → copy out → `wimlib` split the wim under 4 GB →
+>   `xorriso` with `efisys_noprompt.bin`); with it the VM booted headless with no
+>   keypress and Setup applied the full image (vmdk 8 MB → 13 GB, confirmed live). It
+>   then ran ~1 hr in OOBE with live disk writes but never reached network/SSH — a
+>   headless VM can't be screen-observed mid-Setup, so OOBE's last mile needs a GUI
+>   session to confirm/iterate. Details in `provisioning/ws-01/README.md`.
 > - The six Ubuntu seeds share the exact mechanism proven on the two verified Linux
 >   builds. Build-verifying the preseeds also caught + fixed a real hands-off bug
 >   (`finish-install/reboot_in_progress note`, commit `6f1511b`).
