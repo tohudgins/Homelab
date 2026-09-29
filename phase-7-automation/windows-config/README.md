@@ -4,8 +4,9 @@ The quality of Windows detection is capped by the quality of Sysmon's config: a 
 generates the events your rules would match. This is the endpoint-telemetry-visibility piece — adopting a
 professional Sysmon config and then making the newly-gained telemetry *actionable*.
 
-Applies to `ws-01` (managed manually — the Windows host has no WinRM/Ansible automation yet; staged here +
-documented, same pattern as the Atomic Red Team install).
+Applies to `ws-01`, deployed by the `windows` Ansible role over SSH (`../ansible/roles/windows/`),
+which also installs Sysmon and the Wazuh agent on a fresh host. The installers live in `installers/`
+(git-ignored) and are fetched, checksum-pinned, by `fetch-installers.sh` — run it once before the role.
 
 ## The gap
 ws-01's original config logged a decent range (Sysmon EID 1/3/7/10/11/13/17/26) but **no EID 22 (DnsQuery)** —

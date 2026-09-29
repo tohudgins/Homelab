@@ -1,8 +1,14 @@
 ---
 # ws-01 — Windows 11 ARM64 domain-joined workstation (the victim endpoint).
-# Sysmon and the Wazuh agent were installed in Phase 3; this role codifies their
-# config + the endpoint's detection-telemetry sources as idempotent Ansible.
+# The role installs Sysmon and the Wazuh agent on a fresh host (the originals were
+# put in by hand in Phase 3), then codifies their config and the endpoint's
+# detection-telemetry sources as idempotent Ansible.
 wazuh_agent_conf: 'C:\Program Files (x86)\ossec-agent\ossec.conf'
+# Event channels beyond the agent's stock Application/Security/System that the
+# detections depend on (Sysmon telemetry, PowerShell 4104 script blocks).
+wazuh_extra_channels:
+  - Microsoft-Windows-Sysmon/Operational
+  - Microsoft-Windows-PowerShell/Operational
 
 # Sysmon's main service (the ARM64 build registers as "Sysmon64a"); the SysmonDrv
 # kernel driver comes up with it.
@@ -14,3 +20,20 @@ sysmon_config_dest: 'C:\ProgramData\Sysmon\sysmonconfig.xml'
 # Internal NTP server for w32time discipline — rtr-01's CORP address (chrony,
 # serves every segment; also the per-segment NTP server dnsmasq advertises).
 ntp_server: 10.10.10.1
+
+# --- Fresh-host install (fetch-installers.sh stages these on the control node) ---
+# Keep wazuh_agent_version in step with the manager and with the fileserver/dmz roles.
+wazuh_agent_version: "4.14.7-1"
+wazuh_agent_exe: 'C:\Program Files (x86)\ossec-agent\wazuh-agent.exe'
+wazuh_agent_msi: "{{ playbook_dir }}/../windows-config/installers/wazuh-agent-{{ wazuh_agent_version }}.msi"
+sysmon_installer: "{{ playbook_dir }}/../windows-config/installers/Sysmon64a.exe"
+
+# --- Domain membership --------------------------------------------------------
+# windows_hostname is both the computer name and the Wazuh agent name. Override it
+# (-e windows_hostname=ws-01t) to test a rebuild without touching the real ws-01's
+# computer account or agent registration. The join password is dc-01's vaulted
+# dc_domain_admin_password; the domain itself comes from group_vars/all.yml.
+windows_hostname: ws-01
+wazuh_agent_name: "{{ windows_hostname }}"
+windows_domain: "{{ lab_domain }}"
+windows_domain_admin: Administrator

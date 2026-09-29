@@ -3,15 +3,15 @@
 ws-01 is the domain-joined Windows victim workstation. Windows uses an
 **autounattend.xml** answer file (not cloud-init/preseed). This reproduces the base
 OS + a local admin + OpenSSH so the `windows` Ansible role can take over **over SSH**
-(its transport). Sysmon, PowerShell Script-Block Logging and the Wazuh agent are all
-applied by that role, not here.
+(its transport). Installing and configuring Sysmon, PowerShell Script-Block Logging
+and the Wazuh agent, and joining the domain, are all done by that role, not here.
 
 > **Build-verified from a blank disk, 2026-09-29.** A fresh `create-vm.sh` VM went blank →
 > Setup → OOBE → AutoLogon → `firstlogon.ps1` (log ends `authorized key installed - DONE`)
 > → `ssh localadmin@10.10.10.50` through rtr-01 answered (`ws-01\localadmin`,
 > Windows 10.0.26200, default shell cmd as the `windows` role expects). Verified with
 > the Fusion GUI console open and nobody touching it; it has **not** been re-run
-> headless. The `windows` role itself was not re-run against the rebuilt VM.
+> headless. The `windows` role then converged on that VM too — see "After first boot".
 >
 > Gotchas that cost time (each found from guest logs, not guesses — read them off the
 > disk with `7zz x <vm>.vmdk '2.Basic data partition.ntfs'`, then
@@ -69,9 +69,40 @@ authorizes the homelab key. Progress is in `C:\firstlogon.log`. (It also writes 
 COM1, but that did not show up in the serial log in testing — treat the log file as
 the source of truth.)
 
-## After first boot
-`ansible-playbook windows.yml` (over SSH) installs Sysmon, PS Script-Block Logging
-and the Wazuh agent. See `../ansible/roles/windows/`. Then domain-join per the AD docs.
+## After first boot: converge the `windows` role
+```bash
+phase-7-automation/windows-config/fetch-installers.sh   # once: stage the Wazuh MSI + Sysmon
+cd phase-7-automation/ansible && ansible-playbook windows.yml
+```
+Needs rtr-01, dc-01 and siem-01 up. The role installs Sysmon (ARM64) and the Wazuh
+agent (enrolling with the manager), makes the agent collect the Sysmon and PowerShell
+channels, sets the timezone, **joins `lab.internal`** (the VM reboots itself), then
+points w32time at rtr-01 and applies the rest. A fresh host converges in one run and
+re-runs at `changed=0`.
+
+Verified 2026-09-29 on a from-blank rebuild, run as a test machine `ws-01t`
+(`-e windows_hostname=ws-01t`, so the real ws-01's AD computer account and Wazuh agent
+registration are never touched; `windows_hostname` is both the computer name and the
+agent name). Manager side: agent Active, and Application/Security/System/Sysmon/
+PowerShell events all arrived. The extra `-e` and a throwaway `known_hosts` are only
+needed when testing next to a live ws-01 at the same address.
+
+Things that bit during that run, now fixed in the role:
+- **Sysmon names its service after the installer's file name.** Staging it under any
+  name but `Sysmon64a.exe` registers a differently-named service.
+- **A fresh Wazuh agent reads only Application/Security/System.** Without the Sysmon and
+  PowerShell channels the machine looks healthy and sends none of the telemetry the
+  detections use; the role now adds them.
+- **Joining a domain resets w32time to `NT5DS`.** The time settings therefore run
+  after the join, not before, or the next converge redoes them. The timezone still runs
+  before it, because Kerberos rejects clock skew over 5 minutes.
+- **`ansible.windows.win_domain_membership` no longer exists**; the role uses
+  `microsoft.ad.membership`.
+- **The vaulted `dc_domain_admin_password` did not match the live domain
+  `Administrator`** (`kinit` said "Password incorrect"; that value was only ever used at
+  provision time). The live account was reset to the vaulted value on 2026-09-29, so the
+  repo is the source of truth again. Domain accounts here expire after 42 days by
+  default, so if a join starts failing with a bad password, check `pwdLastSet`.
 
 Login: `localadmin`, password `WsLab2026!` (lab-only — see SECURITY.md); SSH key auth
 is added by the FirstLogonCommands for the role's transport. **If you change the

@@ -17,3 +17,7 @@ scripts/.lab-secrets
 # Velociraptor binaries — large (~70MB each), fetched from GitHub releases per the
 # offline-install pattern (like isos/); staged locally, deployed by the ansible role.
 phase-4-detection/velociraptor/binaries/
+
+# Windows endpoint installers (Wazuh agent MSI, Sysmon) — fetched by
+# phase-7-automation/windows-config/fetch-installers.sh, deployed by the windows role.
+phase-7-automation/windows-config/installers/

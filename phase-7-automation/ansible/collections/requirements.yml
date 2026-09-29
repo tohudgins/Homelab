@@ -7,3 +7,4 @@ collections:
   - name: ansible.posix        # sysctl (router IP-forwarding / kernel hardening)
   - name: ansible.windows      # win_copy / win_regedit / win_service / win_shell (ws-01)
   - name: community.windows    # win_lineinfile / win_timezone (ws-01)
+  - name: microsoft.ad         # membership (domain join of ws-01; replaces the removed win_domain_membership)

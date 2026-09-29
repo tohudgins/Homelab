@@ -127,7 +127,7 @@ ansible-playbook siem.yml
 | `dc` | dc-01 | Samba AD DC `smb.conf` (incl. Phase 4 audit logging) + the deliberate weaknesses register (Kerberoastable service accounts + SPNs, unprivileged user, svc-backup's Backup Operators + DCSync over-privilege), each guarded by an existence check | ✅ built, idempotent + self-verifying |
 | `dmz` | dmz-01 | Docker + OWASP Juice Shop, Wazuh agent (+ container-log ingestion), NTP sync to rtr-01 | ✅ built, idempotent |
 | `fileserver` | fs-01 | Samba member `smb.conf`, the weak `[public]` share + `full_audit` VFS, the bait credential file, Wazuh agent + realtime FIM on the share | ✅ built, idempotent + self-verifying |
-| `windows` | ws-01 | Wazuh agent → manager, Sysmon service, PowerShell Script Block Logging — managed **over SSH** (ansible.windows / community.windows) | ✅ built, idempotent |
+| `windows` | ws-01 | **Installs** Sysmon (ARM64) and the Wazuh agent on a fresh host from checksum-pinned installers staged by `windows-config/fetch-installers.sh`, joins `lab.internal`, then configures them: agent → manager incl. the Sysmon + PowerShell event channels, Script Block Logging, Sysmon config, w32time — managed **over SSH** (ansible.windows / community.windows / microsoft.ad) | ✅ built, idempotent; converged from a blank rebuild |
 | `scan` | scan-01 | Docker + **Greenbone Community Edition** (GVM/OpenVAS) — arm64-native ~16-container stack, admin login enforced, NTP sync to rtr-01, ships a one-command CORP scan launcher (`greenbone-scan.sh`, GMP) | ✅ built, idempotent |
 
 > **The OS install is codified too, not just the config — for every host.** Each
@@ -150,8 +150,12 @@ ansible-playbook siem.yml
 >   install ISO → Setup → OOBE → AutoLogon → `firstlogon.ps1` (VMware Tools for the
 >   vmxnet3 driver, static `10.10.10.50`, OpenSSH from a pinned MSI on the answer CD,
 >   authorized key) → SSH as `localadmin` through rtr-01. Verified with the Fusion GUI
->   console open, no input; not re-run headless, and the `windows` role was not re-run
->   against the rebuilt VM. Real bugs found and fixed on the way (all in
+>   console open, no input; not re-run headless. The `windows` role was then run
+>   against that rebuilt VM (as `ws-01t`, to keep the real ws-01's AD account and agent
+>   registration untouched): installs Sysmon + the Wazuh agent, joins `lab.internal`,
+>   converged, then re-ran at `changed=0`; the manager showed the agent Active and
+>   received Sysmon + PowerShell events from it. The test VM, its AD computer and its
+>   agent registration were then deleted. Real bugs found and fixed on the way (all in
 >   `provisioning/ws-01/README.md`): `RunSynchronous` in the wrong unattend component,
 >   no AutoLogon, non-ASCII bytes breaking the PowerShell 5.1 parse, and no USB HID
 >   device on Windows VMs. `build-media.sh` now builds both ISOs reproducibly.

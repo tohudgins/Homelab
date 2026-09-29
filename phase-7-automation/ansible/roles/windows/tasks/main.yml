@@ -6,12 +6,68 @@
 # win_* modules. Idempotent.
 # ============================================================================
 
-# --- Wazuh agent → manager ----------------------------------------------------
+# --- Wazuh agent: install (fresh hosts) → manager ------------------------------
+# WAZUH_MANAGER makes the MSI enrol with authd (1515) as WAZUH_AGENT_NAME during
+# install. MSI comes from windows-config/fetch-installers.sh, pushed from the control
+# node. Existing agents are left alone (creates_path).
+- name: Check whether the Wazuh agent is installed
+  ansible.windows.win_stat:
+    path: "{{ wazuh_agent_exe }}"
+  register: wazuh_installed
+
+- name: Stage the Wazuh agent MSI
+  ansible.windows.win_copy:
+    src: "{{ wazuh_agent_msi }}"
+    dest: 'C:\Windows\Temp\wazuh-agent.msi'
+  when: not wazuh_installed.stat.exists
+
+- name: Install the Wazuh agent, enrolling with the manager
+  ansible.windows.win_package:
+    path: 'C:\Windows\Temp\wazuh-agent.msi'
+    creates_path: "{{ wazuh_agent_exe }}"
+    arguments:
+      - /q
+      - "WAZUH_MANAGER={{ wazuh_manager_ip }}"
+      - "WAZUH_AGENT_NAME={{ wazuh_agent_name }}"
+    state: present
+  when: not wazuh_installed.stat.exists
+
+- name: Remove the staged Wazuh agent MSI
+  ansible.windows.win_file:
+    path: 'C:\Windows\Temp\wazuh-agent.msi'
+    state: absent
+
 - name: Point the Wazuh agent at the manager
   community.windows.win_lineinfile:
     path: "{{ wazuh_agent_conf }}"
     regexp: '<address>.*</address>'
     line: "      <address>{{ wazuh_manager_ip }}</address>"
+  notify: Restart wazuh agent
+
+# A fresh agent only reads Application/Security/System. Without these two channels
+# Sysmon and Script Block Logging run but nothing reaches the SIEM, so every Sysmon
+# and 4104 detection is silently blind. Insert any missing <localfile> before the
+# closing tag (BOM-less UTF-8, as the agent expects). Idempotent: prints CHANGED only
+# when it wrote something.
+- name: Make the Wazuh agent collect the Sysmon and PowerShell event channels
+  ansible.windows.win_shell: |
+    $p = '{{ wazuh_agent_conf }}'
+    $c = [IO.File]::ReadAllText($p)
+    $changed = $false
+    foreach ($ch in '{{ wazuh_extra_channels | join("','") }}') {
+      if ($c -notmatch [regex]::Escape("<location>$ch</location>")) {
+        $blk = "  <localfile>`r`n    <location>$ch</location>`r`n    <log_format>eventchannel</log_format>`r`n  </localfile>`r`n`r`n"
+        $i = $c.LastIndexOf('</ossec_config>')
+        $c = $c.Insert($i, $blk)
+        $changed = $true
+      }
+    }
+    if ($changed) {
+      [IO.File]::WriteAllText($p, $c, (New-Object Text.UTF8Encoding($false)))
+      'CHANGED'
+    }
+  register: wazuh_channels
+  changed_when: "'CHANGED' in wazuh_channels.stdout"
   notify: Restart wazuh agent
 
 - name: Ensure the Wazuh agent service is running
@@ -29,17 +85,14 @@
     type: dword
 
 # --- Sysmon -------------------------------------------------------------------
-- name: Ensure the Sysmon service is running
-  ansible.windows.win_service:
-    name: "{{ sysmon_service }}"
-    start_mode: auto
-    state: started
-
-# --- Sysmon config as code (SwiftOnSecurity, see windows-config/README.md) ----
-# The config itself is already live + regression-tested (purple-team.py 9/9,
-# including the Sysmon EID 22 DNS telemetry it added) — this closes the
-# "applied manually, not reproducible from the repo" gap, not a behavior
-# change. Sysmon has no diff/dry-run of its own, so win_copy's checksum
+# Install it first if the box is fresh (the Phase-3 install was by hand). The
+# ARM64 build registers as Sysmon64a; `-i <config>` installs with the config, so
+# a fresh host never runs unconfigured. Installer comes from
+# windows-config/fetch-installers.sh (staged on the control node, no guest internet).
+#
+# Sysmon config as code (SwiftOnSecurity, see windows-config/README.md): already
+# live + regression-tested (purple-team.py, including the Sysmon EID 22 DNS
+# telemetry it added). Sysmon has no diff/dry-run of its own, so win_copy's checksum
 # comparison (gating the reconfigure on its changed result) is what makes this
 # idempotent: an unchanged config is a true no-op on the next converge.
 - name: Ensure the Sysmon config directory exists
@@ -53,21 +106,73 @@
     dest: "{{ sysmon_config_dest }}"
   register: sysmon_config_copy
 
-- name: Apply the Sysmon config (only when it actually changed)
-  ansible.windows.win_shell: '& "{{ sysmon_exe }}" -c "{{ sysmon_config_dest }}"'
-  when: sysmon_config_copy.changed
+- name: Check whether Sysmon is installed
+  ansible.windows.win_stat:
+    path: "{{ sysmon_exe }}"
+  register: sysmon_installed
 
-# --- Time: correct timezone + discipline w32time to the lab's internal NTP -----
-# ws-01 shipped set to Pacific while the host/domain are US Eastern; combined with
-# Windows reading the VM RTC as local time, that put its computed UTC ~3h fast,
-# which silently mis-timestamped Sysmon telemetry relative to the SIEM. Fix as code:
-# correct the zone and point w32time at rtr-01 (10.10.10.1 — the lab's chrony NTP
-# server, the same address dnsmasq hands out per segment). All registry-based so it
-# is idempotent (win_shell w32tm /config would report "changed" every run).
+- name: Stage the Sysmon installer
+  ansible.windows.win_copy:
+    src: "{{ sysmon_installer }}"
+    dest: "{{ sysmon_config_dir }}\\Sysmon64a.exe"
+  when: not sysmon_installed.stat.exists
+
+# The staged file MUST keep the name Sysmon64a.exe: Sysmon names its service and
+# driver after the executable it is installed from, so a renamed copy registers a
+# differently-named service and `sysmon_service` below never exists.
+- name: Install Sysmon with the lab config
+  ansible.windows.win_command: '"{{ sysmon_config_dir }}\Sysmon64a.exe" -accepteula -i "{{ sysmon_config_dest }}"'
+  when: not sysmon_installed.stat.exists
+
+- name: Remove the staged Sysmon installer
+  ansible.windows.win_file:
+    path: "{{ sysmon_config_dir }}\\Sysmon64a.exe"
+    state: absent
+
+- name: Ensure the Sysmon service is running
+  ansible.windows.win_service:
+    name: "{{ sysmon_service }}"
+    start_mode: auto
+    state: started
+
+- name: Apply the Sysmon config (only when it changed on an already-installed Sysmon)
+  ansible.windows.win_command: '"{{ sysmon_exe }}" -c "{{ sysmon_config_dest }}"'
+  when: sysmon_config_copy.changed and sysmon_installed.stat.exists
+
+# --- Time + domain membership: order matters --------------------------------------
+# 1. Timezone first. ws-01 shipped set to Pacific while the host/domain are US
+#    Eastern; combined with Windows reading the VM RTC as local time, that put its
+#    computed UTC ~3h fast, which silently mis-timestamped Sysmon telemetry relative
+#    to the SIEM. Kerberos also rejects a >5 minute clock skew, so the zone has to be
+#    right before the join.
 - name: Set timezone to US Eastern
   community.windows.win_timezone:
     timezone: Eastern Standard Time
 
+# 2. Join the domain (lab.internal, Samba AD on dc-01). The guest's DNS already points
+#    at dc-01 (firstlogon.ps1 sets it), which the join needs to find the domain.
+#    Already-joined hosts are a no-op. `windows_hostname` is also the computer name
+#    the join gives the machine, so a rebuild can be tested under a different name
+#    without touching the real ws-01's computer account.
+- name: Flush pending handlers before a possible reboot
+  ansible.builtin.meta: flush_handlers
+
+- name: Join the AD domain (renaming the machine if needed), rebooting if it changed
+  microsoft.ad.membership:
+    dns_domain_name: "{{ windows_domain }}"
+    hostname: "{{ windows_hostname }}"
+    domain_admin_user: "{{ windows_domain_admin }}@{{ windows_domain }}"
+    domain_admin_password: "{{ hostvars['dc-01'].dc_domain_admin_password }}"
+    state: domain
+    reboot: true
+    reboot_timeout: 900
+  no_log: true
+
+# 3. w32time last. Joining a domain resets w32time's Type to NT5DS (domain
+#    hierarchy), so configuring it before the join means the next converge has to
+#    redo it. Point it at rtr-01 (10.10.10.1 — the lab's chrony NTP server, the same
+#    address dnsmasq hands out per segment). All registry-based so it is idempotent
+#    (win_shell w32tm /config would report "changed" every run).
 - name: Point w32time at rtr-01 as its NTP peer
   ansible.windows.win_regedit:
     path: HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters
