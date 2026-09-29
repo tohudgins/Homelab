@@ -7,13 +7,13 @@ afterwards per [`../../../phase-5-offense/TOOLS.md`](../../../phase-5-offense/TO
 — atk-01 is deliberately **not** in the Ansible inventory (an attacker box is driven
 by hand, not converged).
 
-> Authored 2026-09-28. This is the **least-verified** of the provisioning set:
-> Kali's stock installer uses a simple-cdd profile flow, and this replaces it with a
-> plain custom preseed (the standard Kali-unattended approach). Installer paths were
-> confirmed against `kali-linux-2026.2-installer-arm64.iso`, but the simple-cdd
-> interaction and the `kali-linux-default` metapackage pull **should be validated on
-> a from-blank build** before trusting it. A `kali-atk01-auto.iso` exists from the
-> original build but its custom seed was never committed — this closes that gap.
+> Authored 2026-09-28 and **build-verified from a genuinely blank VM the same day**:
+> the plain custom preseed cleanly overrode Kali's stock simple-cdd flow, ran fully
+> unattended, pulled the entire `kali-linux-default` toolset + Xfce, auto-powered-off,
+> then booted the disk → SSH in as `tohudgins` with the homelab key → confirmed
+> hostname `atk-01`, Kali Rolling, `kali-linux-default` and `kali-desktop-xfce` both
+> installed, sshd active. Closes the gap where a `kali-atk01-auto.iso` existed from the
+> original build but its custom seed was never committed.
 
 ## What's here
 | File | Purpose |

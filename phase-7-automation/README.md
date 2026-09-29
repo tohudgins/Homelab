@@ -140,13 +140,21 @@ ansible-playbook siem.yml
 > - **Debian netinst preseed**: rtr-01. **Kali preseed**: atk-01. **Windows
 >   autounattend**: ws-01 (added 2026-09-28).
 >
-> Verification status is honest per host: the six Ubuntu seeds and `create-vm.sh`
-> are verified (the VM generator was live-tested end to end); the preseed/Windows
-> three are authored to standard practice with real ISO paths but are marked
-> **pending a from-blank build-verify** in their READMEs (Kali's simple-cdd flow and
-> the Windows edition/ARM specifics are the parts to confirm on a build). The config
-> roles that run after each install are separately verified (`f91597f` and the
-> idempotent-converge evidence below).
+> Verification status is honest per host (all build-verified from genuinely blank
+> throwaway VMs via `create-vm.sh`, 2026-09-28):
+> - **rtr-01 (Debian preseed) — VERIFIED**: unattended install → auto-poweroff →
+>   booted disk → SSH as root with the key, hostname/OS/PermitRootLogin correct.
+> - **atk-01 (Kali preseed) — VERIFIED**: custom preseed cleanly overrode Kali's
+>   simple-cdd, installed the full `kali-linux-default` + Xfce, → SSH as the user.
+> - **ws-01 (Windows autounattend) — statically verified, headless run blocked by an
+>   env quirk**: XML valid + edition confirmed against the real `install.wim`, but a
+>   headless from-blank Windows install is stopped by the un-dismissable "Press any key
+>   to boot from CD" prompt (and this UDF ISO can't be remastered no-prompt with Mac
+>   tooling). One GUI keypress (or a Windows `oscdimg` no-prompt rebuild) completes it —
+>   details in `provisioning/ws-01/README.md`.
+> - The six Ubuntu seeds share the exact mechanism proven on the two verified Linux
+>   builds. Build-verifying the preseeds also caught + fixed a real hands-off bug
+>   (`finish-install/reboot_in_progress note`, commit `6f1511b`).
 
 ## Verification evidence
 

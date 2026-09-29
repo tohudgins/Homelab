@@ -5,10 +5,12 @@ Suricata + Zeek). Unlike the Ubuntu hosts it uses the **Debian installer + prese
 (not cloud-init autoinstall). These files make the base OS reproducible from the
 repo; the `router` role does all the actual router configuration afterwards.
 
-> Authored 2026-09-28. Debian preseed is standard and the installer paths here were
-> confirmed against `debian-13.6.0-arm64-netinst.iso`, but unlike the Ubuntu trio
-> there was no prior in-repo example to model on — **pending a from-blank
-> build-verify**. The `router` role itself is verified idempotent against the live host.
+> Authored 2026-09-28. **Build-verified from a genuinely blank VM the same day**:
+> remastered ISO → `create-vm.sh` → fully unattended install → clean auto-poweroff →
+> booted the installed disk → SSH in as root with the homelab key → confirmed hostname
+> `rtr-01`, Debian 13, `PermitRootLogin prohibit-password`, sshd active. (The verify
+> also caught the `finish-install/reboot_in_progress note` bug now fixed in the
+> preseed.) The `router` role that configures this host is separately verified idempotent.
 
 ## What's here
 | File | Purpose |
