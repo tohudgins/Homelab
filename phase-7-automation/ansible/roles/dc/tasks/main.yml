@@ -195,6 +195,26 @@
     label: "{{ item.name }}"
   when: item.name not in samba_users.stdout_lines
 
+# The domain Administrator is the account the `windows` role joins ws-01 with, using
+# dc_domain_admin_password from the vault. Samba's default max password age is 42
+# days; once it lapses, a rebuild's join fails with a bad-password error that looks
+# like vault drift. Exempt just this account (not the whole domain: the weak-password
+# service accounts above are attack targets and keep default behaviour).
+# Idempotent: reads userAccountControl and only acts when DONT_EXPIRE_PASSWORD
+# (0x10000) is unset.
+- name: Domain Administrator password never expires
+  ansible.builtin.shell: |
+    set -e
+    uac=$(samba-tool user show Administrator | sed -n 's/^userAccountControl: *//p')
+    if [ $(( uac & 65536 )) -eq 0 ]; then
+      samba-tool user setexpiry Administrator --noexpiry
+      echo CHANGED
+    fi
+  args:
+    executable: /bin/bash
+  register: dc_admin_noexpiry
+  changed_when: "'CHANGED' in dc_admin_noexpiry.stdout"
+
 # --- SPNs (what makes the accounts Kerberoastable) ----------------------------
 - name: Read current SPNs per service account
   ansible.builtin.command: samba-tool spn list {{ item.name }}

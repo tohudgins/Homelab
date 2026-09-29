@@ -101,8 +101,9 @@ Things that bit during that run, now fixed in the role:
 - **The vaulted `dc_domain_admin_password` did not match the live domain
   `Administrator`** (`kinit` said "Password incorrect"; that value was only ever used at
   provision time). The live account was reset to the vaulted value on 2026-09-29, so the
-  repo is the source of truth again. Domain accounts here expire after 42 days by
-  default, so if a join starts failing with a bad password, check `pwdLastSet`.
+  repo is the source of truth again. Samba's default 42-day password age would have
+  silently broken the next rebuild's join, so the `dc` role now marks the domain
+  `Administrator` (only that account) as never-expiring.
 
 Login: `localadmin`, password `WsLab2026!` (lab-only — see SECURITY.md); SSH key auth
 is added by the FirstLogonCommands for the role's transport. **If you change the
