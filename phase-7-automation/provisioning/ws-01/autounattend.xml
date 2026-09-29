@@ -77,6 +77,20 @@
                language="neutral" versionScope="nonSxS">
       <ComputerName>ws-01</ComputerName>
     </component>
+    <!-- RunSynchronous lives in Microsoft-Windows-Deployment, NOT Shell-Setup (putting
+         it in Shell-Setup makes Windows reject the whole unattend file with 0x80220001
+         -> "unexpected error ... restart the installation"). Win11 24H2+ OOBE insists on
+         a network / Microsoft account unless told otherwise. -->
+    <component name="Microsoft-Windows-Deployment"
+               processorArchitecture="arm64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS">
+      <RunSynchronous>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE /v BypassNRO /t REG_DWORD /d 1 /f</Path>
+        </RunSynchronousCommand>
+      </RunSynchronous>
+    </component>
   </settings>
 
   <!-- === oobeSystem: skip OOBE, local admin, enable OpenSSH === -->
@@ -105,20 +119,21 @@
           </LocalAccount>
         </LocalAccounts>
       </UserAccounts>
+      <!-- FirstLogonCommands only run when someone logs on — without AutoLogon the
+           VM parks at the lock screen forever and nothing below ever executes. -->
+      <AutoLogon>
+        <Enabled>true</Enabled>
+        <LogonCount>1</LogonCount>
+        <Username>localadmin</Username>
+        <Password><Value>WsLab2026!</Value><PlainText>true</PlainText></Password>
+      </AutoLogon>
+      <!-- Everything else lives in firstlogon.ps1 on the WSANSWER CD (VMware Tools
+           -> static IP -> OpenSSH -> authorized key). The drive letter isn't fixed,
+           so scan for it. -->
       <FirstLogonCommands>
-        <!-- Install + start the OpenSSH server, then drop the homelab key so the
-             `windows` role can manage ws-01 over SSH (its transport). -->
         <SynchronousCommand wcm:action="add">
           <Order>1</Order>
-          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0"</CommandLine>
-        </SynchronousCommand>
-        <SynchronousCommand wcm:action="add">
-          <Order>2</Order>
-          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "Set-Service sshd -StartupType Automatic; Start-Service sshd"</CommandLine>
-        </SynchronousCommand>
-        <SynchronousCommand wcm:action="add">
-          <Order>3</Order>
-          <CommandLine>powershell -NoProfile -ExecutionPolicy Bypass -Command "New-Item -ItemType Directory -Force -Path C:\ProgramData\ssh; Set-Content -Path C:\ProgramData\ssh\administrators_authorized_keys -Value 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH7GQV6ykcpEB9lPX4PtS48LOUIeL2N/gA4w5biGD+XS tohudgins@mac-homelab-jumphost'; icacls C:\ProgramData\ssh\administrators_authorized_keys /inheritance:r /grant 'Administrators:F' /grant 'SYSTEM:F'"</CommandLine>
+          <CommandLine>cmd /c "for %d in (C D E F G H I J) do @if exist %d:\firstlogon.ps1 powershell -NoProfile -ExecutionPolicy Bypass -File %d:\firstlogon.ps1"</CommandLine>
         </SynchronousCommand>
       </FirstLogonCommands>
     </component>

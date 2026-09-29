@@ -15,6 +15,9 @@
 #   "vmnetN"  -> a custom host-only/segment network
 # e.g. rtr-01 (WAN + 4 segments): --net nat,vmnet3,vmnet4,vmnet5,vmnet6
 #
+# --extra-iso attaches a third CD (e.g. isos/vmware-arm64-drivers.iso, which ws-01's
+# first-logon script installs to get the vmxnet3 driver).
+#
 # Modelled field-for-field on the lab's existing hand-built ARM VMs (firmware=efi,
 # nvme system disk, vmxnet3 NICs, file-backed serial console for headless
 # autoinstall). It refuses to clobber an existing VM. Does NOT install an OS —
@@ -28,10 +31,10 @@ VDISK="$FUSION/Library/vmware-vdiskmanager"
 VMROOT="${VMROOT:-$HOME/Virtual Machines.localized}"
 
 name="" os="arm-ubuntu-64" cpus="2" mem="4096" disk="40" net="vmnet3"
-iso="" seed="" start="no"
+iso="" seed="" extra="" start="no" ui="nogui"
 
 usage() {
-    sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -45,7 +48,9 @@ while [ $# -gt 0 ]; do
         --net)   net="$2"; shift 2 ;;
         --iso)   iso="$2"; shift 2 ;;
         --seed)  seed="$2"; shift 2 ;;
+        --extra-iso) extra="$2"; shift 2 ;;
         --start) start="yes"; shift ;;
+        --gui)   ui="gui"; shift ;;
         -h|--help) usage 0 ;;
         *) echo "unknown arg: $1" >&2; usage 2 ;;
     esac
@@ -61,6 +66,8 @@ resolve() { case "$1" in /*) echo "$1" ;; "") echo "" ;; *) echo "$REPO/$1" ;; e
 iso="$(resolve "$iso")"; seed="$(resolve "$seed")"
 [ -z "$iso" ]  || [ -f "$iso" ]  || { echo "! installer ISO not found: $iso" >&2; exit 1; }
 [ -z "$seed" ] || [ -f "$seed" ] || { echo "! seed ISO not found: $seed" >&2; exit 1; }
+extra="$(resolve "$extra")"
+[ -z "$extra" ] || [ -f "$extra" ] || { echo "! extra ISO not found: $extra" >&2; exit 1; }
 
 vmdir="$VMROOT/$name.vmwarevm"
 vmx="$vmdir/$name.vmx"
@@ -115,7 +122,38 @@ serial0.fileName = "$name-serial.log"
 serial0.yieldOnMsrRead = "TRUE"
 VMX
 
-# CD drives: installer on sata0:0, optional seed on sata0:1.
+# Windows guests need a USB controller AND its virtual HID (keyboard/mouse) device:
+# WinPE/Setup and OOBE have no other input path, so without these the console is
+# unusable (Linux hosts install over serial). The hub/hid/video entries mirror what
+# Fusion writes into a GUI-created Windows VM.
+case "$os" in
+    *windows*) cat <<VMX
+usb.present = "TRUE"
+usb_xhci.present = "TRUE"
+vmci0.present = "TRUE"
+usb_xhci:4.present = "TRUE"
+usb_xhci:4.deviceType = "video"
+usb_xhci:4.port = "4"
+usb_xhci:4.parent = "-1"
+usb_xhci:5.present = "TRUE"
+usb_xhci:5.deviceType = "hid"
+usb_xhci:5.port = "5"
+usb_xhci:5.parent = "-1"
+usb_xhci:6.present = "TRUE"
+usb_xhci:6.deviceType = "hub"
+usb_xhci:6.speed = "2"
+usb_xhci:6.port = "6"
+usb_xhci:6.parent = "-1"
+usb_xhci:7.present = "TRUE"
+usb_xhci:7.deviceType = "hub"
+usb_xhci:7.speed = "4"
+usb_xhci:7.port = "7"
+usb_xhci:7.parent = "-1"
+VMX
+    ;;
+esac
+
+# CD drives: installer on sata0:0, optional seed on the next, optional extra after.
 cd=0
 if [ -n "$iso" ]; then
 cat <<VMX
@@ -131,6 +169,15 @@ cat <<VMX
 sata0:$cd.present = "TRUE"
 sata0:$cd.deviceType = "cdrom-image"
 sata0:$cd.fileName = "$seed"
+sata0:$cd.startConnected = "TRUE"
+VMX
+cd=$((cd + 1))
+fi
+if [ -n "$extra" ]; then
+cat <<VMX
+sata0:$cd.present = "TRUE"
+sata0:$cd.deviceType = "cdrom-image"
+sata0:$cd.fileName = "$extra"
 sata0:$cd.startConnected = "TRUE"
 VMX
 fi
@@ -159,8 +206,8 @@ echo "  wrote $vmx"
 echo "  wrote $vmdk (${disk} GB, growable)"
 
 if [ "$start" = "yes" ]; then
-    echo "Starting $name (headless) — autoinstall will run from the seed ISO."
-    "$VMRUN" start "$vmx" nogui
+    echo "Starting $name ($ui) — autoinstall will run from the seed ISO."
+    "$VMRUN" start "$vmx" "$ui"
 else
     echo "Not started (pass --start to boot). Start later with:"
     echo "  '$VMRUN' start '$vmx' nogui"

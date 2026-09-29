@@ -146,15 +146,15 @@ ansible-playbook siem.yml
 >   booted disk → SSH as root with the key, hostname/OS/PermitRootLogin correct.
 > - **atk-01 (Kali preseed) — VERIFIED**: custom preseed cleanly overrode Kali's
 >   simple-cdd, installed the full `kali-linux-default` + Xfce, → SSH as the user.
-> - **ws-01 (Windows autounattend) — boots + installs headless (verified); OOBE
->   completion unconfirmed**: XML valid + edition confirmed against the real
->   `install.wim`. The "Press any key to boot from CD" stall was solved by rebuilding a
->   **no-prompt ISO** (mount UDF → copy out → `wimlib` split the wim under 4 GB →
->   `xorriso` with `efisys_noprompt.bin`); with it the VM booted headless with no
->   keypress and Setup applied the full image (vmdk 8 MB → 13 GB, confirmed live). It
->   then ran ~1 hr in OOBE with live disk writes but never reached network/SSH — a
->   headless VM can't be screen-observed mid-Setup, so OOBE's last mile needs a GUI
->   session to confirm/iterate. Details in `provisioning/ws-01/README.md`.
+> - **ws-01 (Windows autounattend) — VERIFIED from blank (2026-09-29)**: no-prompt
+>   install ISO → Setup → OOBE → AutoLogon → `firstlogon.ps1` (VMware Tools for the
+>   vmxnet3 driver, static `10.10.10.50`, OpenSSH from a pinned MSI on the answer CD,
+>   authorized key) → SSH as `localadmin` through rtr-01. Verified with the Fusion GUI
+>   console open, no input; not re-run headless, and the `windows` role was not re-run
+>   against the rebuilt VM. Real bugs found and fixed on the way (all in
+>   `provisioning/ws-01/README.md`): `RunSynchronous` in the wrong unattend component,
+>   no AutoLogon, non-ASCII bytes breaking the PowerShell 5.1 parse, and no USB HID
+>   device on Windows VMs. `build-media.sh` now builds both ISOs reproducibly.
 > - The six Ubuntu seeds share the exact mechanism proven on the two verified Linux
 >   builds. Build-verifying the preseeds also caught + fixed a real hands-off bug
 >   (`finish-install/reboot_in_progress note`, commit `6f1511b`).
