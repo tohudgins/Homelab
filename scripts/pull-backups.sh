@@ -32,10 +32,12 @@
 #     disk. Pulls only the LATEST pair instead of the whole retention window
 #     — bounds MISP's footprint to ~650M regardless of source retention.
 #
-# Usage: scripts/pull-backups.sh   (or `make backup-pull`)
-# Not scheduled automatically — this is a personal Mac, not a fleet backup
-# server; run it after a backup cron fires, or add it to your own crontab if
-# you want it automatic (see docs/RUNBOOK.md §4 for the one-line entry).
+# Usage: scripts/pull-backups.sh              (or `make backup-pull`) — pull everything now
+#        scripts/pull-backups.sh --scheduled  — what the launchd job runs (`make backup-schedule`):
+#          per host, skip quietly when the VM isn't reachable (the lab is mostly suspended) or
+#          was already pulled successfully in the last 20h, so a frequent timer yields at most
+#          one pull per host per day, taken whenever that host happens to be up.
+# Exit status is non-zero if any pull failed (manual and scheduled alike).
 # ===========================================================================
 set -euo pipefail
 
@@ -57,18 +59,34 @@ pull() {
   local dest="$DEST_ROOT/$host/$local_name"
   mkdir -p "$dest"
   echo "==> $host:$remote_path -> $dest (full mirror)"
+  # rsync --delete from an EMPTY source (a freshly rebuilt VM, an unmounted path) would wipe
+  # the only off-host copy — exactly when it is needed. Refuse instead of mirroring nothing.
+  # Bug fixed 2026-09-30: the original guard ran $(ls -A ...) as the SSH user, who can't read
+  # root-owned dirs — sudo only wrapped `test`, not the subshell. Running everything inside
+  # `sudo bash -c '...'` gives ls the right privileges.
+  if ! ssh "$host" "sudo bash -c 'ls -A \"${remote_path%/}\" 2>/dev/null | grep -q .'"; then
+    echo "  ! $host:$remote_path is empty or unreachable — refusing to --delete the local mirror"
+    FAILURES=$((FAILURES + 1)); return 0
+  fi
   rsync -az --delete "${RSYNC_SUDO[@]}" -e ssh "${host}:${remote_path%/}/" "$dest/" \
-    || echo "  ! rsync failed for $host:$remote_path (host down?)"
+    || { echo "  ! rsync failed for $host:$remote_path"; FAILURES=$((FAILURES + 1)); }
 }
 
 # Single remote file -> local directory.
+# Written to a temp name first: a bare `> file` would truncate the previous good copy to zero
+# bytes the moment the ssh fails.
 pull_file() {
   local host="$1" remote_file="$2" local_name="$3"
   local dest="$DEST_ROOT/$host/$local_name"
   mkdir -p "$dest"
   echo "==> $host:$remote_file -> $dest/"
-  ssh "$host" "sudo cat '$remote_file'" > "$dest/$(basename "$remote_file")" \
-    || echo "  ! pull failed for $host:$remote_file (host down?)"
+  if ssh "$host" "sudo cat '$remote_file'" > "$dest/.$(basename "$remote_file").partial"; then
+    mv "$dest/.$(basename "$remote_file").partial" "$dest/$(basename "$remote_file")"
+  else
+    rm -f "$dest/.$(basename "$remote_file").partial"
+    echo "  ! pull failed for $host:$remote_file — keeping the previous local copy"
+    FAILURES=$((FAILURES + 1))
+  fi
 }
 
 # Latest-file-matching-pattern only, deliberately NOT a full mirror (MISP —
@@ -85,7 +103,8 @@ pull_latest() {
   local dest="$DEST_ROOT/$host/$local_name"
   mkdir -p "$dest"
   local latest
-  latest=$(ssh "$host" "sudo ls -t ${remote_dir}/${pattern} 2>/dev/null | head -1") || true
+  latest=$(ssh "$host" "sudo ls -t ${remote_dir}/${pattern} 2>/dev/null | head -1") || {
+    echo "  ! $host unreachable listing $remote_dir/$pattern"; FAILURES=$((FAILURES + 1)); return 0; }
   if [ -z "$latest" ]; then
     echo "==> $host:$remote_dir/$pattern -> $dest (nothing found)"
     return 0
@@ -97,31 +116,52 @@ pull_latest() {
     find "$dest" -maxdepth 1 -type f -name "$pattern" ! -name "$base" -delete
   else
     rm -f "$dest/$base.partial"
-    echo "  ! pull failed for $host:$latest (host down?) — keeping the previous local copy"
+    echo "  ! pull failed for $host:$latest — keeping the previous local copy"; FAILURES=$((FAILURES + 1))
   fi
 }
 
-echo "Pulling backups into $DEST_ROOT"
+SCHEDULED=0; [ "${1:-}" = "--scheduled" ] && SCHEDULED=1
+MAX_AGE_SECS=72000   # 20h: a daily pull, with slack so it doesn't drift later each day
+FAILURES=0
+mkdir -p "$DEST_ROOT"
+
+# due <host>: manual runs always pull; scheduled runs pull only a reachable host that has
+# no successful pull in the last 20h. (Quiet skips are the normal case — the lab is mostly off.)
+due() {
+  [ "$SCHEDULED" = 1 ] || return 0
+  local stamp="$DEST_ROOT/.last-success-$1"
+  if [ -f "$stamp" ] && [ $(( $(date +%s) - $(stat -f %m "$stamp") )) -lt "$MAX_AGE_SECS" ]; then
+    return 1
+  fi
+  ssh -o BatchMode=yes -o ConnectTimeout=8 "$1" true 2>/dev/null
+}
+# mark <host> <failures-before>: stamp only if this host's pulls all succeeded.
+mark() { [ "$FAILURES" -eq "$2" ] && touch "$DEST_ROOT/.last-success-$1" || true; }
+
+echo "Pulling backups into $DEST_ROOT ($(date '+%F %T'))"
 echo
 
 # siem-01 — Wazuh's OpenSearch snapshot repo (wazuh-snapshot-backup.sh's target,
 # roles/siem/defaults/main.yml: wazuh_snapshot_repo_path) + its own run log.
-# Mechanism verified live before wiring this up: a real manual snapshot+delete
-# round-trip against the same credential/repo the cron uses succeeded cleanly
-# (the stale "Unauthorized" lines in the run log are from 2026-09-26, almost
-# certainly an indexer-restart timing window during that day's work, not a
-# standing defect — the 4am cron simply hasn't run since, since the VM's
-# suspended outside active sessions).
-pull siem-01 /var/lib/wazuh-indexer-snapshots wazuh-snapshots
-pull_file siem-01 /var/log/wazuh-snapshot-backup.log wazuh-snapshot-backup-log
+if due siem-01; then
+  before=$FAILURES
+  pull siem-01 /var/lib/wazuh-indexer-snapshots wazuh-snapshots
+  pull_file siem-01 /var/log/wazuh-snapshot-backup.log wazuh-snapshot-backup-log
+  mark siem-01 "$before"
+fi
 
 # misp-01 — MISP and IRIS (roles/misp,iris/defaults/main.yml) both live on the
 # same host (the `threat_intel` inventory group).
-pull_latest misp-01 /opt/misp-docker/backups misp 'misp-db-*.sql.gz'
-pull_latest misp-01 /opt/misp-docker/backups misp 'misp-state-*.tar.gz'
-pull_file misp-01 /opt/misp-docker/backups/backup.log misp
-pull misp-01 /opt/iris-web/backups iris
+if due misp-01; then
+  before=$FAILURES
+  pull_latest misp-01 /opt/misp-docker/backups misp 'misp-db-*.sql.gz'
+  pull_latest misp-01 /opt/misp-docker/backups misp 'misp-state-*.tar.gz'
+  pull_file misp-01 /opt/misp-docker/backups/backup.log misp
+  pull misp-01 /opt/iris-web/backups iris
+  mark misp-01 "$before"
+fi
 
 echo
-echo "Done. Local footprint:"
+echo "Done ($FAILURES failure(s)). Local footprint:"
 du -sh "$DEST_ROOT"/*/* 2>/dev/null || echo "  (nothing pulled — are the source VMs up?)"
+[ "$FAILURES" -eq 0 ]

@@ -8,6 +8,12 @@ samba_private_db: /var/lib/samba/private/sam.ldb
 samba_domain_dn: "DC=lab,DC=internal"
 samba_service: samba-ad-dc
 
+# Wazuh agent (same values as the fileserver/dmz roles; wazuh_manager_ip is in
+# group_vars/all.yml). Keep wazuh_agent_version in step with the manager.
+wazuh_agent_version: "4.14.7-1"
+wazuh_apt_key_url: "https://packages.wazuh.com/key/GPG-KEY-WAZUH"
+wazuh_apt_repo: "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main"
+
 # dc_domain_admin_password (used only by tasks/provision.yml's samba-tool
 # domain provision --adminpass) is a genuine secret, not a lab target like the
 # weak service-account passwords below — it lives vaulted in

@@ -1,0 +1,63 @@
+---
+# ===========================================================================
+# patch-windows.yml — manual, on-demand Windows Update for ws-01.
+#
+# The Windows counterpart of patch.yml (which covers the Linux fleet only). Same
+# philosophy, for the same reasons:
+#   - on demand, never on a timer: ws-01 is the Windows detection-telemetry and
+#     attack-simulation endpoint (Sysmon, Wazuh agent, Defender exclusions and the
+#     Atomic Red Team battery all depend on its exact state), so what gets patched is a
+#     deliberate act, followed by a re-converge and a purple-team re-run;
+#   - PREVIEW first, then apply;
+#   - it REPORTS that a reboot is required and never reboots the VM itself.
+#
+#   cd phase-7-automation/ansible
+#   ansible-playbook patch-windows.yml --check --diff   # PREVIEW: lists what would install
+#   ansible-playbook patch-windows.yml                  # apply
+#   ansible-playbook windows.yml                        # re-converge: must stay changed=0
+#   make stop && make up PROFILE=ad                     # real reboot if the play said REBOOT REQUIRED
+#                                                       # (`make down` suspend/resume never applies
+#                                                       #  a pending cumulative update)
+#
+# Scope, deliberately narrow: security, critical, update-rollup (the monthly cumulative
+# update) and Defender definition updates. NOT feature/version upgrades and NOT drivers —
+# those change the OS build under the detections (Sysmon schema, event IDs, the
+# vmxnet3/VMware Tools pairing) and are a rebuild-the-image decision, not a patch.
+#
+# Not covered by this play, on purpose: the Wazuh agent and Sysmon. They are not
+# Windows-Update-managed; they are pinned, checksum-verified installers staged by
+# windows-config/fetch-installers.sh and installed by the `windows` role.
+# ===========================================================================
+- name: Patch ws-01 (Windows Update, manual, on-demand)
+  hosts: windows
+  gather_facts: false
+  vars:
+    # Per the ansible.windows.win_updates notes: a Windows Update can restart the network
+    # adapter mid-run, so the SSH connection must not sit on a shared ControlMaster socket
+    # and needs a keepalive to notice a dead link.
+    ansible_ssh_args: -o ControlMaster=no -o ServerAliveInterval=30
+  tasks:
+    - name: Install security, critical, rollup and Defender-definition updates (no reboot)
+      ansible.windows.win_updates:
+        category_names:
+          - SecurityUpdates
+          - CriticalUpdates
+          - UpdateRollups
+          - DefinitionUpdates
+        state: installed
+        reboot: false
+      register: win_patch
+
+    - name: Report ws-01's patch result
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}:
+          {{ win_patch.installed_update_count | default(0) }} update(s) installed,
+          {{ win_patch.failed_update_count | default(0) }} failed,
+          {{ 'REBOOT REQUIRED (make stop, not make down)' if win_patch.reboot_required | default(false) else 'no reboot needed' }}
+
+    - name: Fail the play if any update failed to install
+      ansible.builtin.assert:
+        that: (win_patch.failed_update_count | default(0)) == 0
+        fail_msg: "{{ win_patch.failed_update_count }} update(s) failed on ws-01 — see the win_updates output above."
+        quiet: true

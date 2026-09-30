@@ -10,31 +10,52 @@
 - name: Provision the AD domain if this is a genuinely blank host (guarded, one-shot)
   ansible.builtin.import_tasks: provision.yml
 
-# Found verifying provision.yml against a genuinely blank host (2026-09-26):
-# three tasks below (active-response script + two ossec.conf blocks) assume a
-# Wazuh AGENT is already installed on this host — real on the live dc-01, but
-# agent installation itself is a manual step nothing in this repo's IaC
-# automates yet, for any host (dc-01, fs-01, rtr-01, ws-01 alike; only
-# siem-01's manager+indexer install is automated, see the siem role). A truly
-# blank rebuild would silently lose active response + the two telemetry
-# feeds this role's later tasks configure without ever being told why. Fail
-# loudly and specifically instead — same "manual pre-step, documented, not
-# hidden" pattern as scripts/bootstrap-sudo.sh.
-- name: Confirm a Wazuh agent is installed before configuring its active-response/telemetry
-  ansible.builtin.stat:
-    path: /var/ossec/active-response/bin
-  register: wazuh_agent_ar_dir
+# --- Wazuh agent: install + enroll ---------------------------------------------
+# Found verifying provision.yml against a genuinely blank host (2026-09-26): the
+# active-response script and the ossec.conf blocks below need a Wazuh AGENT, which
+# this role used to assume was hand-installed (real on the live dc-01, absent on a
+# rebuild — it then failed with an assert rather than silently dropping telemetry).
+# Installing it here, same pinned-apt pattern as the fileserver and dmz roles,
+# makes a blank dc-01 converge to a reporting host in one run (closed 2026-09-30).
+- name: Install the Wazuh GPG key (dearmored)
+  ansible.builtin.shell: |
+    set -o pipefail
+    curl -s {{ wazuh_apt_key_url }} | gpg --dearmor > /usr/share/keyrings/wazuh.gpg
+  args:
+    creates: /usr/share/keyrings/wazuh.gpg
+    executable: /bin/bash
 
-- name: Fail with a clear message if the Wazuh agent prerequisite is missing
-  ansible.builtin.assert:
-    that: wazuh_agent_ar_dir.stat.exists
-    fail_msg: >-
-      /var/ossec/active-response/bin doesn't exist — this host has no Wazuh
-      agent installed yet. Install and enroll the Wazuh agent first (see
-      Tools/Wazuh.md's "Enrolling a Linux agent" — apt repo, version-pinned
-      install, WAZUH_MANAGER=<siem-ip>), then re-run this role. Agent
-      installation isn't part of this or any other role's IaC yet.
-    success_msg: "Wazuh agent present; configuring active response + telemetry."
+- name: Add the Wazuh apt repository
+  ansible.builtin.apt_repository:
+    repo: "{{ wazuh_apt_repo }}"
+    filename: wazuh
+    state: present
+    update_cache: true
+
+- name: Install the Wazuh agent (pinned, manager preconfigured)
+  ansible.builtin.apt:
+    name: "wazuh-agent={{ wazuh_agent_version }}"
+    state: present
+  environment:
+    WAZUH_MANAGER: "{{ wazuh_manager_ip }}"
+
+- name: Hold the agent at the manager's version (no silent drift)
+  ansible.builtin.dpkg_selections:
+    name: wazuh-agent
+    selection: hold
+
+- name: Point the agent at the Wazuh manager
+  ansible.builtin.lineinfile:
+    path: /var/ossec/etc/ossec.conf
+    regexp: '<address>.*</address>'
+    line: "      <address>{{ wazuh_manager_ip }}</address>"
+  notify: Restart wazuh-agent
+
+- name: Enable and start the Wazuh agent
+  ansible.builtin.systemd:
+    name: wazuh-agent
+    enabled: true
+    state: started
 
 # --- smb.conf (carries the Phase 4 audit logging that makes attacks visible) ---
 - name: Deploy Samba AD DC smb.conf

@@ -156,12 +156,18 @@
     state: present
     update_cache: true
 
-- name: Install Zeek
+- name: Install Zeek (pinned — see defaults/main.yml; unpin and re-validate when upgrading)
   ansible.builtin.apt:
     name:
-      - zeek
-      - zeekctl
+      - "zeek={{ zeek_version }}"
+      - "zeekctl={{ zeek_version }}"
     state: present
+
+- name: Hold Zeek at the pinned version (patch.yml explicitly releases this to upgrade)
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: [zeek, zeekctl, zeek-core, libbroker-dev]
 
 - name: Deploy Zeek node.cfg (standalone on the CORP interface)
   ansible.builtin.copy:

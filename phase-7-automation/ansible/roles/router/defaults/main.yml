@@ -16,6 +16,10 @@ router_services:
 
 # Zeek ships from the OpenSUSE OBS build service, not Debian — this is exactly
 # the source the box was originally installed from (installs under /opt/zeek).
+# Pinned to 9.0.0 (validated 2026-09-30 against the live CORP sensor, all log
+# formats identical to 8.2.1: dns/conn fields unchanged, hunt scripts parse by
+# #fields header so they were unaffected). Unpin and re-validate when upgrading.
+zeek_version: "9.0.0-0"
 zeek_prefix: /opt/zeek
 zeek_apt_repo: "deb http://download.opensuse.org/repositories/security:/zeek/Debian_13/ /"
 zeek_apt_key_url: "https://download.opensuse.org/repositories/security:zeek/Debian_13/Release.key"
