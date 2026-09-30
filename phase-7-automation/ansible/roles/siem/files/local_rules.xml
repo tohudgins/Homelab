@@ -1047,7 +1047,7 @@
   <!-- The injected `1:misp:{...}` event is valid JSON, so Wazuh's built-in json
        decoder flattens it (integration, misp.value, misp.source.*). Key on that,
        not a custom decoded_as. -->
-  <rule id="100300" level="3">
+  <rule id="100300" level="0">
     <decoded_as>json</decoded_as>
     <field name="integration">^misp$</field>
     <description>MISP integration event</description>
@@ -1064,10 +1064,26 @@
     <group>threat_intel,attack,</group>
   </rule>
 
-  <rule id="100302" level="5">
+  <!-- One of these is raised for EVERY alert the integration tries to enrich. The error text
+       contains MISP's own IP, so as a level-5 alert it re-triggered another lookup and another
+       error: a self-sustaining loop that fired ~200 times in 20 minutes with misp-01 down and
+       buried the real detections in Discover. Level 2 is below the alert threshold (3), so it is
+       not an alert and cannot feed the integration (which triggers at level 3), but the event is
+       still recorded so 100303 can count it. Not noalert="1" (Wazuh keeps scanning and settles on
+       the generic rule 1002) and not level 0 (not retained for frequency correlation). -->
+  <rule id="100302" level="2">
     <if_sid>100300</if_sid>
     <field name="misp.error">\.+</field>
     <description>MISP: integration error — $(misp.error)</description>
+    <group>threat_intel,</group>
+  </rule>
+
+  <!-- The signal worth keeping: threat-intel enrichment is offline. `ignore` is correct on
+       this rule (unlike the per-target brute-force rules) because it reports one global
+       condition, not a per-account/IP one: alert once, then stay quiet for 10 minutes. -->
+  <rule id="100303" level="7" frequency="5" timeframe="300" ignore="600">
+    <if_matched_sid>100302</if_matched_sid>
+    <description>MISP integration failing — threat-intel enrichment is offline (is misp-01 up?). Latest error: $(misp.error)</description>
     <group>threat_intel,</group>
   </rule>
 

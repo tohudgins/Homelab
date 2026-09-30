@@ -130,6 +130,16 @@ Gotchas that cost real time (each one looked like a broken detection):
   Fix: `pkill -f 'ssh.*ansible/cp'; rm -f ~/.ansible/cp/*`.
 - **Only one rule fires per event.** Two rules matching the same event don't both alert; the first sibling
   wins (that's why the 7-Zip image-name rule 100518 stays quiet when the `OriginalFileName` rule 100517 fires).
+- **misp-01 is off in most profiles, and that used to flood the dashboard.** The manager looks up every
+  alert's IPs/hashes in MISP; each failed lookup raised its own alert (`100302`), whose text contains
+  MISP's IP, which triggered another lookup: a loop of ~200 alerts per 20 minutes that buried real
+  detections. Errors are now silent, and you get one level-7 alert, `100303` ("MISP integration failing"),
+  at most every 10 minutes. It means enrichment is offline, not that something is under attack. Start
+  misp-01 (`make up PROFILE=soc-ops`, mind the RAM ceiling) if you want it gone.
+- **Silencing a Wazuh rule: use a level below 3, not `noalert="1"` or level 0.** `noalert` makes Wazuh keep
+  scanning and settle on a generic catch-all rule, and level 0 isn't retained for frequency correlation;
+  a correlation rule downstream then never sees the match. Level 1–2 is quiet *and* countable (see the
+  comment on rule 100302).
 
 ### Vulnerability scanning (scan-01 / Greenbone CE)
 
