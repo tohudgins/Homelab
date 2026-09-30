@@ -4,10 +4,10 @@ A segmented, reproducible security lab built on Apple Silicon (VMware Fusion, AR
 a hand-built Linux router/firewall, Wazuh SIEM, and a full detection-engineering loop from attack simulation
 to written detection to evasion attempt.
 
-**All 8 build phases (0–7) complete.** The detection catalog runs to **50 ATT&CK techniques** across
-**13 of ATT&CK's 14 tactics**, almost all verified end-to-end against real, live-fired attacks — not just
-written and assumed to work. A capstone end-to-end intrusion emulation chains 7 phases into one detected
-kill chain. Full status and rationale: [`README`](https://github.com/tohudgins/Homelab).
+**All 8 build phases (0–7) complete.** The detection catalog runs to **56 ATT&CK techniques** across
+**13 of ATT&CK's 14 tactics**, **51 verified end-to-end** by an automated attack→detect→PASS harness
+(`purple-team.py`/`ad-validate.py`), not just written and assumed to work. A capstone end-to-end intrusion
+emulation chains 7 phases into one detected kill chain. Full status and rationale: [`README`](https://github.com/tohudgins/Homelab).
 
 ## Where to start
 

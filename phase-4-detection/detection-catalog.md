@@ -1232,11 +1232,6 @@ actual point of running this rather than just chasing the percentage up.
 
 ---
 
-*(Additional techniques added as Phase 4 progresses — target is 8–12 total per the build plan, covering
-both dc-01/rtr-01 Linux telemetry and ws-01 Windows/Sysmon telemetry once ws-01 is back online.)*
-
----
-
 ## Phase 5 additions (offense-in-context)
 
 Two custom detections written to close gaps found while executing a BloodHound-mapped attack path from the
