@@ -90,3 +90,19 @@ tool (snapshot API, `mysqldump`, `pg_dump`). A single generic "tar the data dire
 either unsafe (raw copy of a live database's files) or silently incomplete (missing the GPG keyring, say).
 Three small, service-native scripts, one per service role — same principle as this repo's per-service
 Ansible roles, not a monolithic "ops" script trying to know about everything.
+
+## Known limitation, closed 2026-09-30 — these backups shared a disk with the data they protect
+
+All three mechanisms above write to a directory on the *same host*, and same underlying VM disk, as the
+data they protect (`/var/lib/wazuh-indexer-snapshots` on siem-01; `/opt/misp-docker/backups` and
+`/opt/iris-web/backups` on misp-01). That's a real backup against **logical** loss — a bad query, an
+accidental index delete, app-level corruption — which is what the restore drill above actually proves. It
+does nothing against **physical** loss: if that one disk dies, the live data and its backup die together.
+
+`make backup-pull` (`scripts/pull-backups.sh`) closes this by pulling each backup onto the control node —
+a different physical disk, reachable because the control node already has one-way SSH access to every VM
+(pull-based, not push-based: no new inbound listener or firewall rule needed on the VMs' side). Deliberately
+bounded, not a second unbounded copy: Wazuh's snapshot repo and IRIS mirror in full (both small; OpenSearch
+snapshots are incremental), but MISP only pulls its *latest* dump, not the full 30-day retention window —
+each MISP dump is ~650M and non-incremental, so mirroring all of them would eventually cost tens of GB on a
+host already tight on disk. See `docs/RUNBOOK.md` §4.

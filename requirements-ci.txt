@@ -1,0 +1,22 @@
+# Pinned exact versions of every linter/tool ci.yml installs, consolidated so
+# there is exactly one place these versions live (previously duplicated as
+# separate `pip install "x==y"` lines across 5 different ci.yml jobs, hand-kept
+# in sync with docs/RUNBOOK.md's local-check commands) and so Dependabot has a
+# real manifest to watch for CVEs/updates in the tooling itself, not just the
+# lab's own code. See docs/RUNBOOK.md §6 for the local-check commands, and
+# .github/dependabot.yml for the update schedule.
+#
+# Do NOT `pip install -r requirements-ci.txt` as one blanket install: sigma-cli
+# and semgrep have genuinely conflicting transitive dependencies (confirmed via
+# `pip install -r` — ResolutionImpossible) and were never installed into the
+# same environment before this file existed either (each ci.yml job always
+# installed only its own tool). Each ci.yml job extracts just its own line(s)
+# via `grep`; do the same locally, e.g.:
+#   pip install "$(grep -m1 '^ruff==' requirements-ci.txt)"
+yamllint==1.38.0
+ansible-lint==26.8.0
+ruff==0.15.14
+sigma-cli==3.1.0
+pyyaml==6.0.3
+defusedxml==0.7.1
+semgrep==1.168.0

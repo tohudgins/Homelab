@@ -18,7 +18,7 @@ Everything runs through `scripts/lab.sh`, wrapped by a `Makefile`:
 make status                 # power state of every VM
 make up PROFILE=soc         # start a run profile's VMs
 make converge                     # ansible-playbook site.yml (bring config to desired state)
-make converge PLAY=misp.yml       # or iris.yml / velociraptor.yml / osquery.yml — site.yml does NOT include these
+make converge PLAY=misp.yml       # or iris.yml / velociraptor.yml / osquery.yml / patch.yml — site.yml does NOT include these
 make down                   # suspend everything running
 make stop                   # clean poweroff of everything
 make snapshot NAME=clean    # snapshot every running VM
@@ -59,9 +59,9 @@ every tunnel `make dashboards` opened.
 | `services` | rtr-01 dc-01 siem-01 fs-01 dmz-01 | file/web services + monitoring |
 
 `site.yml` (what plain `make converge` runs) covers rtr-01/dc-01/siem-01/dmz-01/fs-01/scan-01/ws-01 only —
-**misp-01 (MISP + IRIS), Velociraptor, and osquery are standalone plays**, run explicitly with
-`PLAY=misp.yml`, `PLAY=iris.yml`, `PLAY=velociraptor.yml`, or `PLAY=osquery.yml` the first time each is
-needed.
+**misp-01 (MISP + IRIS), Velociraptor, osquery, and the patch cycle are standalone plays**, run explicitly with
+`PLAY=misp.yml`, `PLAY=iris.yml`, `PLAY=velociraptor.yml`, `PLAY=osquery.yml`, or `PLAY=patch.yml` (see
+"Patching" below — always preview it first) the first time each is needed.
 
 ## 2. Run a simulation (the detection loop)
 
@@ -174,6 +174,49 @@ ssh scan-01 'sudo /opt/greenbone/greenbone-scan.sh status'  # watch progress
   `soc-ops`) instead — the GSA report already has everything Greenbone found, so
   nothing is lost by not running both stacks at once.
 
+### Patching (closing the vulnerability-management loop)
+
+Scanning finds problems; this fixes them — `scan → patch → rescan`. Manual and on-demand by design
+(`phase-7-automation/ansible/patch.yml`), never on a timer: parts of this stack are version-sensitive and
+drift has broken it before, so what gets patched is a deliberate act.
+
+```bash
+make up PROFILE=...                                            # the hosts you're about to patch
+( cd phase-7-automation/ansible && ansible-playbook patch.yml --check --diff )   # PREVIEW — read it
+make converge PLAY=patch.yml                                   # apply
+make converge                                                  # re-converge: must stay changed=0
+make stop && make up PROFILE=...                               # real reboot if the play said REBOOT REQUIRED
+```
+
+What it does: holds every installed Wazuh-family, `filebeat` and Zeek package where it is, then
+`apt dist-upgrade`s everything else, `autoremove`s superseded kernels, clears the apt cache, and **reports**
+(never performs) `reboot-required`. Live-verified 2026-09-30 on rtr-01 (Debian 13) and dc-01/siem-01/dmz-01
+(Ubuntu 26.04): ~60–78 packages per host, zero failures, re-converge `changed=0` on all four, every held
+package unchanged, disk net-neutral (rtr-01 +0.3G, others unchanged at 0.1G resolution).
+
+Things this play exists because of — each found by **simulating the upgrade first** (`apt-get -s upgrade`),
+not by reading docs:
+
+- **A blanket upgrade would have broken the SIEM.** siem-01's `wazuh-manager`/`indexer`/`dashboard` are held by
+  *no* role (only the agent is, and only on dmz-01/fs-01) — `apt upgrade` would have moved all three
+  4.14.7 → 4.14.8, past every pinned agent, skipping Wazuh's own upgrade procedure. dc-01's agent (installed
+  out-of-band; `roles/dc` only configures it) would have jumped past its manager too. The hold list is built
+  from what's actually installed, so it also caught a `wazuh-agent` on rtr-01 nobody expected.
+- **`make down` never loads a new kernel.** Suspend/resume keeps whatever kernel the VM booted with. dmz-01 had
+  7.0.0-34 installed but was still *running* 7.0.0-31. Only a real power cycle (`make stop`) picks it up — after
+  which nginx, Docker, the agent and Juice Shop-via-nginx were all confirmed healthy from a genuine boot.
+- **Not held on purpose** (they need patching too, but restart something live — read the `--check` output):
+  `samba*`/`krb5*` on dc-01, `docker.io`/`containerd` on the app hosts (the MISP/IRIS/Greenbone stacks are slow to
+  come back), `dnsmasq` on rtr-01 (briefly interrupts DHCP/DNS for every segment).
+- **Scope:** Linux fleet only. ws-01 (Windows) needs Windows Update / `ansible.windows`, not built.
+
+**Known hole this surfaced — rtr-01 is not rebuildable from blank as verified.** `roles/router` installs Zeek
+*unpinned*, and the upstream repo now offers **only 9.0.0** (8.2.1 exists solely in rtr-01's local dpkg state —
+confirmed via `apt-cache policy zeek`). The live sensor runs 8.2.1, held; a from-blank rebuild today would
+install 9.0.0, untested against `zeek-node.cfg`/`zeek-networks.cfg` or the phase-6 DNS-hunting scripts (written
+against 8.x log formats). Pinning the role to 8.2.1 would instead make the rebuild *fail*. The fix is a decision,
+not an edit: validate the lab on Zeek 9, or archive the 8.2.1 packages while they still exist on rtr-01.
+
 ## 3. Add a new host (the scalability story)
 
 The lab scales by the same pattern every existing host follows — this is why it's
@@ -196,18 +239,51 @@ built on Ansible roles, not hand config:
 New segments scale the same way: create the vmnet (DHCP off), add an nftables
 stanza to the `router` role, converge rtr-01.
 
+### Testing a firewall change safely (and recovering if you lock yourself out)
+
+rtr-01 is both the firewall *and* the only SSH jump host into every internal segment
+(`docs/00-ip-plan.md`) — a bad nftables change can lock you out of the whole network in
+one `nft -f`, with the router role's own reload handler (deliberately not the Ansible
+converge path). Two layers, for the two moments this actually happens:
+
+**Before committing a change — test it live with an auto-revert safety net:**
+```bash
+ssh rtr-01-root                                          # sudo isn't installed on rtr-01
+nft list ruleset > /tmp/candidate.conf                   # start from the live ruleset
+vim /tmp/candidate.conf                                  # make your change — keep the `flush ruleset` line
+nft-safe-apply.sh /tmp/candidate.conf 5                  # apply, auto-reverts in 5 min unless confirmed
+# ... from a NEW session, confirm you can still reach everything you expect to ...
+nft-safe-apply.sh confirm                                # only if it's actually safe
+```
+Same commit-confirm pattern production network gear (`Junos`/`IOS-XR`'s `commit confirmed`)
+builds in natively. If you don't confirm — including if the change broke your access and you
+*can't* — it auto-reverts to the exact pre-apply ruleset on its own; no action needed. Only
+once a change is proven safe does it get copied into
+`phase-7-automation/ansible/roles/router/files/nftables.conf` and converged for real. Live-fire
+tested (2026-09-30): apply → wait → unconfirmed auto-revert (byte-identical ruleset restored,
+confirmed via diff) and apply → confirm → change persists past the same timeout, both clean.
+
+**If you're already locked out anyway:** the safe-apply tool only helps if you used it *before*
+the bad change. If SSH to rtr-01 is just gone — VMware Fusion's console window reaches the VM
+directly, independent of any network path through it (the same role an iLO/iDRAC plays on real
+hardware): open Fusion, select `rtr-01`, use the console to log in locally and run
+`nft -f /etc/nftables.conf` (the known-good, committed ruleset) to recover.
+
 ## 4. Where things live
 
 | Need | Location |
 |---|---|
 | IP plan / segments | `docs/00-ip-plan.md` |
 | Firewall / DHCP / DNS / NSM config | `phase-7-automation/ansible/roles/router/` |
+| Firewall change testing / OOB recovery | §3 above ("Testing a firewall change safely") — `nft-safe-apply.sh` on rtr-01 |
 | AD config + deliberate weaknesses | `roles/dc/` + `phase-2-identity/known-weaknesses.md` |
 | Detection rules/decoders | `roles/siem/` + `phase-4-detection/` |
 | Attack writeups + BloodHound | `phase-5-offense/` |
 | NSM / PCAP analysis | `phase-6-nsm/` |
 | Archive/alert log retention (siem-01, cron 03:30 daily) | `roles/siem/files/wazuh-log-retention.sh` (90-day default, `wazuh_log_retention_days`) |
 | App-level backup/restore (Wazuh/MISP/IRIS, daily cron) | [`docs/backup-restore.md`](backup-restore.md) |
+| **Off-host copy of those backups** (they otherwise share a disk with the data they protect) | `make backup-pull` (`scripts/pull-backups.sh`) → `~/Homelab-backups/` on this Mac. On-demand, not scheduled — run it yourself, or add it to your own crontab. Bounded: mirrors Wazuh's snapshot repo + IRIS in full (both small; OpenSearch snapshots are incremental), but only MISP's *latest* DB+state dump, not the full 30-day retention window (each dump is ~650M and non-incremental — mirroring all of them would eventually add tens of GB) |
+| Does a manager restart/outage lose telemetry? | [`docs/pipeline-resilience.md`](pipeline-resilience.md) — live-tested: no, the agent-side queue survives it |
 | "Who watches the watchmen" — siem-01 external availability check (rtr-01, cron every 5 min) | `roles/router/files/monitor-siem-availability.sh` → `/var/log/siem-monitor.log` on rtr-01 (state-transition only, no spam) |
 | siem-01's own cron-job failure alerting (retention + snapshot-backup) | `/var/log/cron-failures.log` on siem-01, fed into Wazuh's own pipeline — rule 100563, reaches IRIS |
 | Velociraptor DFIR→SIEM escalation (daily cron, siem-01) | `phase-4-detection/velociraptor/velociraptor-hunt-escalate.py` — rules 100564–100566, reaches IRIS |
@@ -244,9 +320,14 @@ detection/infra team runs on the parts that don't execute in CI. Each job maps t
 a command you can run locally:
 
 ```bash
-# one-time: the linters CI uses
-pip install "yamllint==1.38.0" "ansible-lint==26.8.0" "ruff==0.15.14" "sigma-cli==3.1.0" \
-            "pyyaml==6.0.3" "defusedxml==0.7.1" "semgrep==1.168.0"
+# one-time: the linters CI uses (versions pinned in requirements-ci.txt —
+# Dependabot watches that file, so this stays in sync with ci.yml automatically).
+# sigma-cli and semgrep have conflicting transitive deps, so install per-tool
+# from that file rather than as one blanket `-r requirements-ci.txt` — same
+# pattern each ci.yml job uses:
+for t in yamllint ansible-lint 'sigma-cli\|pyyaml\|defusedxml' ruff semgrep; do
+  pip install $(grep -E "^($t)==" requirements-ci.txt)
+done
 ansible-galaxy collection install -r phase-7-automation/ansible/collections/requirements.yml
 
 # the checks (each is one CI job)
@@ -293,8 +374,8 @@ every push to `main` — kept out of `ci.yml` deliberately, so a docs-only chang
 static-validation suite and vice versa.
 
 ```bash
-# one-time: the site-building tools
-pip install mkdocs==1.6.1 mkdocs-material==9.7.7 mkdocs-callouts==1.17.1
+# one-time: the site-building tools (versions pinned in requirements-docs.txt)
+pip install -r requirements-docs.txt
 
 mkdocs serve      # live preview at http://127.0.0.1:8000 while editing
 mkdocs build      # writes site/ (gitignored) — what CI publishes

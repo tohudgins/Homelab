@@ -219,6 +219,22 @@
     minute: "*/5"
     job: "SIEM_HOST={{ siem_monitor_host }} SIEM_PORT={{ siem_monitor_port }} /usr/local/sbin/monitor-siem-availability.sh"
 
+# --- nft-safe-apply: commit-confirm safety net for hand-testing firewall ------
+# changes on rtr-01 (an architectural-gap review, 2026-09-30): rtr-01 is both
+# the firewall AND the only SSH jump host into every internal segment, with no
+# documented recovery if a bad ruleset locks you out. This is a manual tool
+# (never invoked by Ansible itself, on purpose — `make converge` is meant to
+# be unattended, and a mandatory confirm-or-revert would make every converge
+# revert itself). See the script's own header, and docs/RUNBOOK.md's OOB
+# recovery note for the "I locked myself out anyway" fallback.
+- name: Deploy the nftables commit-confirm safe-apply tool
+  ansible.builtin.copy:
+    src: nft-safe-apply.sh
+    dest: /usr/local/sbin/nft-safe-apply.sh
+    owner: root
+    group: root
+    mode: "0750"
+
 - name: Ensure logrotate is installed (minimal Debian doesn't ship it)
   ansible.builtin.apt:
     name: logrotate

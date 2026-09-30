@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install "yamllint==1.38.0"
+      - run: pip install "$(grep -m1 '^yamllint==' requirements-ci.txt)"
       - name: yamllint (errors fail; long-line warnings inform)
         run: yamllint .
 
@@ -42,7 +42,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install "ansible-lint==26.8.0"
+      - run: pip install "$(grep -m1 '^ansible-lint==' requirements-ci.txt)"
       - name: Install collection dependencies
         run: ansible-galaxy collection install -r phase-7-automation/ansible/collections/requirements.yml
       - name: Provide a throwaway vault password (ansible.cfg references one)
@@ -61,7 +61,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install "sigma-cli==3.1.0" "pyyaml==6.0.3" "defusedxml==0.7.1"
+      - run: pip install $(grep -E '^(sigma-cli|pyyaml|defusedxml)==' requirements-ci.txt)
       - name: sigma check (schema-validate the detection rules)
         run: sigma check phase-4-detection/sigma/rules/
       - name: sigma-to-wazuh --check (fail on any unsupported/skipped rule)
@@ -88,7 +88,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install "ruff==0.15.14"
+      - run: pip install "$(grep -m1 '^ruff==' requirements-ci.txt)"
       - run: ruff check .
       - name: Rule 100563 allowlist covers every siem-01 cron-failure writer
         run: python3 scripts/check-cron-failure-allowlist.py
@@ -103,7 +103,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install "semgrep==1.168.0"
+      - run: pip install "$(grep -m1 '^semgrep==' requirements-ci.txt)"
       # p/python alone, not stacked with another overlapping registry config
       # (e.g. p/security-audit) — confirmed locally that loading two configs
       # which both register the same rule ID under the hood makes `# nosemgrep`

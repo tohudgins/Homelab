@@ -1,0 +1,31 @@
+version: 2
+
+# Watches the repo's OWN tooling supply chain — the linters/SAST/secret-scan
+# versions ci.yml and docs.yml pin, and the GitHub Actions those workflows
+# run — for CVEs and updates. Everything else in this repo (Ansible roles,
+# Wazuh rules, Sigma detections) is the lab's own code, already covered by
+# CI's static validation; this is specifically for third-party tooling drift,
+# the same class of risk gitleaks/semgrep/Trivy already watch for elsewhere.
+#
+# ansible-galaxy collections (phase-7-automation/ansible/collections/requirements.yml)
+# aren't listed: Dependabot has no ansible-galaxy ecosystem as of this writing,
+# and those collections aren't even version-pinned yet (always installs
+# latest) — nothing for Dependabot to bump. Revisit if that ever changes.
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      ci-tooling:
+        patterns:
+          - "*"

@@ -36,7 +36,7 @@ jobs:
       # Pinned exact versions, same convention as the linters in ci.yml
       # (see docs/RUNBOOK.md's local-check commands).
       - name: Install MkDocs Material
-        run: pip install mkdocs==1.6.1 mkdocs-material==9.7.7 mkdocs-callouts==1.17.1
+        run: pip install -r requirements-docs.txt
       # Not --strict: 4 pre-existing cross-links in the phase docs point at
       # things genuinely outside the docs site's scope (the top-level README,
       # .github/workflows/ci.yml, two ../docs/design-decisions.md links whose

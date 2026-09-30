@@ -1,0 +1,139 @@
+---
+# ===========================================================================
+# patch.yml — manual, on-demand OS patch cycle for the Linux fleet.
+#
+# Real gap this closes (architectural review, 2026-09-30): Greenbone + Wazuh's
+# vuln module both scan and report real findings (9,888 CVEs across the
+# fleet, several CVSS 10.0 — see phase-4-detection/vulnerability-management-
+# active-vs-passive.md) but nothing in this repo ever closed the loop. A
+# vulnerability-management PROGRAM is scan -> patch -> rescan; this lab only
+# ever did the first third, indefinitely.
+#
+# Deliberately NOT `unattended-upgrades` / automatic: parts of this stack are
+# version-sensitive on purpose, and drift has broken it before (see the holds
+# below). Auto-patching a version-pinned stack on a timer is how you
+# re-introduce exactly that breakage. This runs when you choose to run it,
+# patches everything NOT held, and leaves you to re-converge + re-scan to prove
+# the loop closed.
+#
+# ALWAYS preview first:   ansible-playbook patch.yml --check --diff
+# Read what it would change before applying, especially on these judgment
+# calls that this play does NOT hold, because they need patching too, but
+# restart a live service when they land:
+#   - samba*/krb5*/ldb on dc-01 (restarts the domain controller's services)
+#   - docker.io/containerd on dmz-01, misp-01, scan-01 (bounces every container;
+#     the MISP/IRIS/Greenbone stacks are slow to come back)
+#   - dnsmasq on rtr-01 (briefly interrupts DHCP/DNS for every internal segment)
+#
+# Reboots: this play REPORTS `reboot-required` but never reboots anything. And
+# note `make down` (suspend/resume) NEVER loads a newly installed kernel — a
+# resumed VM keeps running whatever it booted with, for weeks if need be. Found
+# live (2026-09-30): dmz-01 had kernel 7.0.0-34 installed but was still running
+# 7.0.0-31, reboot-required: YES. To actually pick up a new kernel: `make stop`
+# then `make up PROFILE=...` (a real power cycle), not `make down`.
+#
+# Scope: the Linux fleet only (routers + internal groups) — ws-01 (Windows)
+# needs a different mechanism (Windows Update / ansible.windows) and is out
+# of scope here; it was also the one host the vuln-management data showed
+# near-zero findings for (agent offline at scan time notwithstanding), so
+# the Linux fleet is where the real exposure actually is.
+#
+# Usage: ansible-playbook patch.yml --check --diff   (preview)
+#        ansible-playbook patch.yml                  (apply)
+# Then:  ansible-playbook site.yml    (re-converge — should stay changed=0)
+#        re-run a Greenbone/Wazuh-vuln scan to confirm the finding count drops
+# ===========================================================================
+- name: Patch the Linux fleet (manual, on-demand)
+  hosts: all:!windows
+  become: true
+  tasks:
+    - name: Gather installed-package facts (to build the hold list from what's actually installed)
+      ansible.builtin.package_facts:
+        manager: apt
+      when: ansible_facts.os_family == "Debian"
+
+    # Found by simulating `apt-get -s upgrade` on every host BEFORE the first
+    # real run (2026-09-30), not assumed. A blanket upgrade would have:
+    #   - bumped wazuh-manager, wazuh-indexer AND wazuh-dashboard on siem-01
+    #     from 4.14.7 to 4.14.8. None of the three is held by any role (only
+    #     the AGENT is held, and only by roles/dmz and roles/fileserver), so
+    #     the SIEM would have drifted ahead of every pinned agent and skipped
+    #     Wazuh's own documented upgrade procedure entirely;
+    #   - bumped dc-01's wazuh-agent past its own manager's version. (roles/dc
+    #     only CONFIGURES that agent and asserts it exists — it was installed
+    #     out-of-band — and nothing holds it.) An agent NEWER than its manager
+    #     is unsupported and can fail to enroll or report at all;
+    #   - jumped rtr-01's Zeek from 8.2.1 to 9.0.0, a MAJOR version, on the
+    #     inline NSM sensor — the router role's node.cfg/networks.cfg and the
+    #     phase-6 DNS-hunting scripts were written and verified against 8.x
+    #     log formats, and a major bump can change both silently. NOTE: 8.2.1
+    #     is no longer offered by the upstream repo at all (only 9.0.0 is), and
+    #     roles/router installs Zeek unpinned — so this hold is the only thing
+    #     keeping the verified version on the live host, and a from-blank
+    #     rebuild of rtr-01 would get 9.0.0 (see docs/RUNBOOK.md, patching);
+    #   - (filebeat 7.10.2 is deliberately the last OSS build that speaks to
+    #     the OpenSearch-based indexer; any newer Elastic filebeat won't.)
+    # The list is built from what's actually INSTALLED (by name pattern), not a
+    # hardcoded per-host list, so it stays correct as the package set changes —
+    # it even caught a wazuh-agent on rtr-01 that a per-host list would have
+    # missed — and is a no-op on hosts with none of these (misp-01, scan-01).
+    - name: Hold every installed Wazuh-family, filebeat and Zeek-family package at its current version
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop: "{{ (ansible_facts.packages | default({})).keys() | select('match', '^(wazuh-|filebeat$|zeek|libbroker)') | list }}"
+      when: ansible_facts.os_family == "Debian"
+
+    - name: Update apt package index
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 0
+      when: ansible_facts.os_family == "Debian"
+
+    # `dist`, not `safe`: a new kernel arrives as a NEW package name
+    # (linux-image-<version>), which plain `apt-get upgrade` never installs —
+    # it keeps the linux-image-generic metapackage back instead. `safe` would
+    # look like patching while silently skipping the very kernel CVEs that
+    # motivated this play. Holds above are still respected by dist-upgrade
+    # (it keeps back anything that would require changing a held package).
+    - name: Upgrade all non-held packages (dpkg holds are respected)
+      ansible.builtin.apt:
+        upgrade: dist
+      register: patch_result
+      when: ansible_facts.os_family == "Debian"
+
+    # Disk: measured live (2026-09-30), a patch cycle is net-NEUTRAL on disk —
+    # rtr-01 grew 2.3G -> 2.6G, siem-01/dmz-01/dc-01 were unchanged at df's 0.1G
+    # resolution. These two tasks are what keep it neutral rather than growing
+    # (the ~60 upgraded packages per host, and the superseded 7.0.0-31 kernel
+    # images, would otherwise accumulate), not a reclaim of pre-existing space.
+    - name: Remove now-unneeded packages (superseded kernels, orphaned dependencies)
+      ansible.builtin.apt:
+        autoremove: true
+        purge: true
+      register: autoremove_result
+      when: ansible_facts.os_family == "Debian"
+
+    # `clean`, not `autoclean`: autoclean only drops .debs that are already
+    # obsolete, so it would leave the just-installed versions' downloads (the
+    # linux-firmware-* packages alone are hundreds of MB) sitting in
+    # /var/cache/apt/archives on every VM. Nothing needs them after install.
+    - name: Clear the local apt package cache (downloaded .debs)
+      ansible.builtin.apt:
+        clean: true
+      when: ansible_facts.os_family == "Debian"
+
+    - name: Check whether a reboot is required (new kernel/libc installed)
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+      when: ansible_facts.os_family == "Debian"
+
+    - name: Report this host's patch result
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}:
+          {{ 'packages upgraded, ' if patch_result.changed | default(false) else 'already up to date, ' }}
+          {{ 'packages removed, ' if autoremove_result.changed | default(false) else '' }}
+          {{ 'REBOOT REQUIRED (make stop, not make down)' if reboot_required.stat.exists | default(false) else 'no reboot needed' }}
+      when: ansible_facts.os_family == "Debian"
