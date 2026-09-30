@@ -8,3 +8,17 @@
   ansible.builtin.systemd:
     name: systemd-timesyncd
     state: restarted
+
+- name: Restart nginx
+  # Real bug found live (2026-09-30): Debian's nginx-light postinst starts the
+  # service immediately on install, before this role's site config exists —
+  # nginx then holds its listen sockets via systemd socket inheritance
+  # ("using inherited sockets from 5;6" in error.log). A plain reload re-reads
+  # nginx.conf but did NOT bind the newly-added :3000 listener from the
+  # juiceshop site — confirmed via `ss -tlnp` showing only :80 after reload,
+  # :3000 appearing only after a full `systemctl restart`. Restart on every
+  # config/site change, not reload, so a blank-host converge self-heals this
+  # instead of silently leaving Juice Shop's public port unbound.
+  ansible.builtin.systemd:
+    name: nginx
+    state: restarted

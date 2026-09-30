@@ -62,11 +62,98 @@
   register: dmz_containers
   changed_when: false
 
+- name: Check whether Juice Shop is still bound directly to 0.0.0.0 (pre-nginx layout)
+  ansible.builtin.shell: |
+    set -o pipefail
+    docker port {{ juiceshop_name }} 3000/tcp | grep -q '^0\.0\.0\.0:'
+  register: juiceshop_direct_bind
+  changed_when: false
+  failed_when: false
+  when: juiceshop_name in dmz_containers.stdout_lines
+
+- name: Recreate Juice Shop bound to loopback only (nginx becomes the public listener)
+  # Migration for hosts built before the nginx reverse-proxy layer: the old
+  # `-p 3000:3000` bound Juice Shop to every interface. The "Deploy" task below
+  # is idempotent on container *existence*, not its port mapping, so a plain
+  # converge would never fix an already-running container's binding — remove
+  # it here so the Deploy task's existence check re-creates it correctly.
+  ansible.builtin.command: docker rm -f {{ juiceshop_name }}
+  when: >-
+    juiceshop_direct_bind.rc is defined
+    and juiceshop_direct_bind.rc == 0
+
+- name: Refresh container list after any removal
+  ansible.builtin.command: docker ps -a --format '{{ "{{" }}.Names{{ "}}" }}'
+  register: dmz_containers
+  changed_when: false
+
 - name: Deploy OWASP Juice Shop (the vulnerable web app)
   ansible.builtin.command: >-
     docker run -d --name {{ juiceshop_name }} --restart unless-stopped
-    -p {{ juiceshop_port }}:3000 {{ juiceshop_image }}
+    -p 127.0.0.1:{{ juiceshop_backend_port }}:3000 {{ juiceshop_image }}
   when: juiceshop_name not in dmz_containers.stdout_lines
+
+# --- nginx reverse proxy (host-side access logging — see defaults/main.yml) ---
+- name: Install nginx
+  ansible.builtin.apt:
+    name: nginx-light
+    state: present
+
+- name: Disable the default nginx site (unrelated, unconfigured attack surface on :80)
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Restart nginx
+
+- name: Configure the Juice Shop reverse-proxy site + access-log format
+  ansible.builtin.copy:
+    dest: /etc/nginx/sites-available/juiceshop
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by Ansible (roles/dmz). Reverse-proxies the public port to
+      # Juice Shop's loopback-only backend, and logs the request line, status,
+      # POST body, and User-Agent — the host-side complement to rtr-01's
+      # inline Suricata (sids 9100020-9100024) on the SAME traffic, since Juice
+      # Shop itself logs no per-request lines of its own (confirmed live).
+      # key=value shape deliberate, not combined/common log format: a
+      # combined-log-shaped line (IP - [time] "REQUEST" status ...) collided
+      # with Wazuh's own stock `web-accesslog` decoder, which fired its
+      # generic rule 31122 instead of ours even with a leading marker token —
+      # confirmed via wazuh-logtest, not assumed. This shape can't collide.
+      log_format juiceshop_lab 'JSWEB_JUICESHOP time="$time_local" srcip=$remote_addr '
+                                'method=$request_method uri="$request_uri" '
+                                'proto=$server_protocol status=$status '
+                                'body="$request_body" ua="$http_user_agent"';
+
+      server {
+        listen {{ juiceshop_public_port }};
+        server_name dmz-01;
+
+        access_log {{ juiceshop_nginx_access_log }} juiceshop_lab;
+
+        location / {
+          proxy_pass http://127.0.0.1:{{ juiceshop_backend_port }};
+          proxy_set_header Host $host;
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_http_version 1.1;
+        }
+      }
+  notify: Restart nginx
+
+- name: Enable the Juice Shop nginx site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/juiceshop
+    dest: /etc/nginx/sites-enabled/juiceshop
+    state: link
+  notify: Restart nginx
+
+- name: Enable and start nginx
+  ansible.builtin.systemd:
+    name: nginx
+    enabled: true
+    state: started
 
 # --- Time sync to rtr-01 (lab time authority; Wazuh correlates by timestamp) --
 # Minimal Ubuntu Server doesn't ship the NTP client — install it, or the config
@@ -143,6 +230,19 @@
       </ossec_config>
   notify: Restart wazuh-agent
 
+- name: Ingest the nginx Juice Shop access log into Wazuh (host-side T1190 detection)
+  ansible.builtin.blockinfile:
+    path: /var/ossec/etc/ossec.conf
+    marker: "<!-- {mark} ANSIBLE MANAGED: dmz nginx access log -->"
+    block: |
+      <ossec_config>
+        <localfile>
+          <log_format>syslog</log_format>
+          <location>{{ juiceshop_nginx_access_log }}</location>
+        </localfile>
+      </ossec_config>
+  notify: Restart wazuh-agent
+
 - name: Enable and start the Wazuh agent
   ansible.builtin.systemd:
     name: wazuh-agent
@@ -150,9 +250,9 @@
     state: started
 
 # --- Verify -------------------------------------------------------------------
-- name: Verify Juice Shop answers on its port
+- name: Verify Juice Shop answers through the nginx reverse proxy on its public port
   ansible.builtin.uri:
-    url: "http://127.0.0.1:{{ juiceshop_port }}/"
+    url: "http://127.0.0.1:{{ juiceshop_public_port }}/"
     status_code: 200
     timeout: 20
   register: js_check

@@ -1210,6 +1210,64 @@
 
 <!--
   ============================================================================
+  DMZ web attack, host-side layer (gap-10 fix, 2026-09-30) — the "possible
+  next step, noted not built" the T1190 writeup's own follow-ups section
+  named ("if Juice Shop is confirmed to log request lines to stdout..."). It
+  isn't: two real attack requests against the running container produced zero
+  new stdout lines (checked live via `docker logs`, before/after line count
+  identical). So this isn't a decoder for Juice Shop's own logs — it's an
+  nginx reverse proxy (roles/dmz) put in front of an app that logs nothing,
+  the real-world equivalent fix, feeding `juiceshop-nginx` (local_decoder.xml)
+  off a genuinely new, independent telemetry source: the host's own access
+  log, not Suricata's copy of the wire. Same traffic as 100440-100442 above,
+  deliberately not correlated into a second burst rule here — a duplicate of
+  100442 keyed on this layer would just be theater (same principle rule 100080
+  already applied to T1003.003/T1003.006 sharing one rule rather than two
+  identical ones). One rule per attack SHAPE, mirroring the Suricata sigs:
+  URI-based (SQLi/XSS/traversal — one rule, like 100440 covers all three via
+  its own alternation), POST-body SQLi (a different field, can't share the
+  URI rule), and scanner User-Agent. Patterns match encoded AND literal forms
+  (no url_decode equivalent in Wazuh pcre2) — same fix class as the Suricata
+  rules' own url_decode transform, applied by hand here instead.
+  ============================================================================
+-->
+<group name="local,web,attack,">
+
+  <rule id="100580" level="10">
+    <decoded_as>juiceshop-nginx</decoded_as>
+    <field name="http_uri" type="pcre2">(?i)(union\s+select|information_schema|or(?:\s|%20)+1(?:\s|%20)*=(?:\s|%20)*1|%27\s*or|sleep\s*\(|sleep%28|benchmark\s*\(|waitfor(?:\s|%20)+delay|&lt;script|%3cscript|onerror\s*=|onload\s*=|javascript:|\.\./|\.\.%2f|%2e%2e%2f|%2e%2e/|/etc/passwd|/proc/self/)</field>
+    <description>DMZ web attack against Juice Shop (host-side, nginx access log) — $(http_method) $(http_uri) from $(srcip)</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+    <group>web_attack,attack,</group>
+  </rule>
+
+  <rule id="100581" level="10">
+    <decoded_as>juiceshop-nginx</decoded_as>
+    <field name="request_body" type="pcre2">(?i)(union\s+select|'\s*or\s*1\s*=\s*1|\bor\b\s+1\s*=\s*1|'\s*--|sleep\s*\()</field>
+    <description>DMZ web attack against Juice Shop (host-side, nginx access log) — SQLi in POST body from $(srcip): $(request_body)</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+    <group>web_attack,attack,</group>
+  </rule>
+
+  <rule id="100582" level="8">
+    <decoded_as>juiceshop-nginx</decoded_as>
+    <field name="user_agent" type="pcre2">(?i)(sqlmap|nikto|gobuster|ffuf|dirbuster|nuclei|wpscan|masscan|acunetix|nmap\s+scripting)</field>
+    <description>DMZ web app being scanned by automated tooling (host-side, nginx access log) — $(user_agent) from $(srcip)</description>
+    <mitre>
+      <id>T1595.002</id>
+    </mitre>
+    <group>recon,attack,</group>
+  </rule>
+
+</group>
+
+
+<!--
+  ============================================================================
   YARA-on-FIM — malware detection on the fs-01 share. Two-stage:
   (1) 100450 fires on any file added/modified under the share path (a syscheck
       child) and is the trigger the `yara` active-response keys on (see the siem

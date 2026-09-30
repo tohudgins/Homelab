@@ -44,7 +44,7 @@ oversight; see `phase-5-offense/attack-detect-writeups/` to add one.
 | T1110.003 | validated | 100401 | [phase-5-offense/attack-detect-writeups/02-password-spray-smb.md](../../phase-5-offense/attack-detect-writeups/02-password-spray-smb.md) |
 | T1112 | validated | 100117, 100118 | [phase-5-offense/purple-team/README.md](../../phase-5-offense/purple-team/README.md) |
 | T1136.001 | validated | 100051, 100552 | [phase-4-detection/osquery/README.md](../osquery/README.md) |
-| T1190 | validated | 100440, 100442, suricata:9100020, suricata:9100021, suricata:9100022, suricata:9100023 | [phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md](../../phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md) |
+| T1190 | validated | 100440, 100442, 100580, 100581, suricata:9100020, suricata:9100021, suricata:9100022, suricata:9100023 | [phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md](../../phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md) |
 | T1197 | validated | 100511, 100512 | [phase-4-detection/threat-hunting/README.md](../threat-hunting/README.md) |
 | T1201 | validated | 100113 | [phase-5-offense/purple-team/README.md](../../phase-5-offense/purple-team/README.md) |
 | T1204.002 | validated | 100200, 100460 | [phase-4-detection/yara-fim/README.md](../yara-fim/README.md) |
@@ -65,4 +65,4 @@ oversight; see `phase-5-offense/attack-detect-writeups/` to add one.
 | T1560.001 | validated | 100517, 100518, 100519 | [phase-5-offense/attack-detect-writeups/14-archive-data-staging-t1560.001.md](../../phase-5-offense/attack-detect-writeups/14-archive-data-staging-t1560.001.md) |
 | T1562.001 | validated | 100060, 100506 | [phase-5-offense/attack-detect-writeups/13-security-tooling-disruption-t1562.001.md](../../phase-5-offense/attack-detect-writeups/13-security-tooling-disruption-t1562.001.md) |
 | T1569.002 | detection only | 100513, 100514 | [phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md](../../phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md) |
-| T1595.002 | validated | 100441, suricata:9100024 | [phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md](../../phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md) |
+| T1595.002 | validated | 100441, 100582, suricata:9100024 | [phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md](../../phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md) |

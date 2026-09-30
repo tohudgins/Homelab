@@ -14,7 +14,8 @@ Sensor: `rtr-01` (inline Suricata) · SIEM: `siem-01` (Wazuh manager).
 > Two real bugs found and fixed along the way: Suricata's PCRE matched the raw URL-encoded request
 > instead of the decoded one (fixed with a `url_decode` transform on rules 20–23), and Wazuh silently
 > lost the alert to a rule-precedence collision with the threat-intel CDB hit 100211 (fixed by raising
-> 100440/100441 to level 13). Full verification in §5.
+> 100440/100441 to level 13). Full verification in §5. **Host-side layer added and live-verified
+> 2026-09-30** (rules 100580–100582) — §7.
 
 ---
 
@@ -137,13 +138,81 @@ scenario (added the same night) and by hand, twice.
 
 ## 6. Notes & follow-ups
 
-- **Host-side complement (optional):** the `dmz` role already ingests the Juice Shop container logs. If
-  Juice Shop is confirmed to log request lines to stdout, a Wazuh decoder + rules on `data.log` would add a
-  host-side detection independent of the network path. Left as a documented next step rather than shipping a
-  decoder against an unverified log format.
+- **Host-side complement — closed 2026-09-30, see §7.** The premise here was wrong: Juice Shop does not
+  log request lines to stdout at all (confirmed live, not assumed). An nginx reverse proxy is the real
+  fix — the same pattern a real deployment would use in front of an app with no access logging of its own.
 - **Coverage:** T1190 is verified TP live (2026-09-07) and wired into `ad-validate.py`'s SCENARIOS as the
   "DMZ Web Attack" entry, so it counts toward "validated" once `generate-coverage.py` is next regenerated
   (deliberately not done mid-session — see the honesty note in `purple-team/README.md`'s Extending section).
 - **The `HTTP_PORTS` fix is the reusable lesson:** any app on a non-standard port silently falls outside a
   signature IDS's HTTP inspection unless you tell the sensor the port is HTTP. Worth auditing for every
   service the lab adds.
+
+---
+
+## 7. Host-side layer — closing the deferred gap (2026-09-30)
+
+§6 originally deferred a host-side decoder "if Juice Shop is confirmed to log request lines to stdout."
+It isn't, and checking that assumption instead of building on it is the point of this section.
+
+**Investigation — the premise was false.** `docker logs juice-shop` before/after two real attack requests
+(one SQLi, one XSS) against the running container: line count identical, `before=367 after=367`. Juice
+Shop logs startup diagnostics (`info:`/`warn:` lines about feature checks) but zero per-request access
+lines — there was never anything for a decoder to decode.
+
+**Real fix, not a workaround.** An nginx reverse proxy now fronts Juice Shop (`roles/dmz`): Juice Shop
+itself moves to `127.0.0.1:3001` (loopback-only), nginx listens on the public `:3000` and proxies to it,
+logging `$request`/`$status`/`$request_body`/`$http_user_agent` to its own access log. This is the
+real-world equivalent fix for "the app doesn't log itself," not a lab-only trick — reverse-proxy access
+logging in front of an app with no logging of its own is a standard production pattern.
+
+**Two real bugs found standing this up, same discipline as §5:**
+
+1. **nginx reload didn't bind the new port.** Debian's `nginx-light` postinst starts the service
+   immediately on install, before this role's site config exists, holding its listen sockets via systemd
+   socket inheritance (`using inherited sockets from "5;6"` in `error.log`). A plain `reload` re-read
+   `nginx.conf` but never bound the newly-added `:3000` listener — confirmed via `ss -tlnp` showing only
+   `:80` after reload, `:3000` appearing only after a full `systemctl restart`. Fixed by making the
+   handler restart, not reload (`roles/dmz/handlers/main.yml`).
+2. **The access-log format collided with Wazuh's own stock decoder.** A first attempt logged in
+   combined-log-ish shape (`IP - [time] "REQUEST" status ...`) with a `JSWEB ` marker prefix. Wazuh's
+   stock `web-accesslog` decoder matched it anyway — `wazuh-logtest` showed it decoding as a generic
+   Apache/nginx access line and firing stock rule **31122** ("Web server 500 error code") instead of any
+   custom rule, marker prefix and all. Wazuh decoders match across every ingested log, not just the file
+   they were written for, and a combined-log-*shaped* line is exactly what that stock decoder looks for
+   regardless of what precedes it. Fixed by switching to an unambiguous key=value log format
+   (`JSWEB_JUICESHOP time="..." srcip=... method=... uri="..." proto=... status=... body="..." ua="..."`)
+   that doesn't resemble any stock decoder — confirmed via `wazuh-logtest` decoding to the custom
+   `juiceshop-nginx` decoder and firing the intended rule, not a stock one.
+
+**Rules** (`roles/siem/files/local_rules.xml`), one per attack shape, mirroring the Suricata sigs but
+matching encoded *and* literal payload forms by hand (Wazuh pcre2 has no `url_decode` equivalent):
+
+| Rule | Field matched | Level | ATT&CK |
+|---|---|---|---|
+| 100580 | `http_uri` — SQLi/XSS/traversal (one rule, like 100440 covers all three) | 10 | T1190 |
+| 100581 | `request_body` — SQLi in the POST login-bypass body | 10 | T1190 |
+| 100582 | `user_agent` — scanner tooling | 8 | T1595.002 |
+
+No host-side burst-correlation rule: 100442 already correlates this exact traffic on the wire, and a
+duplicate keyed on this layer would be theater, not a second real detection — the same principle rule
+100080 already applied to T1003.003/T1003.006 sharing one rule instead of two identical ones.
+
+**Verification (true positive, both layers, one pass):** `wazuh-logtest` first, against real captured
+`juiceshop-access.log` lines for all three shapes — clean decode, correct rule, correct MITRE tag, no
+stock-decoder collision. Then live: re-ran the *same, unmodified* `web-attacks/web-attack-scan.sh` from
+atk-01 against the now-proxied port 3000 and counted `alerts.json` for the whole run:
+
+```
+100440: 36   100441: 40   100442: 4      (wire — Suricata/eve.json, unchanged from §5)
+100580: 5    100581: 1    100582: 9      (host — nginx access log, new)
+```
+
+Same attack, same run, two independent telemetry sources both firing — the paired-sensor principle
+Phase 6 established for Suricata+Zeek (`phase-6-nsm/README.md`), now applied to this technique too: wire
+and host go blind to *different* failure modes (a TLS-terminating proxy upstream would blind the wire
+layer; an app that stops logging, or a proxy that's misconfigured, would blind the host layer), so
+running both is the point, not redundancy.
+
+**Coverage:** `attack-coverage/technique-index.md` regenerated; T1190/T1595.002 rule-ID lists now include
+100580–100582 alongside the existing wire-layer IDs.

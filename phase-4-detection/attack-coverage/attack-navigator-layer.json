@@ -250,7 +250,7 @@
       "techniqueID": "T1190",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100440, 100442, suricata:9100020, suricata:9100021, suricata:9100022, suricata:9100023 | learn: phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md",
+      "comment": "VALIDATED (purple-team) \u2014 100440, 100442, 100580, 100581, suricata:9100020, suricata:9100021, suricata:9100022, suricata:9100023 | learn: phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md",
       "enabled": true
     },
     {
@@ -397,7 +397,7 @@
       "techniqueID": "T1595.002",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100441, suricata:9100024 | learn: phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md",
+      "comment": "VALIDATED (purple-team) \u2014 100441, 100582, suricata:9100024 | learn: phase-5-offense/attack-detect-writeups/03-web-attack-juiceshop-t1190.md",
       "enabled": true
     }
   ],

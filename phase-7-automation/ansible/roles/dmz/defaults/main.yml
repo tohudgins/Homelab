@@ -3,10 +3,24 @@
 dmz_docker_packages:
   - docker.io
 
-# OWASP Juice Shop — multi-arch image (runs natively on ARM64).
+# OWASP Juice Shop — multi-arch image (runs natively on ARM64). Bound to
+# 127.0.0.1 only: nginx (below) is the actual public listener on 3000 now, so
+# the app itself is reachable only via the reverse proxy, never directly.
 juiceshop_image: "bkimminich/juice-shop"
 juiceshop_name: "juice-shop"
-juiceshop_port: 3000
+juiceshop_public_port: 3000    # what attackers/scripts hit — unchanged externally
+juiceshop_backend_port: 3001   # loopback-only; nginx proxies :3000 -> 127.0.0.1:3001
+
+# nginx reverse proxy — gap-10 fix (2026-09-30): Juice Shop logs zero
+# per-request lines to stdout by default (confirmed live: two real attack
+# requests produced no new container-log output), so the "host-side decoder
+# on Juice Shop's own logs" plan in the T1190 writeup's follow-ups turned out
+# to rest on a false premise. A reverse proxy is the real-world equivalent
+# fix — access logging in front of an app that doesn't log itself is the
+# standard pattern, not a lab workaround — and gives an actual second,
+# independent detection layer (host log vs wire) instead of a decoder with
+# nothing to decode.
+juiceshop_nginx_access_log: "/var/log/nginx/juiceshop-access.log"
 
 # Wazuh agent — pinned to the manager's version (see siem-01 / the other agents).
 # wazuh_manager_ip comes from group_vars/all.yml.
@@ -17,6 +31,8 @@ wazuh_apt_repo: "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.
 # Time authority: rtr-01's DMZ-side address (rtr-01 is the lab's chrony source).
 dmz_ntp_server: "10.10.20.1"
 
-# Where Docker's json-file driver writes container stdout — tailing this puts the
-# Juice Shop request logs into Wazuh so DMZ web attacks are actually visible.
+# Where Docker's json-file driver writes container stdout — startup diagnostics
+# only (confirmed live 2026-09-30: real requests produce zero new lines here,
+# Juice Shop has no per-request access log of its own). Kept for container
+# health/crash visibility; the nginx access log above is the request-level feed.
 dmz_docker_log_glob: "/var/lib/docker/containers/*/*-json.log"

@@ -108,3 +108,29 @@
   <order>ar_action, ar_account, ar_rc</order>
 </decoder>
 
+<!--
+  DMZ web attack, host-side layer (gap-10 fix, 2026-09-30): Juice Shop itself
+  logs zero per-request lines to stdout (confirmed live — real attack requests
+  produced no new container-log output), so an nginx reverse proxy was put in
+  front of it (roles/dmz) purely to get a real, independent host-side access
+  log — the same traffic rtr-01's inline Suricata already sees on the wire
+  (sids 9100020-9100024 / Wazuh rules 100440-100442), now also visible from
+  the host's own log, e.g.:
+      JSWEB_JUICESHOP time="30/Sep/2026:02:30:00 +0000" srcip=10.10.40.119 method=GET uri="/rest/products/search?q=test%27%20OR%201=1[dash-dash]" proto=HTTP/1.1 status=500 body="-" ua="curl/8.5.0"
+  key=value shape, not combined/common log format, is deliberate: a
+  combined-log-shaped line (IP - [time] "REQUEST" status ...) was tried first
+  and collided with Wazuh's own stock `web-accesslog` decoder, which matched
+  it and fired the generic rule 31122 instead of this one — confirmed via
+  wazuh-logtest, even with a leading "JSWEB " marker token. This shape doesn't
+  resemble any stock decoder Wazuh ships, so it can't be shadowed the same way.
+-->
+<decoder name="juiceshop-nginx">
+  <prematch>^JSWEB_JUICESHOP </prematch>
+</decoder>
+
+<decoder name="juiceshop-nginx-fields">
+  <parent>juiceshop-nginx</parent>
+  <regex type="pcre2">^JSWEB_JUICESHOP time="[^"]+" srcip=(\S+) method=(\S+) uri="(.*?)" proto=\S+ status=(\d+) body="(.*?)" ua="(.*)"$</regex>
+  <order>srcip, http_method, http_uri, status, request_body, user_agent</order>
+</decoder>
+
