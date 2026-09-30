@@ -14,9 +14,9 @@
 # via `grep`; do the same locally, e.g.:
 #   pip install "$(grep -m1 '^ruff==' requirements-ci.txt)"
 yamllint==1.38.0
-ansible-lint==26.8.0
-ruff==0.15.14
+ansible-lint==26.9.0
+ruff==0.16.9
 sigma-cli==3.1.0
 pyyaml==6.0.3
 defusedxml==0.7.1
-semgrep==1.168.0
+semgrep==1.178.0
