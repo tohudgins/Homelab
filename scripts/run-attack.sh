@@ -33,6 +33,13 @@ SPRAY_PW="${SPRAY_PW:-Summer2026}"
 [ -n "$ADMIN_USER" ] && [ -n "$ADMIN_PW" ] \
   || echo "! ADMIN_USER/ADMIN_PW not set (scripts/.lab-secrets or the environment) — WMI/WinRM/PsExec steps will skip cleanly, everything else still runs" >&2
 
+# Domain Administrator password for the scenarios that act as a stolen domain-admin
+# credential (SYSVOL Remote Write). The repo's source of truth is dc-01's vault, so
+# read it from there unless it's already in the environment; skip cleanly if not.
+DOMAIN_ADMIN_PW="${DOMAIN_ADMIN_PW:-$(cd "$REPO/phase-7-automation/ansible" 2>/dev/null \
+  && ansible-vault view host_vars/dc-01/vault.yml 2>/dev/null \
+  | python3 -c "import sys,yaml; print(yaml.safe_load(sys.stdin)['dc_domain_admin_password'],end='')" 2>/dev/null || true)}"
+
 usage() { echo "usage: $0 capstone [run-scenario.sh args] | ad-validate [ad-validate.py args]"; exit 2; }
 
 mode="${1:-}"; [ -n "$mode" ] || usage; shift || true
@@ -44,7 +51,7 @@ case "$mode" in
     ssh atk-01 "cd ~/capstone/apt-scenario && SPRAY_PW='$SPRAY_PW' ADMIN_USER='$ADMIN_USER' ADMIN_PW='$ADMIN_PW' ./run-scenario.sh $*"
     ;;
   ad-validate)
-    exec env ADMIN_USER="$ADMIN_USER" ADMIN_PW="$ADMIN_PW" \
+    exec env ADMIN_USER="$ADMIN_USER" ADMIN_PW="$ADMIN_PW" DOMAIN_ADMIN_PW="$DOMAIN_ADMIN_PW" \
       "$REPO/phase-5-offense/purple-team/ad-validate.py" "$@"
     ;;
   *) usage ;;

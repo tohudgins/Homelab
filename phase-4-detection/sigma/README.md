@@ -55,8 +55,12 @@ use.
   (`critical→13, high→12, medium→8, low→5, informational→3`). Levels sit above the stock discovery band (L3)
   so a Sigma detection wins Wazuh's one-rule-per-event precedence and actually surfaces
   (see the vault's *Wazuh Rule Precedence* note).
-- **stable IDs** each Sigma `id:` (GUID) maps to a fixed Wazuh id in `id-map.json` (base **100500**, clear of
-  the hand-written 100010–100401 range), so a rule always compiles to the same id across runs.
+- **stable IDs** each Sigma `id:` (GUID) maps to a fixed Wazuh id in `id-map.json`, so a rule always compiles
+  to the same id across runs. New ids start at 100500 and go **above every id already in use, including the
+  hand-written `local_rules.xml`** — the two files share one id space, and a duplicate makes Wazuh drop or
+  shadow one of the rules silently. (Found 2026-09-29: the allocator only knew its own map, so five new rules
+  were about to take 100527/100530/100531, which are hand-written rules — including the WMI fix. It now
+  reads `local_rules.xml` and refuses to compile if the map reuses one of its ids.)
 
 **Honest limits** (the same ~10% the real tools drop): `| count`/aggregation, `near`, timeframe, parenthesised
 conditions, keyword/full-text selections, and multi-field negation are **skipped with a printed reason** — never
@@ -86,6 +90,8 @@ emitted as a broken or over-broad rule.
 | `ps_script_win_compress_archive_collection.yml` | **ps_script** | T1560.001 | 100519 | Fileless `Compress-Archive` staging — the same technique with no external binary. |
 | `proc_creation_win_inhibit_system_recovery.yml` | process_creation | T1490 | 100520–100524 | `vssadmin` delete/resize, `wmic` shadowcopy delete, `wbadmin` delete, `bcdedit` recovery-disable — 5 rules from one `1 of selection_*` condition. |
 | `proc_creation_win_lsass_comsvcs_minidump.yml` | process_creation | T1003.001 | 100525, 100526 | `comsvcs.dll`+`MiniDump` on the command line — catches the LOLBin even when the memory *read* is blocked (see the Defender finding below). |
+| `proc_creation_win_remote_system_discovery.yml` | process_creation | T1018 | 100568–100571 | `net view`, cmd `for /L` ping sweep, `nslookup`, `arp -a` — one rule per variant (`1 of selection_*`), L5. The variants 100110 (`nltest /dclist`) missed. |
+| `ps_script_win_domain_trust_discovery.yml` | **ps_script** | T1482 | 100572 | PowerView `Get-DomainTrust` / `Get-NetDomainTrust` / `Get-NetForestTrust` / `Invoke-MapDomainTrust` in a script block. |
 
 > Note on upstream ps_script rules: several maintained SigmaHQ PowerShell rules tag `attack.t1685` (and the
 > non-standard tactic `attack.defense-impairment`), an ATT&CK id I couldn't verify — so rather than pass an

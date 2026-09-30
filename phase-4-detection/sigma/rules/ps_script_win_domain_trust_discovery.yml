@@ -1,0 +1,31 @@
+title: Domain Trust Discovery Via PowerView Cmdlets
+id: 76c0e5ce-0fa6-49b2-81c7-37a05f1ce437
+status: experimental
+description: |
+    Detects PowerView-style domain/forest trust enumeration in PowerShell script
+    blocks (Get-DomainTrust, Get-NetDomainTrust, Get-NetForestTrust,
+    Invoke-MapDomainTrust). Complements the hand-written rules that catch the
+    nltest/dsquery/adfind variants (100111) and the AD-module Get-ADTrust (100112),
+    which do not match these cmdlet names. Requires Script Block Logging (EID 4104).
+references:
+    - https://attack.mitre.org/techniques/T1482/
+author: Tyler Hudgins (homelab)
+date: 2026-09-29
+tags:
+    - attack.discovery
+    - attack.t1482
+logsource:
+    category: ps_script
+    product: windows
+    definition: 'Requirements: Script Block Logging must be enabled'
+detection:
+    selection:
+        ScriptBlockText|contains:
+            - 'Get-DomainTrust'
+            - 'Get-NetDomainTrust'
+            - 'Get-NetForestTrust'
+            - 'Invoke-MapDomainTrust'
+    condition: selection
+falsepositives:
+    - Authorized red-team / AD assessment tooling
+level: low

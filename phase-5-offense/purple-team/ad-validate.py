@@ -46,6 +46,7 @@ WS_IP = "10.10.10.50"
 DMZ_WEB = "http://10.10.20.10:3000"
 ADMIN_USER = os.environ.get("ADMIN_USER", "")
 ADMIN_PW = os.environ.get("ADMIN_PW", "")
+DOMAIN_ADMIN_PW = os.environ.get("DOMAIN_ADMIN_PW", "")
 
 # Each scenario runs `cmd` on `host` and expects a positive delta in `rules`.
 SCENARIOS = [
@@ -284,25 +285,21 @@ SCENARIOS = [
         # timing margin as Kerberoasting below: the frequency=4/timeframe=60 correlation
         # rule occasionally needs a few extra seconds to settle, not a rule defect.
         #
-        # `sleep 1` added between attempts (2026-09-15): a real, separate, root-caused
-        # finding — a genuine FAIL, not a flake. With no delay (how this scenario
-        # originally read, and how an unthrottled real brute-force tool actually
-        # behaves), all 4 attempts land at analysisd within a few ms of each other and
-        # the frequency/same_field correlation reliably undercounts the burst — rule
-        # 100040 fires all 4 times individually, 100041 never does. Spacing attempts 1s
-        # apart avoids that arrival-burst gap so this scenario can keep verifying the
-        # correlation logic + active response are otherwise intact. The burst gap itself
-        # is real and NOT fixed by this — see detection-catalog.md's T1110.001 section
-        # ("A second, more surprising evasion...") for the full repro table.
+        # Runs back to back with no delay, the way an unthrottled real brute-force tool
+        # behaves. (A `sleep 1` workaround used to sit here for a supposed "burst-arrival"
+        # race in Wazuh's correlation. That diagnosis was wrong: rule 100041's
+        # `ignore="120"` is a per-RULE timer, so an earlier firing for ANY account silenced
+        # it for 120s, and the earlier repros ran back to back. `ignore` is now removed
+        # from every frequency rule; see detection-catalog.md, T1110.001.)
         "name": "Kerberos Brute Force",
         "setup": {"host": "dc-01", "cmd": "sudo samba-tool user create pt-kbrute 'Init2026zQ!' >/dev/null 2>&1"},
         "host": "atk-01",
         "settle": 35,
-        "cmd": "for i in 1 2 3 4; do echo wrongpass$i | kinit pt-kbrute@LAB.INTERNAL 2>/dev/null; sleep 1; done; true",
+        "cmd": "for i in 1 2 3 4; do echo wrongpass$i | kinit pt-kbrute@LAB.INTERNAL 2>/dev/null; done; true",
         "teardown": {"host": "dc-01", "cmd": "sudo samba-tool user delete pt-kbrute >/dev/null 2>&1"},
         "rules": ["100041"],
         "technique": "T1110.001",
-        "desc": "4 wrong-password kinit attempts, 1s apart, against a throwaway account in 60s (T1110.001)",
+        "desc": "4 wrong-password kinit attempts, back to back (unthrottled, as a real tool does), against a throwaway account (T1110.001)",
     },
     {
         "name": "SYSVOL Integrity Tampering",
@@ -315,12 +312,81 @@ SCENARIOS = [
         "desc": "add/modify/delete a SYSVOL logon-script file on dc-01 (T1484.001)",
     },
     {
+        # T1484.001 via the realistic path (2026-09-29): a domain member writing to SYSVOL
+        # over SMB with a stolen domain-admin credential, not a root shell on the DC. The
+        # FIM watches the filesystem so the client shouldn't matter, but the catalog had
+        # only ever tested the local path. Verified live: create + delete both fire 100020.
+        # `net use` + direct UNC path on purpose: a PowerShell PSDrive mangles this UNC
+        # path. The password is a bare alphanumeric+`*` string, safe inside cmd quotes.
+        "name": "SYSVOL Remote Write",
+        "host": "ws-01",
+        "requires_env": ["DOMAIN_ADMIN_PW"],
+        "cmd": ('powershell -NoProfile -Command "'
+                r"net use \\dc-01.lab.internal\SYSVOL /user:LAB\Administrator " + DOMAIN_ADMIN_PW + " | Out-Null; "
+                r"Set-Content \\dc-01.lab.internal\SYSVOL\lab.internal\scripts\pt-remote.bat 'echo test'; "
+                r"Start-Sleep 2; Remove-Item \\dc-01.lab.internal\SYSVOL\lab.internal\scripts\pt-remote.bat; "
+                r'net use \\dc-01.lab.internal\SYSVOL /delete /y | Out-Null"'),
+        "rules": ["100020"],
+        "technique": "T1484.001",
+        "desc": "write + delete a SYSVOL logon script over SMB from ws-01 as a domain admin (T1484.001)",
+    },
+    # --- Added 2026-09-29: the discovery variants the purple-team README listed as
+    # "uncovered (evasion) — future rule work". One scenario per rule so a regression in
+    # any single one shows up (a shared scenario would pass on whichever fired). Run on
+    # ws-01 over SSH (cmd shell); all verified live before being written here.
+    {
+        "name": "Discovery: net view",
+        "host": "ws-01",
+        "cmd": "net view",
+        "rules": ["100568"],
+        "technique": "T1018",
+        "desc": "net view host/share listing (T1018)",
+    },
+    {
+        "name": "Discovery: ping sweep",
+        "host": "ws-01",
+        "cmd": 'cmd /c "for /L %i in (1,1,3) do @ping -n 1 -w 100 10.10.10.%i"',
+        "rules": ["100569"],
+        "technique": "T1018",
+        "desc": "cmd for /L ping sweep of the CORP /24 (T1018)",
+    },
+    {
+        "name": "Discovery: nslookup",
+        "host": "ws-01",
+        "cmd": "nslookup dc-01.lab.internal",
+        "rules": ["100570"],
+        "technique": "T1018",
+        "desc": "nslookup host resolution (T1018)",
+    },
+    {
+        "name": "Discovery: arp -a",
+        "host": "ws-01",
+        "cmd": "arp -a",
+        "rules": ["100571"],
+        "technique": "T1018",
+        "desc": "ARP cache listing of neighbouring hosts (T1018)",
+    },
+    {
+        # PowerView isn't installed; a stub function of the same name runs the same native
+        # .NET trust enumeration. The rule keys on the cmdlet name in the script block, so
+        # this exercises the detection path (Script Block Logging -> 4104 -> 100572).
+        "name": "Discovery: PowerView trusts",
+        "host": "ws-01",
+        "cmd": ('powershell -NoProfile -Command "function Get-DomainTrust { '
+                '[System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain().GetAllTrustRelationships() }; '
+                'Get-DomainTrust | Out-Null"'),
+        "rules": ["100572"],
+        "technique": "T1482",
+        "desc": "PowerView Get-DomainTrust script block (T1482)",
+    },
+    {
         # `sleep 1` added between create and delete (2026-09-15): a genuine, reproducible
         # finding, not a flake — the original back-to-back `tee ... && rm -f` (zero gap)
         # FAILed (hits=0) on a full battery run, while a manual create-then-delete with a
-        # ~2s gap reliably fired. Same family as the Kerberos Brute Force burst-arrival
-        # gap above, but a different subsystem: this is the agent-side realtime/inotify
-        # engine appearing to occasionally miss or coalesce a create+delete pair on the
+        # ~2s gap reliably fired. Not the manager-side correlation gap once blamed on
+        # Kerberos Brute Force (that turned out to be a per-rule `ignore=`, now removed;
+        # rule 100050 has no frequency/ignore): this looks like the agent-side
+        # realtime/inotify engine missing or coalescing one half of a create+delete pair on the
         # *same* path when they land within the same instant, not the manager-side
         # frequency correlator. `/etc/cron.d` realtime FIM otherwise works reliably (see
         # the repeated SYSVOL passes using the identical touch/tee/rm pattern with real
@@ -546,9 +612,22 @@ def count_rules(rule_ids):
 
 
 def main():
+    # --list          print scenario names and exit
+    # --only TEXT     run only scenarios whose name contains TEXT (case-insensitive);
+    #                 repeatable. For running one technique by hand, or re-checking a fix.
+    args = sys.argv[1:]
+    if "--list" in args:
+        for s in SCENARIOS:
+            print(f"{s['name']:38} {s['technique']:10} rules {','.join(s['rules'])}")
+        sys.exit(0)
+    only = [args[i + 1].lower() for i, a in enumerate(args[:-1]) if a == "--only"]
+    scenarios = [s for s in SCENARIOS if not only or any(o in s["name"].lower() for o in only)]
+    if only and not scenarios:
+        sys.exit(f"no scenario name contains {only}; try --list")
+
     print(f"\n== AD attack -> detection validation :: siem={SIEM} ==\n")
     results = []
-    for s in SCENARIOS:
+    for s in scenarios:
         req = s.get("requires")
         if req and not reachable(req):
             print(f"  [SKIP] {s['name']:17} needs {req} (unreachable)          {s['desc']}")

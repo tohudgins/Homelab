@@ -195,25 +195,26 @@
     label: "{{ item.name }}"
   when: item.name not in samba_users.stdout_lines
 
-# The domain Administrator is the account the `windows` role joins ws-01 with, using
-# dc_domain_admin_password from the vault. Samba's default max password age is 42
-# days; once it lapses, a rebuild's join fails with a bad-password error that looks
-# like vault drift. Exempt just this account (not the whole domain: the weak-password
-# service accounts above are attack targets and keep default behaviour).
-# Idempotent: reads userAccountControl and only acts when DONT_EXPIRE_PASSWORD
-# (0x10000) is unset.
-- name: Domain Administrator password never expires
+# Passwords never expire. Samba's default max password age is 42 days, and every account
+# here is a fixture, not a person: the weak service accounts (svc-sql, svc-backup, ...) are
+# the credentials the attack simulations authenticate with, and Administrator is what the
+# `windows` role joins ws-01 with. When a password lapses, kinit/impacket get a "must change
+# password" and the attack paths (Kerberoast, DCSync, the weak share) stop working ~6 weeks
+# after the accounts were created, with failures that look like broken detections. (Hit
+# 2026-09-29: 4 ad-validate scenarios failed at once, ~42 days after the accounts were made.)
+# Idempotent: only acts when the current maximum is not already 0 (= never).
+- name: Domain passwords never expire (lab fixture accounts)
   ansible.builtin.shell: |
     set -e
-    uac=$(samba-tool user show Administrator | sed -n 's/^userAccountControl: *//p')
-    if [ $(( uac & 65536 )) -eq 0 ]; then
-      samba-tool user setexpiry Administrator --noexpiry
+    cur=$(samba-tool domain passwordsettings show | sed -n 's/^Maximum password age (days): *//p')
+    if [ "$cur" != "0" ]; then
+      samba-tool domain passwordsettings set --max-pwd-age=0
       echo CHANGED
     fi
   args:
     executable: /bin/bash
-  register: dc_admin_noexpiry
-  changed_when: "'CHANGED' in dc_admin_noexpiry.stdout"
+  register: dc_pwd_noexpiry
+  changed_when: "'CHANGED' in dc_pwd_noexpiry.stdout"
 
 # --- SPNs (what makes the accounts Kerberoastable) ----------------------------
 - name: Read current SPNs per service account

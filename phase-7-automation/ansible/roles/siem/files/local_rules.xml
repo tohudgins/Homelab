@@ -14,9 +14,21 @@
   than chase what looks like a version-specific bug, pivoted to two explicit if_matched_sid rules
   below — same intent (tighter threshold + active response), proven mechanism.
 -->
+
+<!--
+  No frequency rule in this file sets `ignore=`. Wazuh's `ignore` is a per-RULE timer, not
+  per same_field/same_source_ip: once a rule fires for one account or IP it is silent for
+  every other account or IP until the timer expires. With ignore="120" an attacker could
+  trip the rule on a throwaway account, then brute-force the real target inside the next 2
+  minutes with no alert (100041 measured: only the first of several back-to-back attempts
+  against different accounts fired; spaced >120s apart it fired every time). This was first
+  misread as a "burst-arrival" race. Flood control comes from the attacker's own behaviour
+  instead: the active responses (firewall-drop, disable-ad-account) stop the failures that
+  feed these rules.
+-->
 <group name="local,syslog,sshd,">
 
-  <rule id="100010" level="12" frequency="4" timeframe="60" ignore="120">
+  <rule id="100010" level="12" frequency="4" timeframe="60">
     <if_matched_sid>5760</if_matched_sid>
     <same_source_ip />
     <description>sshd: brute force — $(srcip) had 4+ wrong-password failures in 60s.</description>
@@ -27,7 +39,7 @@
     <group>authentication_failures,attack,</group>
   </rule>
 
-  <rule id="100011" level="12" frequency="4" timeframe="60" ignore="120">
+  <rule id="100011" level="12" frequency="4" timeframe="60">
     <if_matched_sid>5710</if_matched_sid>
     <same_source_ip />
     <description>sshd: brute force — $(srcip) had 4+ non-existent-user failures in 60s.</description>
@@ -69,7 +81,7 @@
     <group>authentication_failed,</group>
   </rule>
 
-  <rule id="100013" level="12" frequency="4" timeframe="60" ignore="120">
+  <rule id="100013" level="12" frequency="4" timeframe="60">
     <if_matched_sid>100012</if_matched_sid>
     <same_source_ip />
     <description>sshd: brute force — $(srcip) had 4+ mixed-type (wrong-password + invalid-user) failures in 60s.</description>
@@ -187,7 +199,7 @@
     extracting a bare srcip needs a child decoder that strips the json fields rule
     100030 depends on — see the note in local_decoder.xml.
   -->
-  <rule id="100031" level="12" frequency="2" timeframe="60" ignore="120">
+  <rule id="100031" level="12" frequency="2" timeframe="60">
     <if_matched_sid>100030</if_matched_sid>
     <same_field>KDC Authorization.account</same_field>
     <description>Kerberoasting suspected — $(KDC Authorization.account) requested 3+ service tickets in 60s.</description>
@@ -329,7 +341,7 @@
     <group>authentication_failed,</group>
   </rule>
 
-  <rule id="100041" level="12" frequency="4" timeframe="60" ignore="120">
+  <rule id="100041" level="12" frequency="4" timeframe="60">
     <if_matched_sid>100040</if_matched_sid>
     <same_field>Authentication.clientAccount</same_field>
     <description>Kerberos brute force — $(Authentication.clientAccount) had 4+ pre-auth failures in 60s.</description>
@@ -399,7 +411,7 @@
     whole point — the failures are across DIFFERENT accounts, which is why the per-account brute rule
     (100041) can never see it.
   -->
-  <rule id="100401" level="12" frequency="4" timeframe="120" ignore="120">
+  <rule id="100401" level="12" frequency="4" timeframe="120">
     <if_matched_sid>100400</if_matched_sid>
     <description>Password spray suspected — 5+ failed SMB logons across the domain in 120s (single-source credential attack; 100041's per-account brute rule would miss this horizontal pattern).</description>
     <mitre>

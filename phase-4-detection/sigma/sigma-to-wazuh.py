@@ -51,6 +51,7 @@ DEFAULT_OUT = os.path.join(
     REPO, "phase-7-automation/ansible/roles/siem/files/sigma_local_rules.xml")
 DEFAULT_IDMAP = os.path.join(HERE, "id-map.json")
 DEFAULT_RULES = os.path.join(HERE, "rules")
+HANDWRITTEN_RULES = os.path.join(REPO, "phase-4-detection/local_rules.xml")
 
 # --- Sigma logsource -> Wazuh (anchor + field map) ---------------------------
 # Each supported Sigma logsource is pinned to (a) the Wazuh rule this lab's stock
@@ -273,19 +274,32 @@ def tactic_groups(tags):
 
 
 # --- id allocation -----------------------------------------------------------
+def handwritten_ids(path):
+    """Rule ids already taken by the hand-written local_rules.xml. Sigma-compiled rules
+    live in a second file but the same 100xxx id space; a duplicate id makes Wazuh drop
+    or shadow one of the two rules silently."""
+    if not os.path.exists(path):
+        return set()
+    return {int(m) for m in re.findall(r'<rule\s+id="(\d+)"', open(path).read())}
+
+
 class IdAllocator:
-    def __init__(self, path, base):
+    def __init__(self, path, base, reserved=()):
         self.path = path
         self.base = base
         self.map = json.load(open(path)) if os.path.exists(path) else {}
-        self._used = set(self.map.values())
+        clash = sorted(set(self.map.values()) & set(reserved))
+        if clash:
+            sys.exit(f"id-map.json reuses hand-written rule id(s) {clash}; "
+                     f"give those Sigma rules new ids before compiling")
+        self._used = set(self.map.values()) | set(reserved)
 
     def get(self, key):
         if key in self.map:
             return self.map[key]
-        nid = self.base
-        while nid in self._used:
-            nid += 1
+        # New rules go above everything in use (Sigma + hand-written), so a new id can
+        # never land in a gap a hand-written rule is about to claim.
+        nid = max(self._used | {self.base - 1}) + 1
         self.map[key] = nid
         self._used.add(nid)
         return nid
@@ -402,7 +416,8 @@ def main():
         print(f"no Sigma rules found in {args.rules_dir}", file=sys.stderr)
         sys.exit(2)
 
-    alloc = IdAllocator(args.id_map, args.id_base)
+    # Hand-written rules share the 100xxx space; never hand out one of their ids.
+    alloc = IdAllocator(args.id_map, args.id_base, handwritten_ids(HANDWRITTEN_RULES))
     rendered_all, skipped = [], []
     for path in files:
         base = os.path.basename(path)

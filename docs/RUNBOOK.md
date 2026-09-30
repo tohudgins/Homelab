@@ -101,6 +101,36 @@ GitHub). Reproducer in `phase-5-offense/atomic-red-team/`; rationale in
 ordinary domain users (plus `jdoe`); run simulations as one of these, not
 `localadmin`. All are (re)created idempotently by the `dc` role.
 
+### Run one technique at a time (and watch it)
+
+The full battery takes ~15 minutes. To see a single technique work, list them and run one:
+
+```bash
+make up PROFILE=attack                    # rtr-01, dc-01, ws-01, siem-01, fs-01, atk-01
+make dashboards                           # in a second terminal: Wazuh at https://localhost:9001
+
+phase-5-offense/purple-team/ad-validate.py --list              # every scenario, technique ID, rule ID(s)
+make attack MODE=ad-validate ARGS='--only Kerberoast'          # run just that one (repeat --only to add more)
+```
+
+Each scenario prints `PASS`/`FAIL`, the rule ID(s) it expects and how many alerts appeared.
+To watch the alert arrive, filter the Wazuh dashboard on `rule.id` (or `ssh siem-01 'sudo tail -f
+/var/ossec/logs/alerts/alerts.json'`). Give it ~25–35 s: agent → manager → correlation has real latency.
+Scenarios that need a host that is off (dmz-01) report `SKIP`, not `FAIL`.
+
+Gotchas that cost real time (each one looked like a broken detection):
+- **`ignore=` on a Wazuh rule is a per-rule timer, not per account/IP.** Once a frequency rule fired for one
+  target it was silent for every other target for that long. It is removed from every rule here; if you add a
+  frequency rule, don't set `ignore` (see `phase-4-detection/detection-catalog.md`, T1110.001).
+- **Domain passwords used to expire after 42 days**, taking Kerberoast/DCSync/the weak share down together (4
+  scenarios failed at once). The `dc` role now sets the domain max password age to 0; if those accounts ever
+  reject a login again, check `samba-tool domain passwordsettings show` first.
+- **Stale Ansible SSH connections.** `ansible.cfg` reuses connections (`ControlPersist`). After rebuilding or
+  deleting a VM that had the same IP/user, the next playbook can hang on its first task for the full timeout.
+  Fix: `pkill -f 'ssh.*ansible/cp'; rm -f ~/.ansible/cp/*`.
+- **Only one rule fires per event.** Two rules matching the same event don't both alert; the first sibling
+  wins (that's why the 7-Zip image-name rule 100518 stays quiet when the `OriginalFileName` rule 100517 fires).
+
 ### Vulnerability scanning (scan-01 / Greenbone CE)
 
 A different loop from attack/detect — active vulnerability assessment of the CORP
@@ -185,6 +215,7 @@ the same way. Actual values live in the vault's `Virtual Machines` note, never h
 | `WS01_VMENC_PASS` | `lab.sh` (start/stop/suspend) | ws-01's VM-encryption passphrase — Fusion forces this on for a Windows 11 guest's vTPM |
 | `ADMIN_USER` / `ADMIN_PW` | `run-attack.sh`, `ad-validate.py`, `run-scenario.sh` | ws-01's local-admin Windows credential — gates the WMI/WinRM/PsExec lateral-movement scenarios; skip cleanly (not fail) when unset |
 | `SPRAY_PW` | `run-scenario.sh` | the weak password the capstone's password-spray phase guesses; defaults to a known lab value if unset |
+| `DOMAIN_ADMIN_PW` | `run-attack.sh` → `ad-validate.py` | the domain `Administrator` password, for the scenarios that act as a stolen domain-admin credential (SYSVOL Remote Write). Not stored in `.lab-secrets`: `run-attack.sh` reads it from `dc-01`'s Ansible vault unless you export it; skips cleanly if neither is available |
 
 ## 5. End a session
 

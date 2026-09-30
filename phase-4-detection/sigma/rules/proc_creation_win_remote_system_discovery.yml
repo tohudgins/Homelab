@@ -1,0 +1,38 @@
+title: Remote System Discovery Via net view, Ping Sweep, nslookup Or arp
+id: 23744349-a215-44a9-b931-a5a22e515035
+status: experimental
+description: |
+    Detects the common living-off-the-land ways to enumerate hosts on the network
+    that the hand-written nltest /dclist rule (100110) does not see: 'net view'
+    (SMB host/share listing), a cmd 'for /L' ping sweep, nslookup, and 'arp -a'.
+    Each is routine administration on its own, so this is a low-severity telemetry
+    rule meant to be read in context (several in a row from one host is the signal).
+references:
+    - https://attack.mitre.org/techniques/T1018/
+author: Tyler Hudgins (homelab)
+date: 2026-09-29
+tags:
+    - attack.discovery
+    - attack.t1018
+logsource:
+    category: process_creation
+    product: windows
+detection:
+    selection_net_view:
+        Image|endswith:
+            - '\net.exe'
+            - '\net1.exe'
+        CommandLine|contains: ' view'
+    selection_ping_sweep:
+        CommandLine|contains|all:
+            - 'for /l'
+            - 'ping'
+    selection_nslookup:
+        Image|endswith: '\nslookup.exe'
+    selection_arp:
+        Image|endswith: '\arp.exe'
+        CommandLine|contains: ' -a'
+    condition: 1 of selection_*
+falsepositives:
+    - Legitimate administration, network troubleshooting and inventory scripts
+level: low

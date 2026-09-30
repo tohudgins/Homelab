@@ -54,7 +54,7 @@
       "techniqueID": "T1018",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100110 | learn: phase-5-offense/purple-team/README.md",
+      "comment": "VALIDATED (purple-team) \u2014 100110, 100568, 100569, 100570, 100571 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {
@@ -299,7 +299,7 @@
       "techniqueID": "T1482",
       "score": 100,
       "color": "#2e7d32",
-      "comment": "VALIDATED (purple-team) \u2014 100111 | learn: phase-5-offense/purple-team/README.md",
+      "comment": "VALIDATED (purple-team) \u2014 100111, 100572 | learn: phase-5-offense/purple-team/README.md",
       "enabled": true
     },
     {

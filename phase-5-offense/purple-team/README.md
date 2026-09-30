@@ -94,6 +94,11 @@ Getting to 9/9 took three iterations, and each failure was a real finding a dete
    detection level; its rule structure is identical to the harness-confirmed `nltest` path.) Broadening the
    `net view` / `wmic group` / PowerView variants the same way is the ongoing increment.
 
+   **Update 2026-09-29:** the `net view`, ping-sweep, `nslookup` and `arp -a` variants of T1018 (100568–100571)
+   and PowerView `Get-DomainTrust` for T1482 (100572) now have Sigma rules, each live-fired and each with its
+   own `ad-validate.py` scenario. Still uncovered: `adfind` computer enumeration (T1018), and every T1069.001
+   variant in the last row.
+
 ## Attack validation from atk-01 — `ad-validate.py`
 `purple-team.py` validates *endpoint* detections by running Atomic Red Team locally on ws-01. `ad-validate.py`
 applies the identical "attack → prove the detection fired" discipline to attacks that must be launched **from

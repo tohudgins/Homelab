@@ -16,7 +16,7 @@ oversight; see `phase-5-offense/attack-detect-writeups/` to add one.
 | T1003.006 | validated | 100080 | [phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md](../../phase-5-offense/attack-detect-writeups/01-fs01-credential-theft-to-dcsync.md) |
 | T1007 | validated | 100507, 100508 | [phase-4-detection/sigma/README.md](../sigma/README.md) |
 | T1016 | validated | 100100, 100101 | [phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md](../../phase-5-offense/attack-detect-writeups/10-discovery-tactics-t1049-t1069.001-t1518.001.md) |
-| T1018 | validated | 100110 | [phase-5-offense/purple-team/README.md](../../phase-5-offense/purple-team/README.md) |
+| T1018 | validated | 100110, 100568, 100569, 100570, 100571 | [phase-5-offense/purple-team/README.md](../../phase-5-offense/purple-team/README.md) |
 | T1021.002 | validated | 100119, 100120 | [phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md](../../phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md) |
 | T1021.006 | validated | 100516 | [phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md](../../phase-5-offense/attack-detect-writeups/04-lateral-movement-wmi-winrm-psexec.md) |
 | T1027 | detection only | 100500, 100501 | [README.md](../../README.md) |
@@ -51,7 +51,7 @@ oversight; see `phase-5-offense/attack-detect-writeups/` to add one.
 | T1218.005 | validated | 100116 | [phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md](../../phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md) |
 | T1218.010 | validated | 100114 | [phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md](../../phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md) |
 | T1218.011 | validated | 100115 | [phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md](../../phase-5-offense/attack-detect-writeups/11-lolbin-proxy-execution-t1218.005-t1218.010.md) |
-| T1482 | validated | 100111 | [phase-5-offense/purple-team/README.md](../../phase-5-offense/purple-team/README.md) |
+| T1482 | validated | 100111, 100572 | [phase-5-offense/purple-team/README.md](../../phase-5-offense/purple-team/README.md) |
 | T1484.001 | validated | 100020 | [phase-5-offense/attack-detect-writeups/09-sysvol-gpo-integrity-t1484.001.md](../../phase-5-offense/attack-detect-writeups/09-sysvol-gpo-integrity-t1484.001.md) |
 | T1486 | validated | 100430, 100431 | [phase-4-detection/deception/README.md](../deception/README.md) |
 | T1490 | validated | 100520, 100521, 100522, 100523, 100524 | [phase-5-offense/attack-detect-writeups/06-inhibit-system-recovery-t1490.md](../../phase-5-offense/attack-detect-writeups/06-inhibit-system-recovery-t1490.md) |

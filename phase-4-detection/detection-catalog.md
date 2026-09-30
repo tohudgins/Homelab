@@ -79,6 +79,9 @@ Rules live on siem-01 at `/var/ossec/etc/rules/local_rules.xml` (mirrored in thi
 | 44 | [T1003.001 – LSASS Memory (command-line angle)](https://attack.mitre.org/techniques/T1003/001/) | 100525, 100526 (Sigma) | ws-01 (Sysmon EID1) | ✅ **verified TP live (2026-09-07) — makes T1003.001 live-fireable, closing gap #12** (stock EID10 rule 92900 was inspection-only, LSASS PPL blocked the memory read). `rundll32.exe comsvcs.dll, MiniDump …` **does** spawn and Sysmon captures the full command line — confirmed 9 real hits across the session on rule 100525, including a fresh one fired specifically to double-check this. **Correction:** an earlier pass tonight concluded this was Defender-blocked with no telemetry (matching the certutil/T1105 pattern) — that was wrong. Microsoft Defender does detect the pattern (`Trojan:Win32/RundllLolBin.AF`, ThreatID 2147793100) and denies the actual memory read/dump write (`Test-Path` on the output file returns `Access is denied`), but that happens **after** process creation, not before — Sysmon still gets the telemetry, and the rule fires on it regardless of whether the dump itself succeeds. **100526** (the companion `rundll32`+`lsass` command-line rule) never independently registers as "the" fired alert — it's a same-level sibling of 100525 matching the identical event, and Wazuh's one-rule-per-event model only records one of two co-matching same-level rules; not evidence either rule's logic is wrong. Exercise: [`phase-5-offense/credential-access/lsass-dump.ps1`](../phase-5-offense/credential-access/lsass-dump.ps1). **Sigma-compiled** (2026-09-06) |
 | 45 | [T1098.007 – Account Manipulation: Additional Local or Domain Groups](https://attack.mitre.org/techniques/T1098/007/) | 100014, 100015 | dc-01 (Samba `dsdb_group_json_audit`) | ✅ **verified TP live (2026-09-12) — closes the gap investigated and left unachieved on 2026-08-15** (see below). Needed log level 5, not 3, on `dsdb_group_audit`/`dsdb_group_json_audit` — not a platform limit after all. Fires on the real remote-LDAP path (not a local shortcut), full MITRE tagging, level 13. |
 | 46 | [T1548.003 – Abuse Elevation Control Mechanism: Sudo and Sudo Caching](https://attack.mitre.org/techniques/T1548/003/) | 100540 | fs-01 (auditd) | ✅ **verified TP live (2026-09-20) — the lab's first Linux-native offense/detection pair.** Every prior attack-detect writeup targets Windows/AD; fs-01's `ops-logview` local account carries a deliberate NOPASSWD sudo grant on `find` (a real-world "let ops search logs without full root" pattern), exploitable via the classic GTFOBins escape (`find … -exec /bin/sh`). Detection is a genuinely new telemetry path for this lab — general auditd process auditing (`<log_format>audit</log_format>`), not Wazuh's own whodata FIM plumbing, the only prior auditd use. **Real false-positive finding:** a naive "root execve from a non-root login" rule also fires on Ubuntu's own `/etc/update-motd.d/*` scripts, which legitimately run `find`/`cat`/`sh` as root on *every* SSH login — narrowed to the actual weaponization signal (`-exec`/`-execdir`/`-ok`/`-okdir` in the command line) instead. **Real tooling gotcha:** `wazuh-logtest`'s line-by-line testing doesn't reproduce the production `audit` log_format's behavior, which fuses an entire multi-line auditd record (SYSCALL+EXECVE+…) into one event before any rule sees it — an initial two-rule `if_matched_sid`/`same_field` design (working in `wazuh-logtest`, matching the idiom used elsewhere in this catalog) never fired live because that split-event model doesn't exist in production; collapsed to one rule checking both conditions on the single merged event. See `phase-5-offense/attack-detect-writeups/05-linux-sudo-privesc-t1548.003.md` for the full writeup. Wired into `ad-validate.py` and confirmed passing through the real harness. |
+| 47 | [T1018 – Remote System Discovery](https://attack.mitre.org/techniques/T1018/) | 100568–100571 (Sigma) | ws-01 (Sysmon EID1) | ✅ **verified TP live (2026-09-29)** — closes the "uncovered variants" the purple-team README listed for #100110: `net view`/`net1 view` (100568), a cmd `for /L` ping sweep (100569), `nslookup` (100570), `arp -a` (100571). One rule per variant, low severity (L5) on purpose: each is routine admin on its own, so this is telemetry to read in sequence from one host, not a standalone alert. Sigma-compiled (`sigma/rules/proc_creation_win_remote_system_discovery.yml`). Still open: `adfind` computer enumeration. |
+| 48 | [T1482 – Domain Trust Discovery](https://attack.mitre.org/techniques/T1482/) | 100572 (Sigma) | ws-01 (PowerShell 4104) | ✅ **verified TP live (2026-09-29)** — PowerView-style `Get-DomainTrust` / `Get-NetDomainTrust` / `Get-NetForestTrust` / `Invoke-MapDomainTrust` in a script block, the variant the purple-team README listed as evading 100111/100112 (which match nltest/dsquery/adfind and the AD-module `Get-ADTrust`). Live-fired with a same-named stub running the native .NET trust enumeration (PowerView itself isn't installed), so it proves the Script Block Logging path and the rule, not PowerView's own behaviour. Sigma-compiled (`sigma/rules/ps_script_win_domain_trust_discovery.yml`). |
+| 49 | *Live-verification update for #42 and #43* | 100517, 100518, 100522 | ws-01 (Sysmon EID1) | ✅ **All three fired live (2026-09-29), superseding the "correct-by-inspection only" notes in #42 and #43.** **100517**: a real portable arm64 7-Zip (`7z.exe` unpacked from the vendor installer, copied to a temp dir, never installed) archiving a file — fires on the PE `OriginalFileName`. **100518** (image-name variant): does *not* fire on that event, because Wazuh lets only the first matching sibling rule fire per event and 100517 wins; it exists for binaries with no/renamed metadata, and fired on a renamed stand-in (`rar.exe` = a copy of cmd.exe). **100522**: `wmic.exe` is absent on this 25H2 build (`WMIC~~~~` capability `NotPresent`), so the technique can't run here; fired on a stand-in `wmic.exe` (cmd.exe copy) carrying `shadowcopy delete`, which proves the Sysmon → decoder → rule path, not `wmic` itself. Temp files removed after each run. |
 
 (#6 is tagged with both IDs deliberately: the rule can't distinguish creating a new local account from
 modifying an existing one's credentials — same file, same rule, same broad-not-narrow tradeoff as the
@@ -536,33 +539,38 @@ script instead ([`disable-ad-account.py`](disable-ad-account.py), mirrored here,
 entirely, and this protocol has no equivalent of trying multiple failure "types" to split across rules
 (the base account discovery is what's happening here; there's just one failure mode: wrong password).
 
-**A second, more surprising evasion found running the full `ad-validate.py` battery for real (2026-09-15):
-firing *fast*, not slow, is what evades this rule.** The scenario's own attack step (`kinit` against a
-throwaway account, 4 wrong passwords, no delay between attempts — how an unthrottled real brute-force tool
-actually behaves) FAILed (hits=0) even though every individual attempt still logged and alerted as rule
-100040. Root-caused by reproducing the same attack at three different paces against fresh throwaway
-accounts:
+**A second evasion, found 2026-09-15 and misdiagnosed until 2026-09-29: the rule's `ignore="120"` was a
+per-rule blind window.** Running the full `ad-validate.py` battery, the scenario's attack step (`kinit`
+against a throwaway account, 4 wrong passwords, no delay) FAILed (hits=0) although every attempt alerted as
+base rule 100040. It was first blamed on a "burst-arrival" race in Wazuh's `frequency`/`same_field`
+matching, based on this table (each row a fresh throwaway account, run one after another):
 
 | Attempt spacing | 100040 (base) fires? | 100041 (correlation) fires? |
 |---|---|---|
-| No delay, from atk-01 (the scenario as originally written) | ✅ all 4 | ❌ never |
-| `sleep 0.3` between attempts, from atk-01 | ✅ all 4 | ❌ never — **all 4 still arrived at the manager within ~3ms of each other**, so client-side spacing didn't help |
+| No delay, from atk-01 | ✅ all 4 | ❌ never |
+| `sleep 0.3` between attempts, from atk-01 | ✅ all 4 | ❌ never |
 | `sleep 1` between attempts, from atk-01 | ✅ all 4 | ✅ fired |
-| No delay, run locally on dc-01 (not through the network stack the same way) | ✅ all 4, ~30ms apart | ✅ fired |
+| No delay, run locally on dc-01 | ✅ all 4 | ✅ fired |
 
-The pattern isn't about *attack* timing — it's about how tightly the 4 matching events cluster *when they
-arrive at analysisd*. Every case where all 4 qualifying 100040 matches landed within roughly a
-single-digit-millisecond window failed to correlate into 100041, even though `same_field`/`if_matched_sid`
-correctly matched all 4 individually and the ~30ms-apart local case (and the 1s-spaced case) correlated
-correctly. This points to a real gap in Wazuh 4.14's `frequency`/`same_field` rule-matching under bursty
-arrival, not a lab misconfiguration or a settle-timing issue (bumping `settle` doesn't fix an undercount).
-It's the opposite of the usual brute-force blind spot: a slow, human-paced guesser is what this rule
-catches reliably; a genuinely fast, unthrottled tool — arguably the more realistic attacker behavior for an
-automated Kerberos brute-forcer — is more likely to land in one burst and evade it. Documented honestly
-rather than patched, in the same spirit as the `if_matched_group` finding above: `ad-validate.py`'s scenario
-was adjusted to space its attempts 1s apart so the harness keeps verifying the detection logic itself
-(same_field/frequency counting works, the active response works), while this table stands as the record of
-the real, separate burst-arrival gap it can't exercise.
+**That was wrong.** Re-measured 2026-09-29 with the same no-delay attack, from atk-01, against fresh
+accounts:
+
+| Condition | 100041 fired |
+|---|---|
+| 5 runs ~27s apart, `analysisd.rule_matching_threads=1` (the race hypothesis) | 1 of 5 — only the first |
+| 3 runs ~2 min apart, default threads | 3 of 3 |
+| 3 runs ~27s apart, `ignore` removed | 3 of 3 |
+
+Only the first run in any 120s window fired, whatever the account. Wazuh's `ignore` is a per-RULE timer,
+not per `same_field`: after 100041 fires for one account it is silent for **every** account for 120s. The
+table above fell out of test order (a run inside a previous firing's window looks like a failure), not
+arrival timing. This is a worse gap than the race it replaced: trip the rule on a throwaway account, then
+brute-force the real target inside the next two minutes and nothing alerts.
+
+Fix: `ignore` removed from all six frequency rules that set it (100010, 100011, 100013, 100031, 100041,
+100401; they share the flaw). Flood check: 12 back-to-back guesses at one account produced 3 alerts on
+100041 (not 9), and the active response disabled the account (`userAccountControl` 514), which stops the
+failures feeding the rule. The `ad-validate.py` scenario is back to the realistic no-delay attack.
 
 **False-positive risk — real and worth taking seriously given the active response attached:** a user who
 mistypes their password 4 times in a row gets their own account disabled for 10 minutes by the system
