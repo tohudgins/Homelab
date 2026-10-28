@@ -3,5 +3,5 @@
 # and docs.yml are separate workflows: a docs-only dependency bump shouldn't touch the
 # lint/scan tooling's pin set, and vice versa.
 mkdocs==1.6.1
-mkdocs-material==9.7.7
+mkdocs-material==9.8.0
 mkdocs-callouts==1.17.1
